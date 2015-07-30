@@ -145,16 +145,19 @@ def contacting_terms (sample_space, contacts):
 ######################################################################  
       
 class GPModel(object):
-    """A Gaussian process model for proteins. 
+    """A Gaussian process model. 
 
     Attributes:
+        X_seqs (DataFrame): The sequences in the training set
+        Y (Series): The outputs for the training set
+        K (DataFrame): Covariance matrix
         Ky (np.matrix): noisy covariance matrix [var_p*K+var_n*I]
         L (np.matrix): lower triangular Cholesky decomposition of Ky
         alpha (np.matrix): L.T\(L\Y)
         ML (float): The negative log marginal likelihood
     """
         
-    def __init__ (self, Ky):
+    def __init__ (self, X_seqs, Y, Ky):
         self.Ky = Ky
         self.L = np.linalg.cholesky(self.Ky)
         self.alpha = np.linalg.lstsq(self.L.T,np.linalg.lstsq (self.L, np.matrix(self.Y).T)[0])[0]

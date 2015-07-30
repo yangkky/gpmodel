@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.optimize import minimize
 import math
+import jitchol
 from sys import exit
 ######################################################################
 # Here are the functions associated with Hamming kernels
@@ -196,24 +197,20 @@ class GPModel(object):
     """A Gaussian process model for proteins. 
 
     Attributes:
-        X_seqs (DataFrame): The sequences in the training set
-        Y (DataFrame): The outputs for the training set
-        K (DataFrame): Covariance matrix
+        factor (np.matrix): [var_p*K+var_n*I]
+        L (np.matrix): lower triangular Cholesky decomposition of factor
+        alpha (np.matrix): L.T\(L\Y)
         inv_K_factor (np.matrix): The inverted matrix used in making predictions
         ML (float): The negative log marginal likelihood
     """
     
     #__metaclass__ = ABCMeta
     
-    def __init__ (self, sequences, outputs, hyper=None, inv_factor=None):
-        if sequences.index != outputs.index:
-            print ('Warning: mismatch between training sequences and outputs')
-        self.X_seqs = sequences
-        self.Y = outputs
-        self.hyper = hyper
-        self.inv_factor = inv_factor
-
-    
+    def __init__ (self, factor):
+        self.factor = factor
+        self.L = np.linalg.cholesky(self.factor)
+        self.alpha = np.linalg.lstsq(self.L.T,np.linalg.lstsq (self.L, np.matrix(self.Y).T)[0])[0]
+        
             
     def predict (self, k, k_star):
         """ Predicts the mean and variance of the output for each of new_seqs
@@ -227,29 +224,31 @@ class GPModel(object):
         Returns: 
             res (tuple): (E,v) as floats
         """
-        E = k*self.inv_factor*np.matrix(self.Y).T
-        v = k_star - k*self.inv_factor*k.T
-        return (E.item(),v.item())
+        E = k*self.alpha
+        v = np.linalg.lstsq(self.L,k)
+        var = k_star - v.T*v
+        #E = k*self.inv_factor*np.matrix(self.Y).T
+        #v = k_star - k*self.inv_factor*k.T
+        return (E.item(),var.item())
     
     def log_ML (self,factor):
         """ Returns the negative log marginal likelihood.  
         
         Parameters: 
-            factor (np.matrix): the inverse of [var_p*K+var_n*I]
+            factor (np.matrix): [var_p*K+var_n*I]
     
         Uses RW Equation 5.8
         """
         Y_mat = np.matrix(self.Y)
-        inv_factor = np.linalg.inv(factor)
-        """first = 0.5*Y_mat*inv_factor*Y_mat.T
-        second = math.exp(0.5)*np.linalg.det(factor).item()
-        third = math.exp(len(Y_mat)/2.)*2*math.pi
+        L = np.linalg.cholesky (factor)
+        inv_factor = np.linalg.inv(L).T*np.linalg.inv(L)
+        print Y_mat*inv_factor*Y_mat.T
         try:
-            return first + math.log(second*third)
+            ML = (0.5*Y_mat*inv_factor*Y_mat.T + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
         except:
-            exit (str(second))"""
-        L = (0.5*Y_mat*inv_factor*Y_mat.T + 0.5*math.log(np.linalg.det(factor)) + len(Y_mat)/2*math.log(2*math.pi)).item()
-        return L
+            print np.linalg.det(factor)
+            exit ('')
+        return ML
 
 class StructureModel(GPModel):
     """A Gaussian process model for proteins with a structure-based kernel
@@ -262,6 +261,8 @@ class StructureModel(GPModel):
         inv_factor (np.matrix): The inverted matrix used in making predictions
         K (DataFrame): Covariance matrix
         factor (np.matrix): [var_p*K+var_n*I]
+        L (np.matrix): lower triangular Cholesky decomposition of factor
+        alpha (np.matrix): L.T\(L\Y)
         contacts (iterable): Each element in contacts pairs two positions that 
                are considered to be in contact  
         contact_terms (iterable): Each element in contact_terms should be of the
@@ -269,18 +270,20 @@ class StructureModel(GPModel):
         sample_space (iterable): Each element in sample_space contains the possible 
            amino acids at that position
     """
-    def __init__ (self, sequences, outputs, contacts, sample_space, guesses=[1.,.250]):
+    def __init__ (self, sequences, outputs, contacts, sample_space, guesses=[100.,1000.]):
         self.X_seqs = sequences
         self.Y = outputs
         self.contacts = contacts
         self.sample_space = sample_space
         self.contact_terms = contacting_terms(self.sample_space, self.contacts)
         self.K = make_structure_matrix (self.X_seqs, self.contact_terms)
-        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)])
+        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='L-BFGS-B')
+        print minimize_res
         self.var_n,self.var_p = minimize_res['x']
         self.ML = minimize_res['fun']
-        self.factor = self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K))
-        self.inv_factor = np.linalg.inv(self.factor)
+        super(StructureModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
+        
+        #self.inv_factor = np.linalg.inv(self.factor)
 
     def log_ML (self, variances):
         """ Returns the negative log marginal likelihood.  
@@ -328,15 +331,17 @@ class HammingModel(GPModel):
         factor (np.matrix): [var_p*K+var_n*I]
     """
     
-    def __init__ (self, sequences, outputs, guesses=[0.001,.250]):
+    def __init__ (self, sequences, outputs, guesses=[10.,10.]):
         self.X_seqs = sequences
         self.Y = outputs
         self.K = make_hamming (self.X_seqs)
-        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)])
+        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='TNC')
+        print minimize_res
         self.var_n,self.var_p = minimize_res['x']
         self.ML = minimize_res['fun']
-        self.factor = self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K))
-        self.inv_factor = np.linalg.inv(self.factor)
+        super(HammingModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
+        
+        #self.inv_factor = np.linalg.inv(self.factor)
         #self.inv_factor = K_factor (self.K, self.var_p, self.var_n)
         
     def log_ML (self, variances):

@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.optimize import minimize
 import math
-import jitchol
 from sys import exit
 ######################################################################
 # Here are the functions associated with Hamming kernels
@@ -200,7 +199,6 @@ class GPModel(object):
         factor (np.matrix): [var_p*K+var_n*I]
         L (np.matrix): lower triangular Cholesky decomposition of factor
         alpha (np.matrix): L.T\(L\Y)
-        inv_K_factor (np.matrix): The inverted matrix used in making predictions
         ML (float): The negative log marginal likelihood
     """
     
@@ -225,7 +223,7 @@ class GPModel(object):
             res (tuple): (E,v) as floats
         """
         E = k*self.alpha
-        v = np.linalg.lstsq(self.L,k)
+        v = np.linalg.lstsq(self.L,k.T)[0]
         var = k_star - v.T*v
         #E = k*self.inv_factor*np.matrix(self.Y).T
         #v = k_star - k*self.inv_factor*k.T
@@ -242,12 +240,7 @@ class GPModel(object):
         Y_mat = np.matrix(self.Y)
         L = np.linalg.cholesky (factor)
         inv_factor = np.linalg.inv(L).T*np.linalg.inv(L)
-        print Y_mat*inv_factor*Y_mat.T
-        try:
-            ML = (0.5*Y_mat*inv_factor*Y_mat.T + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
-        except:
-            print np.linalg.det(factor)
-            exit ('')
+        ML = (0.5*Y_mat*inv_factor*Y_mat.T + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
         return ML
 
 class StructureModel(GPModel):
@@ -278,7 +271,6 @@ class StructureModel(GPModel):
         self.contact_terms = contacting_terms(self.sample_space, self.contacts)
         self.K = make_structure_matrix (self.X_seqs, self.contact_terms)
         minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='L-BFGS-B')
-        print minimize_res
         self.var_n,self.var_p = minimize_res['x']
         self.ML = minimize_res['fun']
         super(StructureModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
@@ -336,7 +328,6 @@ class HammingModel(GPModel):
         self.Y = outputs
         self.K = make_hamming (self.X_seqs)
         minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='TNC')
-        print minimize_res
         self.var_n,self.var_p = minimize_res['x']
         self.ML = minimize_res['fun']
         super(HammingModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))

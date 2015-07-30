@@ -141,22 +141,6 @@ def contacting_terms (sample_space, contacts):
 ######################################################################
 # Here are tools that are generally useful
 ######################################################################
-
-def K_factor (K, var_p, var_n):
-    """ Calculates the inverted matrix used to predict mean and variance.
-
-    This is [var_p*K+var_n^2*I]^-1. 
-
-    Parameters: 
-        K (numpy.matrix): 
-        var_p (float): The hyperparameter to use in in the kernel function
-        var_n (float): Signal noise variance
-          
-    Returns: 
-        (np.matrix): The result is returned as a matrix    
-    """
-    return np.linalg.inv(var_p*K+var_n*np.identity(len(K)))
-
 def plot_predictions (real_Ys, predicted_Ys,stds=None,file_name=None,title='',label='', line=True):
     if stds is None:
         plt.plot (real_Ys, predicted_Ys, 'g.')
@@ -196,17 +180,17 @@ class GPModel(object):
     """A Gaussian process model for proteins. 
 
     Attributes:
-        factor (np.matrix): [var_p*K+var_n*I]
-        L (np.matrix): lower triangular Cholesky decomposition of factor
+        Ky (np.matrix): noisy covariance matrix [var_p*K+var_n*I]
+        L (np.matrix): lower triangular Cholesky decomposition of Ky
         alpha (np.matrix): L.T\(L\Y)
         ML (float): The negative log marginal likelihood
     """
     
     #__metaclass__ = ABCMeta
     
-    def __init__ (self, factor):
-        self.factor = factor
-        self.L = np.linalg.cholesky(self.factor)
+    def __init__ (self, Ky):
+        self.Ky = Ky
+        self.L = np.linalg.cholesky(self.Ky)
         self.alpha = np.linalg.lstsq(self.L.T,np.linalg.lstsq (self.L, np.matrix(self.Y).T)[0])[0]
         
             
@@ -225,22 +209,20 @@ class GPModel(object):
         E = k*self.alpha
         v = np.linalg.lstsq(self.L,k.T)[0]
         var = k_star - v.T*v
-        #E = k*self.inv_factor*np.matrix(self.Y).T
-        #v = k_star - k*self.inv_factor*k.T
         return (E.item(),var.item())
     
-    def log_ML (self,factor):
+    def log_ML (self,Ky):
         """ Returns the negative log marginal likelihood.  
         
         Parameters: 
-            factor (np.matrix): [var_p*K+var_n*I]
+            Ky (np.matrix): [var_p*K+var_n*I]
     
         Uses RW Equation 5.8
         """
         Y_mat = np.matrix(self.Y)
-        L = np.linalg.cholesky (factor)
-        inv_factor = np.linalg.inv(L).T*np.linalg.inv(L)
-        ML = (0.5*Y_mat*inv_factor*Y_mat.T + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
+        L = np.linalg.cholesky (Ky)
+        alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
+        ML = (0.5*Y_mat*alpha + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
         return ML
 
 class StructureModel(GPModel):
@@ -251,10 +233,9 @@ class StructureModel(GPModel):
         Y (Series): The outputs for the training set
         var_p (float): the hyperparameter to use in in the kernel function
         var_n (float): signal variance        
-        inv_factor (np.matrix): The inverted matrix used in making predictions
         K (DataFrame): Covariance matrix
-        factor (np.matrix): [var_p*K+var_n*I]
-        L (np.matrix): lower triangular Cholesky decomposition of factor
+        Ky (np.matrix): [var_p*K+var_n*I]
+        L (np.matrix): lower triangular Cholesky decomposition of Ky
         alpha (np.matrix): L.T\(L\Y)
         contacts (iterable): Each element in contacts pairs two positions that 
                are considered to be in contact  
@@ -275,8 +256,6 @@ class StructureModel(GPModel):
         self.ML = minimize_res['fun']
         super(StructureModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
         
-        #self.inv_factor = np.linalg.inv(self.factor)
-
     def log_ML (self, variances):
         """ Returns the negative log marginal likelihood.  
     
@@ -318,9 +297,8 @@ class HammingModel(GPModel):
         Y (Series): The outputs for the training set
         var_p (float): the hyperparameter to use in in the kernel function
         var_n (float): signal variance        
-        inv_factor (np.matrix): The inverted matrix used in making predictions
         K (DataFrame): Covariance matrix
-        factor (np.matrix): [var_p*K+var_n*I]
+        Ky (np.matrix): [var_p*K+var_n*I]
     """
     
     def __init__ (self, sequences, outputs, guesses=[10.,10.]):
@@ -331,10 +309,7 @@ class HammingModel(GPModel):
         self.var_n,self.var_p = minimize_res['x']
         self.ML = minimize_res['fun']
         super(HammingModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
-        
-        #self.inv_factor = np.linalg.inv(self.factor)
-        #self.inv_factor = K_factor (self.K, self.var_p, self.var_n)
-        
+                
     def log_ML (self, variances):
         """ Returns the negative log marginal likelihood.  
     

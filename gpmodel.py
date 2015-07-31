@@ -1,8 +1,6 @@
 ''' Classes for doing Gaussian process models of proteins'''
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 from scipy.optimize import minimize
 import math
 from sys import exit
@@ -28,7 +26,7 @@ class GPModel(object):
         self.Y = Y
         self.kern = kern
         self.K = self.kern.make_K(X_seqs)
-        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-3,None),(1e-5,None)], method='L-BFGS-B')
+        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-4,None),(1e-5,None)], method='L-BFGS-B')
         self.var_n,self.var_p = minimize_res['x']
         self.Ky = self.var_p*self.K+self.var_n*np.identity(len(X_seqs))
         self.L = np.linalg.cholesky(self.Ky)
@@ -67,11 +65,7 @@ class GPModel(object):
         Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
         L = np.linalg.cholesky (Ky)
         alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
-        try:
-            ML = (0.5*Y_mat*alpha + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
-        except:
-            print np.linalg.det(L)
-            exit ('')
+        ML = (0.5*Y_mat*alpha + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
         return ML
         
     def predicts (self, new_seqs):

@@ -1,4 +1,4 @@
-''' Functions and classes for doing Gaussian process models of proteins'''
+''' Classes for doing Gaussian process models of proteins'''
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,143 +6,8 @@ import pandas as pd
 from scipy.optimize import minimize
 import math
 from sys import exit
-######################################################################
-# Here are the functions associated with Hamming kernels
-######################################################################
-
-def hamming_kernel (seq1, seq2, var_p=1):
-    """ Returns the number of shared amino acids between two sequences"""
-    return sum ([1 if str(a) == str(b) else 0 for a,b in zip(seq1, seq2)])*var_p
-    
-def make_hamming (seqs):
-    """ Returns a hamming matrix for two or more sequences of the same length
-
-    Parameters: 
-        seqs (DataFrame)
-    
-    Returns: 
-        DataFrame
-    """
-    # note: could probably do this more elegantly without transposing
-    n_seqs = len (seqs.index)
-    hamming = np.zeros((n_seqs, n_seqs))
-    for n1,i in zip(range(n_seqs), seqs.index):
-        for n2,j in zip(range (n_seqs), seqs.transpose().columns):
-            seq1 = seqs.loc[i]
-            seq2 = seqs.transpose()[j]
-            hamming[n1,n2] = hamming_kernel (seq1, seq2)
-    hamming_df = pd.DataFrame (hamming, index = seqs.index, columns = seqs.index)
-    return hamming_df          
-        
-######################################################################
-# Here are functions specific to the structure-based kernel
-######################################################################
-
-def generate_library (n_blocks, n_parents):
-    """Generates all the chimeras with n_blocks blocks and n_parents parents
-    
-    Parameters: 
-        n_blocks (int): number of blocks
-        n_parents (int): number of parents
-        
-    Returns: 
-        list: all possible chimeras
-    """
-    if n_blocks > 1:
-        this = ([i+str(n) for i in generate_library(n_blocks-1,n_parents) for n in range (n_parents)])
-        return this
-    return [str(i) for i in range (n_parents)]
-    
-def contacts_X_row (seq, contact_terms, var_p):
-    """ Determine whether the given sequence contains each of the given contacts
-    
-    Parameters: 
-        seq (iterable): Amino acid sequence
-        contact_terms (iterable): Each element in contact_terms should be of the
-          form ((pos1,aa2),(pos2,aa2))
-        var_p (float): underlying variance of Gaussian process  
-          
-    Returns: 
-        list: 1 for contacts present, else 0
-    """
-    X_row = []
-    for term in contact_terms:
-        if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
-            X_row.append (1)
-        else:
-            X_row.append (0)
-    return [var_p*x for x in X_row]
-    
-def structure_kernel (seq1, seq2, contact_terms, var_p=1):
-    """ Determine the number of shared contacts between the two sequences
-    
-    Parameters: 
-        seq1 (iterable): Amino acid sequence
-        seq2 (iterable): Amino acid sequence
-        contact_terms (iterable): Each element in contact_terms should be of the
-          form ((pos1,aa2),(pos2,aa2))
-        var_p (float): underlying variance of Gaussian process  
-  
-    Returns: 
-        int: number of shared contacts
-    """
-    X1 = contacts_X_row (seq1, contact_terms)
-    X2 = contacts_X_row (seq2, contact_terms)
-    return sum ([1 if a == b else 0 for a,b in zip(X1, X2)])*var_p
-
-    
-def make_contacts_X (seqs, contact_terms,var_p=1):
-    """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
-    
-    X = []
-    for i in seqs.index:
-        X.append(contacts_X_row(seqs.loc[i],contact_terms,var_p))
-    return X
-    
-def make_structure_matrix (seqs, contact_terms,var_p=1):
-    """ Makes the structure-based covariance matrix
-    
-    Parameters: 
-        seqs (DataFrame): amino acid sequences
-        contact_terms (iterable): Each element in contact_terms should be of the
-          form ((pos1,aa2),(pos2,aa2))    
-        var_p (float): underlying variance of Gaussian process  
-    
-    Returns: 
-        Dataframe: structure-based covariance matrix
-    """
-    X = np.matrix(make_contacts_X (seqs, contact_terms,var_p))
-    return pd.DataFrame(np.einsum('ij,jk->ik', X, X.T), index=seqs.index, columns=seqs.index)
-
-def contacting_terms (sample_space, contacts):
-    """ Lists the possible contacts
-    
-    Parameters: 
-        sample_space (iterable): Each element in sample_space contains the possible 
-           amino acids at that position
-        contacts (iterable): Each eleent in contacts pairs two positions that 
-           are considered to be in contact
-    
-    Returns: 
-        list: Each item in the list is a contact in the form ((pos1,aa1),(pos2,aa2))
-    """
-    contact_terms = []
-    for contact in contacts:
-        first_pos = contact[0]
-        second_pos = contact[1]
-        first_possibilities = set(sample_space[first_pos])
-        second_possibilities = set(sample_space[second_pos])
-        for aa1 in first_possibilities:
-            for aa2 in second_possibilities:
-                contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
-    return contact_terms
 
 
-
-
-######################################################################
-# Now we start class definitions
-######################################################################  
       
 class GPModel(object):
     """A Gaussian process model. 
@@ -150,6 +15,7 @@ class GPModel(object):
     Attributes:
         X_seqs (DataFrame): The sequences in the training set
         Y (Series): The outputs for the training set
+        kern (kernel): a kernel for calculating covariances
         K (DataFrame): Covariance matrix
         Ky (np.matrix): noisy covariance matrix [var_p*K+var_n*I]
         L (np.matrix): lower triangular Cholesky decomposition of Ky
@@ -157,9 +23,16 @@ class GPModel(object):
         ML (float): The negative log marginal likelihood
     """
         
-    def __init__ (self, X_seqs, Y, Ky):
-        self.Ky = Ky
+    def __init__ (self, X_seqs, Y, kern, guesses=[1.,1.]):
+        self.X_seqs = X_seqs
+        self.Y = Y
+        self.kern = kern
+        self.K = self.kern.make_K(X_seqs)
+        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-3,None),(1e-5,None)], method='L-BFGS-B')
+        self.var_n,self.var_p = minimize_res['x']
+        self.Ky = self.var_p*self.K+self.var_n*np.identity(len(X_seqs))
         self.L = np.linalg.cholesky(self.Ky)
+        self.ML = minimize_res['fun']
         self.alpha = np.linalg.lstsq(self.L.T,np.linalg.lstsq (self.L, np.matrix(self.Y).T)[0])[0]
         
             
@@ -180,71 +53,31 @@ class GPModel(object):
         var = k_star - v.T*v
         return (E.item(),var.item())
     
-    def log_ML (self,Ky):
+    def log_ML (self,variances):
         """ Returns the negative log marginal likelihood.  
         
         Parameters: 
-            Ky (np.matrix): [var_p*K+var_n*I]
+            variances (iterable): var_n and var_p
     
         Uses RW Equation 5.8
         """
         Y_mat = np.matrix(self.Y)
+        var_n,var_p = variances
+        K_mat = np.matrix (self.K)
+        Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
         L = np.linalg.cholesky (Ky)
         alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
-        ML = (0.5*Y_mat*alpha + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
+        try:
+            ML = (0.5*Y_mat*alpha + 0.5*math.log(np.linalg.det(L)**2) + len(Y_mat)/2*math.log(2*math.pi)).item()
+        except:
+            print np.linalg.det(L)
+            exit ('')
         return ML
-
-class StructureModel(GPModel):
-    """A Gaussian process model for proteins with a structure-based kernel
-
-    Attributes:
-        X_seqs (DataFrame): The sequences in the training set
-        Y (Series): The outputs for the training set
-        var_p (float): the hyperparameter to use in in the kernel function
-        var_n (float): signal variance        
-        K (DataFrame): Covariance matrix
-        Ky (np.matrix): [var_p*K+var_n*I]
-        L (np.matrix): lower triangular Cholesky decomposition of Ky
-        alpha (np.matrix): L.T\(L\Y)
-        contacts (iterable): Each element in contacts pairs two positions that 
-               are considered to be in contact  
-        contact_terms (iterable): Each element in contact_terms should be of the
-          form ((pos1,aa2),(pos2,aa2))     
-        sample_space (iterable): Each element in sample_space contains the possible 
-           amino acids at that position
-    """
-    def __init__ (self, sequences, outputs, contacts, sample_space, guesses=[1.,1.]):
-        self.X_seqs = sequences
-        self.Y = outputs
-        self.contacts = contacts
-        self.sample_space = sample_space
-        self.contact_terms = contacting_terms(self.sample_space, self.contacts)
-        self.K = make_structure_matrix (self.X_seqs, self.contact_terms)
-        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='L-BFGS-B')
-        self.var_n,self.var_p = minimize_res['x']
-        self.ML = minimize_res['fun']
-        super(StructureModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
         
-    def log_ML (self, variances):
-        """ Returns the negative log marginal likelihood.  
-    
-        Uses RW Equation 5.8
-    
-        Parameters: 
-            variances (iterable): var_n and var_p
-
-        Returns: 
-            L (float): the negative log marginal likelihood
-        """
-        var_n,var_p = variances
-        K_mat = np.matrix (self.K)
-        return super(StructureModel,self).log_ML(K_mat*var_p+np.identity(len(K_mat))*var_n)  
-        
-    def predict (self, new_seqs):
+    def predicts (self, new_seqs):
         """ Calculates predicted (mean, variance) for each sequence in new_seqs
     
-        Uses Equations 2.23 and 2.24 of RW and a structure-based kernel
-        
+        Uses Equations 2.23 and 2.24 of RW
         Parameters: 
             new_seqs (DataFrame): sequences to predict
             
@@ -253,62 +86,10 @@ class StructureModel(GPModel):
         """
         predictions = []
         for ns in [new_seqs.loc[i] for i in new_seqs.index]:
-            k = np.matrix([structure_kernel(ns,seq1,self.var_p) for seq1 in [self.X_seqs.loc[i] for i in self.X_seqs.index]])
-            k_star = structure_kernel(ns,ns,self.var_p)
-            predictions.append(super(StructureModel,self).predict(k, k_star))
+            k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) for seq1 in [self.X_seqs.loc[i] for i in self.X_seqs.index]])
+            k_star = self.kern.calc_kernel(ns,ns,self.var_p)
+            predictions.append(self.predict(k, k_star))
         return predictions   
 
-class HammingModel(GPModel):
-    """A Gaussian process model for proteins with a Hamming kernel
 
-    Attributes:
-        X_seqs (DataFrame): The sequences in the training set
-        Y (Series): The outputs for the training set
-        var_p (float): the hyperparameter to use in in the kernel function
-        var_n (float): signal variance        
-        K (DataFrame): Covariance matrix
-        Ky (np.matrix): [var_p*K+var_n*I]
-    """
-    
-    def __init__ (self, sequences, outputs, guesses=[10.,10.]):
-        self.X_seqs = sequences
-        self.Y = outputs
-        self.K = make_hamming (self.X_seqs)
-        minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-5,None),(1e-5,None)], method='TNC')
-        self.var_n,self.var_p = minimize_res['x']
-        self.ML = minimize_res['fun']
-        super(HammingModel,self).__init__(self.var_p*np.matrix(self.K) + self.var_n*np.identity(len(self.K)))
-                
-    def log_ML (self, variances):
-        """ Returns the negative log marginal likelihood.  
-    
-        Uses RW Equation 5.8
-    
-        Parameters: 
-            variances (iterable): var_n and var_p
-
-        Returns: 
-            L (float): the negative log marginal likelihood
-        """
-        var_n,var_p = variances
-        K_mat = np.matrix (self.K)
-        return super(HammingModel,self).log_ML(K_mat*var_p+np.identity(len(K_mat))*var_n)
-            
-    def predict (self, new_seqs):
-        """ Calculates predicted (mean, variance) for each sequence in new_seqs
-    
-        Uses Equations 2.23 and 2.24 of RW and a hamming kernel
-        
-        Parameters: 
-            new_seqs (DataFrame): sequences to predict
-            
-         Returns: 
-            predictions (list): (E,v) as floats
-        """
-        predictions = []
-        for ns in [new_seqs.loc[i] for i in new_seqs.index]:
-            k = np.matrix([hamming_kernel(ns,seq1,self.var_p) for seq1 in [self.X_seqs.loc[i] for i in self.X_seqs.index]])
-            k_star = hamming_kernel(ns,ns,self.var_p)
-            predictions.append(super(HammingModel,self).predict(k, k_star))
-        return predictions 
         

@@ -29,7 +29,6 @@ def main ():
         sys.exit ('Kernel type must be hamming or structure')
     
     
-    
     print 'Creating training set...'
     # this reads in the chimeras for the training set
     # we need to shift all the parent numbers down by one to be consistent with 
@@ -77,6 +76,7 @@ def main ():
     print 'Pickling model...'
     f = open (os.path.join(path, args.kernel +'_kernel.pkl'), 'wb')
     pickle.dump(model, f)
+    f.close()
 
     
 

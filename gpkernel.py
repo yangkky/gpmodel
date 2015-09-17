@@ -44,7 +44,6 @@ class StructureKernel (GPKernel):
     """A Structure kernel
 
     Attributes:
-        hypers (list): hyperparameters for the kernel
         contact_terms (iterable): Each element in contact_terms should be of the
           form ((pos1,aa2),(pos2,aa2))            
     """
@@ -85,7 +84,7 @@ class StructureKernel (GPKernel):
         Returns: 
             Dataframe: structure-based covariance matrix
         """
-        X = np.matrix(self.make_contacts_X (seqs, self.contact_terms,var_p))
+        X = np.matrix(self.make_contacts_X (seqs,var_p))
         return pd.DataFrame(np.einsum('ij,jk->ik', X, X.T), index=seqs.index, columns=seqs.index)
         
     def calc_kernel (self, seq1, seq2, var_p=1):
@@ -102,12 +101,11 @@ class StructureKernel (GPKernel):
         X2 = self.contacts_X_row (seq2, self.contact_terms)
         return sum ([1 if a == b else 0 for a,b in zip(X1, X2)])*var_p
         
-    def make_contacts_X (self, seqs):
+    def make_contacts_X (self, seqs, var_p):
         """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
-        var_p = self.hypers[0]
         X = []
         for i in seqs.index:
-            X.append(self.contacts_X_row(seqs.loc[i],self.contact_terms,var_p))
+            X.append(self.contacts_X_row(seqs.loc[i],var_p))
         return X
         
     def contacts_X_row (self, seq, var_p=1):

@@ -85,7 +85,6 @@ class GPModel(object):
             
     def p_integral (self, z, mean, variance):
         '''Equation to integrate when calculating pi_star for classification'''
-        #print z, mean, variance
         first = 1./(1+math.exp(-z))
         second = 1/math.sqrt(2*math.pi*variance)
         third = math.exp(-(z-mean)**2/(2*variance))
@@ -109,7 +108,6 @@ class GPModel(object):
         ML = (0.5*Y_mat*alpha + sum([math.log(l) for l in np.diag(L)]) + len(Y_mat)/2.*math.log(2*math.pi)).item()
         # log[det(Ky)] = 2*sum(log(diag(L))) is a property of the Cholesky decomposition
         # Y.T*Ky^-1*Y = L\(L\Y.T) (another property of the Cholesky)
-        print var_n, var_p, sum([math.log(l) for l in np.diag(L)]), 0.5*Y_mat*alpha
         return ML
         
     def predicts (self, new_seqs):

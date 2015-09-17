@@ -1,4 +1,8 @@
-''' Reads in an ncr training set, builds a GPModel, and pickles the model'''
+''' Reads in an ncr training set, builds a GPModel, and pickles the model
+
+python train_and_save.py -p 150419_ChR_lib_files/ -a alignment_and_contacts.pkl -t ncr_contig_lib_blocks.txt -as "output/library10_21_mod2.output" -k hamming
+
+'''
 
 import argparse, gpmodel, gpkernel, os, sys, pickle
 import pandas as pd

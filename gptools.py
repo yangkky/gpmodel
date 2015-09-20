@@ -24,7 +24,7 @@ def plot_predictions (real_Ys, predicted_Ys,stds=None,file_name=None,title='',la
     if not file_name is None:
         plt.savefig (file_name)
         
-def plot_LOO(Xs, Ys, args=[], kernel='Hamming',save_as=None, lab=''):
+def plot_LOO(Xs, Ys, kernel,save_as=None, lab=''):
     std = []
     predicted_Ys = []
     for i in Xs.index:
@@ -32,9 +32,8 @@ def plot_LOO(Xs, Ys, args=[], kernel='Hamming',save_as=None, lab=''):
         train_Xs = Xs.loc[train_inds]
         train_Ys = Ys.loc[train_inds]
         verify = Xs.loc[[i]]
-        if kernel == 'Hamming':
-            kern = gpkernel.HammingKernel()
-        model = gpmodel.GPModel(train_Xs,train_Ys, kern)
+       
+        model = gpmodel.GPModel(train_Xs,train_Ys, kernel)
         predicted = model.predicts(verify)
         if model.is_class():
             E = predicted[0]

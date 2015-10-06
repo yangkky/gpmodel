@@ -97,9 +97,10 @@ class StructureKernel (GPKernel):
         Returns:
             int: number of shared contacts
         """
-        X1 = self.contacts_X_row (seq1, self.contact_terms)
-        X2 = self.contacts_X_row (seq2, self.contact_terms)
-        return sum ([1 if a == b else 0 for a,b in zip(X1, X2)])*var_p
+        X1 = self.contacts_X_row (seq1)
+        X2 = self.contacts_X_row (seq2)
+        print X1,X2
+        return sum ([1 if a == 1 and b == 1 else 0 for a,b in zip(X1, X2)])*var_p
 
     def make_contacts_X (self, seqs, var_p):
         """ Makes a list with the result of contacts_X_row for each sequence in seqs"""

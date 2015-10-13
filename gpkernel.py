@@ -3,6 +3,9 @@ import pandas as pd
 
 class GPKernel (object):
     """A Gaussian process kernel for proteins.
+
+       Attribute:
+           type (string)
     """
 
     def __init__ (self):
@@ -12,13 +15,23 @@ class HammingKernel (GPKernel):
     """A Hamming Kernel
 
     Attributes:
+        seqs (dict)
     """
     def __init__ (self):
+        self.saved_seqs = {}
         super(HammingKernel,self).__init__()
 
     def calc_kernel (self, seq1, seq2, var_p=1):
         """ Returns the number of shared amino acids between two sequences"""
-        return sum ([1 if str(a) == str(b) else 0 for a,b in zip(seq1, seq2)])*var_p
+        if seq1 not in self.saved_seqs:
+            s1 = ''.join([s for s in seq1])
+        else:
+            s2 = seq2
+        if seq2 not in self.saved_seqs:
+            s2 = ''.join([s for s in seq1])
+        else:
+            s2 = seq2
+        return sum ([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
 
     def make_K (self, seqs, var_p=1):
         """ Returns a covariance matrix for two or more sequences of the same length
@@ -40,16 +53,29 @@ class HammingKernel (GPKernel):
         K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
         return K_df
 
+    def train(self, X_seqs):
+        """
+        Stores the sequences in X_seqs in the kernel's saved_seqs dict
+        """
+        for i in range(len(X_seqs.index)):
+            if i in self.contacts.keys():
+                print 'Attempting to rewrite sequences for' + i
+            else:
+                self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
+
+
 class StructureKernel (GPKernel):
     """A Structure kernel
 
     Attributes:
         contact_terms (iterable): Each element in contact_terms should be of the
           form ((pos1,aa1),(pos2,aa2))
+        contacts (dict): a dict matching the labels for sequences to their contacts
     """
 
     def __init__ (self, contacts, sample_space):
         self.contact_terms = self.contacting_terms (sample_space, contacts)
+        self.contacts = {}
         super (StructureKernel, self).__init__()
 
     def contacting_terms (self, sample_space, contacts):
@@ -97,10 +123,14 @@ class StructureKernel (GPKernel):
         Returns:
             int: number of shared contacts
         """
-        X1 = self.contacts_X_row (seq1)
-        X2 = self.contacts_X_row (seq2)
-        print X1,X2
-        return sum ([1 if a == 1 and b == 1 else 0 for a,b in zip(X1, X2)])*var_p
+        #X1 = self.contacts_X_row(seq1)
+        #X2 = self.contacts_X_row(seq2)
+        #return var_p*sum([1 if x1==1 & x2==1 else 0 for x1,x2 in zip(X1,X2)])
+        contacts1 = self.get_contacts(seq1)
+        contacts2 = self.get_contacts(seq2)
+
+        return sum([1 if c in contacts2 else 0 for c in contacts1])*var_p
+
 
     def make_contacts_X (self, seqs, var_p):
         """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
@@ -127,6 +157,33 @@ class StructureKernel (GPKernel):
                 X_row.append (0)
 
         return [var_p*x for x in X_row]
+
+    def train(self, X_seqs):
+        """
+        Stores the sequences in X_seqs in the kernel's contacts dict
+        """
+        for i in range(len(X_seqs.index)):
+            if i in self.contacts.keys():
+                print 'Attempting to rewrite contacts for' + i
+            else:
+                self.contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
+
+
+    def get_contacts(self, seq):
+        """
+        Gets the contacts for seq.
+        """
+        try:
+            return self.contacts[seq]
+
+        except TypeError:
+            contacts = []
+            for term in self.contact_terms:
+                if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
+                    contacts.append(term)
+            return contacts
+
+
 
 
 

@@ -25,7 +25,7 @@ def plot_predictions (real_Ys, predicted_Ys,stds=None,file_name=None,title='',la
     if not file_name is None:
         plt.savefig (file_name)
 
-def plot_ROC (real_Ys, pis, file_name=None,title='',label=''):
+def plot_ROC (real_Ys, pis, file_name=None,title=''):
     fps = np.empty(np.shape(pis))
     tps = np.empty(np.shape(pis))
     n_false = sum([1 if y == -1 else 0 for y in real_Ys])
@@ -42,13 +42,15 @@ def plot_ROC (real_Ys, pis, file_name=None,title='',label=''):
         fps[i] = float(fp)/n_false
         tps[i] = float(tp)/n_true
     plt.plot (fps,tps,'.-')
+    plt.xlim([-.1,1.1])
+    plt.ylim([-.1,1.1])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title(title)
     if not file_name is None:
         plt.savefig (file_name)
 
-def plot_LOO(Xs, Ys,kernel,save_as=None, lab=''):
+def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
     std = []
     predicted_Ys = []
     for i in Xs.index:
@@ -63,7 +65,10 @@ def plot_LOO(Xs, Ys,kernel,save_as=None, lab=''):
         if model.is_class():
             E = predicted[0]
         else:
-            [(E,v)] = predicted
+            try:
+                [(E,v)] = predicted
+            except ValueError:
+                print 'ValueError', i, predicted
             std.append(math.pow(v,0.5))
         predicted_Ys.append (E)
     plot_predictions (Ys.tolist(), predicted_Ys, stds=None,label=lab, line=True, file_name=save_as)

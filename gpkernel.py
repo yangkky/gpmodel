@@ -23,14 +23,8 @@ class HammingKernel (GPKernel):
 
     def calc_kernel (self, seq1, seq2, var_p=1):
         """ Returns the number of shared amino acids between two sequences"""
-        if seq1 not in self.saved_seqs:
-            s1 = ''.join([s for s in seq1])
-        else:
-            s2 = seq2
-        if seq2 not in self.saved_seqs:
-            s2 = ''.join([s for s in seq1])
-        else:
-            s2 = seq2
+        s1 = self.get_sequence(seq1)
+        s2 = self.get_sequence(seq2)
         return sum ([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
 
     def make_K (self, seqs, var_p=1):
@@ -58,10 +52,19 @@ class HammingKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's saved_seqs dict
         """
         for i in range(len(X_seqs.index)):
-            if i in self.contacts.keys():
+            if i in self.saved_seqs.keys():
                 print 'Attempting to rewrite sequences for' + i
             else:
                 self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
+
+    def get_sequence(self,seq):
+        """
+        Get the sequence for seq
+        """
+        try:
+            return self.saved_seqs[seq]
+        except TypeError:
+            return ''.join([s for s in seq])
 
 
 class StructureKernel (GPKernel):

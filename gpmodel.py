@@ -24,7 +24,6 @@ class GPModel(object):
         ML (float): The negative log marginal likelihood
         l (int): number of training samples
     """
-
     def __init__ (self, X_seqs, Y, kern, guesses=[1.,100.]):
         self.X_seqs = X_seqs
         self.Y = Y

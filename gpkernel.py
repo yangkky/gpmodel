@@ -61,7 +61,6 @@ class HammingKernel (GPKernel):
         """
         Get the sequence for seq
         """
-        print seq
         try:
             return self.saved_seqs[seq]
         except TypeError:

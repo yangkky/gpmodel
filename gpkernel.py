@@ -40,9 +40,9 @@ class HammingKernel (GPKernel):
         n_seqs = len (seqs.index)
         K = np.zeros((n_seqs, n_seqs))
         for n1,i in zip(range(n_seqs), seqs.index):
-            for n2,j in zip(range (n_seqs), seqs.transpose().columns):
-                seq1 = seqs.loc[i]
-                seq2 = seqs.transpose()[j]
+            for n2,j in zip(range (n_seqs), seqs.index):
+                seq1 = seqs.iloc[n1]
+                seq2 = seqs.iloc[n2]
                 K[n1,n2] = self.calc_kernel (seq1, seq2, var_p=var_p)
         K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
         return K_df
@@ -61,6 +61,7 @@ class HammingKernel (GPKernel):
         """
         Get the sequence for seq
         """
+        print seq
         try:
             return self.saved_seqs[seq]
         except TypeError:

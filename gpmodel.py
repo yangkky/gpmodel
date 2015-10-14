@@ -201,7 +201,7 @@ class GPModel(object):
             F (Series): values for the latent function
 
         Returns:
-            W (np.matrix): diagonal Hessian of the log likelihood matrix
+            W (np.matrix): diagonal negtive Hessian of the log likelihood matrix
         """
         W = np.matrix(np.zeros([self.l,self.l]))
         for i in range(self.l):

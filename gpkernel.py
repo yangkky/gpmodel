@@ -73,12 +73,14 @@ class StructureKernel (GPKernel):
     Attributes:
         contact_terms (iterable): Each element in contact_terms should be of the
           form ((pos1,aa1),(pos2,aa2))
-        contacts (dict): a dict matching the labels for sequences to their contacts
+        saved_contacts (dict): a dict matching the labels for sequences to their contacts
+        contacts: list of which residues are in contact
     """
 
     def __init__ (self, contacts, sample_space):
         self.contact_terms = self.contacting_terms (sample_space, contacts)
-        self.contacts = {}
+        self.saved_contacts = {}
+        self.contacts = contacts
         super (StructureKernel, self).__init__()
 
     def contacting_terms (self, sample_space, contacts):
@@ -126,13 +128,9 @@ class StructureKernel (GPKernel):
         Returns:
             int: number of shared contacts
         """
-        #X1 = self.contacts_X_row(seq1)
-        #X2 = self.contacts_X_row(seq2)
-        #return var_p*sum([1 if x1==1 & x2==1 else 0 for x1,x2 in zip(X1,X2)])
         contacts1 = self.get_contacts(seq1)
         contacts2 = self.get_contacts(seq2)
-
-        return sum([1 if c in contacts2 else 0 for c in contacts1])*var_p
+        return len(set(contacts1) & set(contacts2))*var_p
 
 
     def make_contacts_X (self, seqs, var_p):
@@ -166,10 +164,10 @@ class StructureKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's contacts dict
         """
         for i in range(len(X_seqs.index)):
-            if i in self.contacts.keys():
+            if i in self.saved_contacts.keys():
                 print 'Attempting to rewrite contacts for' + i
             else:
-                self.contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
+                self.saved_contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
 
 
     def get_contacts(self, seq):
@@ -177,13 +175,17 @@ class StructureKernel (GPKernel):
         Gets the contacts for seq.
         """
         try:
-            return self.contacts[seq]
+            return self.saved_contacts[seq]
 
         except TypeError:
+            seq = ''.join([s for s in seq])
             contacts = []
-            for term in self.contact_terms:
-                if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
-                    contacts.append(term)
+            for i,con in enumerate(self.contacts):
+                term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
+                contacts.append(term)
+#             for term in self.contact_terms:
+#                 if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
+#                     contacts.append(term)
             return contacts
 
 

@@ -91,7 +91,7 @@ def test_structure_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern.contacts == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+    assert kern.saved_contacts == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
                              'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
                              'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
                              'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\

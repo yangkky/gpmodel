@@ -30,7 +30,7 @@ class GPModel(object):
         self.l = len(Y)
         self.kern = kern
         self.K = self.kern.make_K(X_seqs)
-        kern.train(X_seqs)
+        self.kern.train(X_seqs)
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
@@ -136,14 +136,14 @@ class GPModel(object):
 
         Uses Equations 2.23 and 2.24 of RW
         Parameters:
-            new_seqs (DataFrame): sequences to predict
+            new_seqs (DataFrame): sequences to predict. They must have unique indices.
 
          Returns:
             predictions (list): (E,v) as floats
         """
         predictions = []
-        for j in range(len(new_seqs.index)):
-            ns = new_seqs.iloc[j]
+        self.kern.train(new_seqs)
+        for ns in new_seqs.index:
             k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) \
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns,ns,self.var_p)

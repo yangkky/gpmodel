@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from numba import jit
 
 class GPKernel (object):
     """A Gaussian process kernel for proteins.

@@ -28,22 +28,6 @@ def plot_predictions (real_Ys, predicted_Ys,stds=None,file_name=None,title='',la
 
 def plot_ROC (real_Ys, pis, file_name=None,title=''):
     fpr, tpr, _ = metrics.roc_curve(real_Ys, pis)
-
-#     fps = np.empty(np.shape(pis))
-#     tps = np.empty(np.shape(pis))
-#     n_false = sum([1 if y == -1 else 0 for y in real_Ys])
-#     n_true = len(real_Ys) - n_false
-#     for i,cut in enumerate(sorted(pis)):
-#         predictions = [1 if p > cut else -1 for p in pis]
-#         fp = 0
-#         tp = 0
-#         for y,p in zip(real_Ys, predictions):
-#             if y == 1 and p == 1:
-#                 tp += 1
-#             elif y==-1 and p == 1:
-#                 fp +=1
-#         fps[i] = float(fp)/n_false
-#         tps[i] = float(tp)/n_true
     plt.plot (fpr,tpr,'.-')
     plt.xlim([-.1,1.1])
     plt.ylim([-.1,1.1])

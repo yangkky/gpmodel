@@ -34,12 +34,18 @@ class GPModel(object):
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
-            minimize_res = minimize(self.log_ML,(guesses), bounds=[(1e-4,None),(1e-5,None)], method='L-BFGS-B')
+            minimize_res = minimize(self.log_ML,
+                                    (guesses),
+                                    bounds=[(1e-4,None),
+                                            (1e-5,None)],
+                                    method='L-BFGS-B')
             self.set_hypers(minimize_res['x'])
             self.ML = minimize_res['fun']
 
         else:
-            minimize_res = minimize(self.logistic_log_ML, 10., bounds=[(1e-4, None)])#, method = 'L-BFGS-B')
+            minimize_res = minimize(self.logistic_log_ML,
+                                    10.,
+                                    bounds=[(1e-4, None)])
             self.set_hypers(minimize_res['x'])
 
     def set_hypers(self,hypers):
@@ -50,7 +56,9 @@ class GPModel(object):
             self.var_n,self.var_p = hypers
             self.Ky = self.var_p*self.K+self.var_n*np.identity(len(self.X_seqs))
             self.L = np.linalg.cholesky(self.Ky)
-            self.alpha = np.linalg.lstsq(self.L.T,np.linalg.lstsq (self.L, np.matrix(self.Y).T)[0])[0]
+            self.alpha = np.linalg.lstsq(self.L.T,
+                                         np.linalg.lstsq (self.L,
+                                                          np.matrix(self.Y).T)[0])[0]
         else:
             self.var_p = hypers[0]
             self.f_hat = self.find_F(var_p=self.var_p)
@@ -84,7 +92,10 @@ class GPModel(object):
             v = np.linalg.lstsq(self.L, self.W_root*k.T)[0]
             var = k_star - v.T*v
             i = 10
-            pi_star = scipy.integrate.quad(self.p_integral, -i*var+f_bar, f_bar+i*var, args=(f_bar.item(), var.item()))[0]
+            pi_star = scipy.integrate.quad(self.p_integral,
+                                           -i*var+f_bar,
+                                           f_bar+i*var,
+                                           args=(f_bar.item(), var.item()))[0]
             return (pi_star)
 
     def p_integral (self, z, mean, variance):
@@ -116,7 +127,6 @@ class GPModel(object):
         second = sum([math.log(l) for l in np.diag(L)])
         third = len(K_mat)/2.*math.log(2*math.pi)
         ML = (first+second+third).item()
-        #print first, second, third
         # log[det(Ky)] = 2*sum(log(diag(L))) is a property of the Cholesky decomposition
         # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
         return ML
@@ -135,8 +145,7 @@ class GPModel(object):
         for j in range(len(new_seqs.index)):
             ns = new_seqs.iloc[j]
             k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) \
-                           for seq1 in self.X_seqs.index])#[self.X_seqs.iloc[i] for i in \
-                                        #range(len(self.X_seqs.index))]])
+                           for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns,ns,self.var_p)
             predictions.append(self.predict(k, k_star))
         return predictions
@@ -275,7 +284,6 @@ class GPModel(object):
         b = W*F_mat.T + np.matrix(np.diag(self.grad_log_logistic_likelihood (self.Y,F))).T
         a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
         logq = 0.5*a.T*F_mat.T - self.log_logistic_likelihood(self.Y, F) + sum(np.log(np.diag(L)))
-        #print var_p, 0.5*a.T*F_mat.T, -self.log_logistic_likelihood(self.Y, F), sum(np.log(np.diag(L))), logq
         return logq
 
     def logistic_log_ML (self, var_p):

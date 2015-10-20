@@ -53,10 +53,18 @@ class HammingKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's saved_seqs dict
         """
         for i in range(len(X_seqs.index)):
-            if i in self.saved_seqs.keys():
-                print 'Attempting to rewrite sequences for' + i
+            if X_seqs.index[i] in self.saved_seqs.keys():
+                print 'Attempting to rewrite sequences for ' + X_seqs.index[i]
             else:
                 self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
+
+    def delete(self,X_seqs):
+        """
+        Deletes sequences from the saved_seqs dict
+        """
+        for i in range(len(X_seqs.index)):
+            if X_seqs.index[i] in self.saved_seqs.keys():
+                del self.saved_seqs[X_seqs.index[i]]
 
     def get_sequence(self,seq):
         """
@@ -106,6 +114,7 @@ class StructureKernel (GPKernel):
                 for aa2 in second_possibilities:
                     contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
         return contact_terms
+
 
     def make_K (self, seqs, var_p=1):
         """ Makes the structure-based covariance matrix
@@ -165,11 +174,18 @@ class StructureKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's contacts dict
         """
         for i in range(len(X_seqs.index)):
-            if i in self.saved_contacts.keys():
-                print 'Attempting to rewrite contacts for' + i
+            if X_seqs.index[i] in self.saved_contacts.keys():
+                print 'Attempting to rewrite contacts for ' + X_seqs.index[i]
             else:
                 self.saved_contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
 
+    def delete(self, X_seqs):
+        """
+        Delete these sequences from the kernel's contacts dict
+        """
+        for i in range (len(X_seqs.index)):
+            if X_seqs.index[i] in self.saved_contacts.keys():
+                del self.saved_contacts[X_seqs.index[i]]
 
     def get_contacts(self, seq):
         """

@@ -43,9 +43,14 @@ def test_hamming_kernel():
                                'C':'RTMA',
                                'D':'RYMA'},\
     'Failed to train HammingKernel.'
+
+    kern.delete(seqs.loc[['D']])
+    assert kern.saved_seqs == {'A':'RYMA',
+                               'B':'RTHA',
+                               'C':'RTMA'}
     assert kern.calc_kernel('A','B') == 2,\
     'Failed calc_kernel with two trained sequences.'
-    assert kern.calc_kernel('C','D',var_p=vp) == 3*vp,\
+    assert kern.calc_kernel('C','B',var_p=vp) == 3*vp,\
     'Failed calc_kernel with vp ~= 1.'
     assert kern.calc_kernel('B',seqs.iloc[0]) == 2,\
     'Failed calc_kernel with one untrained and one trained sequence.'
@@ -96,6 +101,12 @@ def test_structure_kernel():
                              'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
                              'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\
     'Failed to train structure kernel.'
+
+    kern.delete(seqs.loc[['D']])
+    assert kern.saved_contacts == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+                             'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
+                             'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))]}
+
     assert kern.calc_kernel('A','B') == 0,\
     'Failed calc_kernel with two trained sequences.'
     assert kern.calc_kernel('A',seqs.iloc[1]) == 0,\

@@ -148,6 +148,7 @@ class GPModel(object):
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns,ns,self.var_p)
             predictions.append(self.predict(k, k_star))
+        self.kern.delete(new_seqs)
         return predictions
 
     def is_class (self):

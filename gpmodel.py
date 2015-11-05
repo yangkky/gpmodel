@@ -15,6 +15,9 @@ class GPModel(object):
     Attributes:
         X_seqs (DataFrame): The sequences in the training set
         Y (Series): The outputs for the training set
+        normed_Y (Series): Normalized outputs for the training set
+        mean (float): mean of unnormed Ys
+        std (float): standard deviation of unnormed Ys
         kern (kernel): a kernel for calculating covariances
         regr (Boolean): classification or regression
         K (DataFrame): Covariance matrix
@@ -35,6 +38,7 @@ class GPModel(object):
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
+            self.mean, self.std, self.normed_Y = self.normalize (self.Y)
             minimize_res = minimize(self.log_ML,
                                     (guesses),
                                     bounds=[(1e-4,None),
@@ -59,7 +63,7 @@ class GPModel(object):
             self.L = np.linalg.cholesky(self.Ky)
             self.alpha = np.linalg.lstsq(self.L.T,
                                          np.linalg.lstsq (self.L,
-                                                          np.matrix(self.Y).T)[0])[0]
+                                                          np.matrix(self.normed_Y).T)[0])[0]
         else:
             self.var_p = hypers[0]
             self.f_hat = self.find_F(var_p=self.var_p)
@@ -68,6 +72,27 @@ class GPModel(object):
             self.Ky = np.matrix (self.K*self.var_p)
             self.L = np.linalg.cholesky (np.matrix(np.eye(self.l))+self.W_root*self.Ky*self.W_root)
             self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood (self.Y, self.f_hat)))
+
+    def normalize(self, data):
+        """
+        Normalizes the elements in data by subtracting the mean and dividing
+        by the standard deviation.
+
+        Parameters:
+            data (pd.Series)
+
+        Returns:
+            mean, standard_deviation, normed
+        """
+        m = data.mean()
+        s = data.std()
+        return m, s, (data-m) / s
+
+    def unnormalize(self, normed, m, s):
+        """
+        Inverse of normalize, but works on single values or arrays
+        """
+        return normed*s + m
 
     def predict (self, k, k_star):
         """ Predicts the mean and variance for one new sequence given its
@@ -84,9 +109,9 @@ class GPModel(object):
                 classification
         """
         if self.regr:
-            E = k*self.alpha
+            E = self.unnormalize(k*self.alpha, self.mean, self.std)
             v = np.linalg.lstsq(self.L,k.T)[0]
-            var = k_star - v.T*v
+            var = (k_star - v.T*v) * self.std**2
             return (E.item(),var.item())
         else:
             f_bar = k*self.grad.T
@@ -111,22 +136,18 @@ class GPModel(object):
 
 
     def log_ML (self,variances):
-        """ Returns the negative log marginal likelihood.
+        """ Returns the negative log marginal likelihood for the regression model.
 
         Parameters:
             variances (iterable): var_n and var_p
 
         Uses RW Equation 5.8
         """
-        Y_mat = np.matrix(self.Y)
+        Y_mat = np.matrix(self.normed_Y)
         var_n,var_p = variances
         K_mat = np.matrix (self.K)
         Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-        try:
-            L = np.linalg.cholesky (Ky)
-        except:
-            print variances
-            exit('')
+        L = np.linalg.cholesky (Ky)
         alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
         first = 0.5*Y_mat*alpha
         second = sum([math.log(l) for l in np.diag(L)])
@@ -152,8 +173,6 @@ class GPModel(object):
             k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) \
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns,ns,self.var_p)
-            if ns == 'A':
-                print k
             predictions.append(self.predict(k, k_star))
         if delete:
             self.kern.delete(new_seqs)
@@ -243,12 +262,6 @@ class GPModel(object):
 
 
         K_mat = var_p*np.matrix (self.K)
-#         r = minimize(self.logq, f_hat, args=var_p)
-#         F = r['x']
-#         F_test = K_mat*np.matrix(np.diag(self.grad_log_logistic_likelihood(self.Y,F))).T
-#         for f,ft in zip(F, F_test):
-#             print f, ft
-#         exit('')
         n_below = 0
         for i in range (evals):
             # find new f_hat
@@ -305,7 +318,6 @@ class GPModel(object):
         var_p = var_p[0]
         f_hat = self.find_F(var_p=var_p) # use Algorithm 3.1 to find mode
         ML = self.logq(f_hat, var_p=var_p)
-        #print 'var_p = %f, ML = %f' %(var_p,ML)
         return ML
 
 

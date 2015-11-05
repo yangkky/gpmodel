@@ -20,10 +20,7 @@ reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
 ham = gpkernel.HammingKernel()
 struct = gpkernel.StructureKernel (contacts,space)
 
-test_seqs = pd.DataFrame([['R','Y','M','A'],['R','Y','H','A']],index=['A','D'])
-
-
-
+test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
 
 def test_regression ():
@@ -37,9 +34,23 @@ def test_regression ():
     assert ham_model.l == len(seqs.index)
     assert struct_model.l ==  len(seqs.index)
 
+    m = reg_Ys.mean()
+    s = reg_Ys.std()
+    assert ham_model.mean == m
+    assert struct_model.mean == m
+    assert ham_model.std == s
+    assert struct_model.std == s
+
+    normed_Ys = (reg_Ys - m) / s
+    assert (y1==y2 for y1, y2 in zip (normed_Ys, ham_model.normed_Y))
+    assert (y1==y2 for y1, y2 in zip (normed_Ys, struct_model.normed_Y))
 
 
-    Y_mat = np.matrix(reg_Ys)
+
+
+
+    Y_mat = np.matrix(normed_Ys)
+
     for name,model in zip(['hamming','structure'],
                           [ham_model, struct_model]):
         print 'Testing regression with ' + name + ' model...'
@@ -54,27 +65,25 @@ def test_regression ():
 
         # because floating point precision
         assert close_enough(model.log_ML((vn,vp)), ML.item()), \
-        name + 'log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
+        name + ' log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
         # test predictions
-        kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],seq1,model.var_p) for seq1 \
+        kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'], seq1, model.var_p) for seq1 \
                         in [seqs.iloc[i] for i in range(len(seqs.index))]])
-        kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'],seq1,model.var_p) for seq1 \
+        kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'], seq1, model.var_p) for seq1 \
                         in [seqs.iloc[i] for i in range(len(seqs.index))]])
-        EA = kA*np.linalg.inv(model.Ky)*Y_mat.T
-        ED = kD*np.linalg.inv(model.Ky)*Y_mat.T
+        EA = (kA*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
+        ED = (kD*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
         k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],test_seqs.loc['A'])*model.var_p
         k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],test_seqs.loc['D'])*model.var_p
-        var_A = k_star_A - kA*np.linalg.inv(model.Ky)*kA.T
-        var_D = k_star_D - kD*np.linalg.inv(model.Ky)*kD.T
-
+        var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
+        var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
         predictions = model.predicts(test_seqs,delete=False)
 
         assert close_enough(EA, predictions[0][0])
         assert close_enough(ED, predictions[1][0])
         assert close_enough(var_A, predictions[0][1])
         assert close_enough(var_D, predictions[1][1])
-        print ham.saved_seqs
 
         [(E,v)] = model.predicts(test_seqs.loc[['D']])
         assert close_enough(E,ED)

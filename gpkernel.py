@@ -54,7 +54,7 @@ class HammingKernel (GPKernel):
         """
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_seqs.keys():
-                print 'Attempting to rewrite sequences for ' + X_seqs.index[i]
+                pass
             else:
                 self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
 
@@ -86,7 +86,9 @@ class StructureKernel (GPKernel):
         contacts: list of which residues are in contact
     """
 
-    def __init__ (self, contacts, sample_space):
+    def __init__ (self, contacts=None, sample_space=None):
+        if contacts==None or sample_space==None:
+            super (StructureKernel, self).__init__()
         self.contact_terms = self.contacting_terms (sample_space, contacts)
         self.saved_contacts = {}
         self.contacts = contacts
@@ -175,7 +177,7 @@ class StructureKernel (GPKernel):
         """
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_contacts.keys():
-                print 'Attempting to rewrite contacts for ' + X_seqs.index[i]
+                continue
             else:
                 self.saved_contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
 

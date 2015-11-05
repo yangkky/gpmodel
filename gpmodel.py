@@ -24,13 +24,14 @@ class GPModel(object):
         ML (float): The negative log marginal likelihood
         l (int): number of training samples
     """
-    def __init__ (self, X_seqs, Y, kern, guesses=[1.,100.]):
+    def __init__ (self, X_seqs, Y, kern, guesses=[10.,1.], train=True):
         self.X_seqs = X_seqs
         self.Y = Y
         self.l = len(Y)
         self.kern = kern
         self.K = self.kern.make_K(X_seqs)
-        self.kern.train(X_seqs)
+        if train:
+            self.kern.train(X_seqs)
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
@@ -121,7 +122,11 @@ class GPModel(object):
         var_n,var_p = variances
         K_mat = np.matrix (self.K)
         Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-        L = np.linalg.cholesky (Ky)
+        try:
+            L = np.linalg.cholesky (Ky)
+        except:
+            print variances
+            exit('')
         alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
         first = 0.5*Y_mat*alpha
         second = sum([math.log(l) for l in np.diag(L)])
@@ -131,7 +136,7 @@ class GPModel(object):
         # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
         return ML
 
-    def predicts (self, new_seqs):
+    def predicts (self, new_seqs, delete=True):
         """ Calculates predicted (mean, variance) for each sequence in new_seqs
 
         Uses Equations 2.23 and 2.24 of RW
@@ -147,8 +152,11 @@ class GPModel(object):
             k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) \
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns,ns,self.var_p)
+            if ns == 'A':
+                print k
             predictions.append(self.predict(k, k_star))
-        self.kern.delete(new_seqs)
+        if delete:
+            self.kern.delete(new_seqs)
         return predictions
 
     def is_class (self):

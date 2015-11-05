@@ -20,7 +20,7 @@ reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
 ham = gpkernel.HammingKernel()
 struct = gpkernel.StructureKernel (contacts,space)
 
-test_seqs = pd.DataFrame([['R','T','H','A'],['R','Y','H','A']],index=['A','D'])
+test_seqs = pd.DataFrame([['R','Y','M','A'],['R','Y','H','A']],index=['A','D'])
 
 
 
@@ -44,7 +44,7 @@ def test_regression ():
                           [ham_model, struct_model]):
         print 'Testing regression with ' + name + ' model...'
         vp = 0.5
-        vn = .2
+        vn = .1
         K_mat = np.matrix(model.K)
         Ky = vp*K_mat + np.eye(len(reg_Ys))*vn
         first = 0.5*Y_mat*np.linalg.inv(Ky)*Y_mat.T
@@ -68,12 +68,13 @@ def test_regression ():
         var_A = k_star_A - kA*np.linalg.inv(model.Ky)*kA.T
         var_D = k_star_D - kD*np.linalg.inv(model.Ky)*kD.T
 
-        predictions = model.predicts(test_seqs)
+        predictions = model.predicts(test_seqs,delete=False)
 
         assert close_enough(EA, predictions[0][0])
         assert close_enough(ED, predictions[1][0])
         assert close_enough(var_A, predictions[0][1])
         assert close_enough(var_D, predictions[1][1])
+        print ham.saved_seqs
 
         [(E,v)] = model.predicts(test_seqs.loc[['D']])
         assert close_enough(E,ED)
@@ -176,5 +177,5 @@ def close_enough(f1,f2):
 
 
 if __name__=="__main__":
-    #test_regression()
+    test_regression()
     test_classification()

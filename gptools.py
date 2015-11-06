@@ -54,15 +54,12 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
     predicted_Ys = []
     count = 0
     for i in Xs.index:
-        if i != 'n72':
-            continue
         train_inds = list(set(Xs.index) - set(i))
         train_Xs = Xs.loc[train_inds]
         train_Ys = Ys.loc[train_inds]
         verify = Xs.loc[[i]]
-        print ''.join(verify.loc[i])
         print 'Building model for ' + str(i)
-        model = gpmodel.GPModel(train_Xs,train_Ys, kernel, train=(count<1))
+        model = gpmodel.GPModel(train_Xs,train_Ys, kernel, guesses=[0.74,.0002684], train=(count<1))
         count += 1
         print model.var_n, model.var_p
         print 'Making prediction for ' + str(i)
@@ -88,73 +85,44 @@ def log_marginal_likelihood (variances, model):
 
         Uses RW Equation 5.8
     """
-    Y_mat = np.matrix(model.Y)
+    Y_mat = np.matrix(model.normed_Y)
     var_n,var_p = variances
     K_mat = np.matrix (model.K)
     Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
     L = np.linalg.cholesky (Ky)
     alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
-    first = 0.5*Y_mat*alpha
-    return first
-    second = sum([math.log(l) for l in np.diag(L)])
-    third = len(K_mat)/2.*math.log(2*math.pi)
+    first = -0.5*Y_mat*alpha
+    second = -sum([math.log(l) for l in np.diag(L)])
+    third = -len(K_mat)/2.*math.log(2*math.pi)
     ML = (first+second+third).item()
     return (first, second, third, ML)
 
-# def log_ML(model,variances):
-# #     Y_mat = np.matrix(model.Y)
-# #     var_n,var_p = variances
-# #     K_mat = np.matrix (model.K)
-# #     Ky = K_mat*var_p+np.eye(len(K_mat))*var_n
-# #     fit = -0.5*Y_mat*np.linalg.inv(Ky)*Y_mat.T
-# #     complexity = -0.5*np.log(np.linalg.det(Ky))
-# #     return fit,complexity
 
-#     vn,vp = variances
-#     Y_mat = np.matrix(model.Y)
-#     K_mat = np.matrix(model.K)
-#     Ky = K_mat*vp + np.eye(len(K_mat))*vn
-#     fit = -0.5*Y_mat*np.linalg.inv(Ky)*Y_mat.T
-#     complexity = -np.log(np.linalg.det(Ky))*0.5
-#     norm = -len(K_mat)*math.log(2*math.pi)*0.5
-    return fit,complexity, norm, fit+complexity+norm
 
-def plot_ML_contour (model, save_as=None, lab='', n=100):
+def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
     """
     Make a plot of how ML varies with the hyperparameters for a given model
     """
     if model.regr:
-        v_n = 0.5
-        vps = np.linspace(0.1,50.,n)
-        ML = np.empty_like(vps)
-        fit = np.empty_like(vps)
-        complexity = np.empty_like(vps)
-        for i,p in enumerate(vps):
-            fit[i],complexity[i],_,ML[i] = [-m for m in log_marginal_likelihood(model, (v_n,p))]
-        #log_ML -= log_ML.max()
+        vns = np.linspace(ranges[0][0], ranges[0][1], n)
+        vps = np.linspace(ranges[1][0], ranges[1][1], n)
+        nn,pp = np.meshgrid(vns, vps)
+        log_ML = np.empty_like(nn)
+        for j in range(len(vns)):
+            for i in range(len(vps)):
+                log_ML[j,i] = -model.log_ML((nn[i,j],pp[i,j]))
+        levels = np.linspace(log_ML.min(), log_ML.max(), n_levels)
+        print levels
+        cs = plt.contour(nn, pp, log_ML, alpha=0.7,levels=levels)
 
-        plt.plot(vps, ML, vps, fit, vps, complexity)
-        plt.legend(['log_ML','fit','complexity'])
-        plt.ylim([min(ML)-20, 20])
-        return (fit, complexity, ML)
-
-#         vps = np.linspace(0.19, 0.20, n)
-#         vns = np.linspace(2.75, 2.85, n)
-#         nn,pp = np.meshgrid(vns, vps)
-#         log_ML = np.empty_like(nn)
-#         for j in range(len(vns)):
-#             for i in range(len(vps)):
-#                 log_ML[j,i] = -model.log_ML((nn[i,j],pp[i,j]))
-#         log_ML -= log_ML.max()
-#         res = np.exp(log_ML)
-#         plt.contourf(nn, pp, res, cmap=plt.cm.Blues, alpha=0.7)
-#         plt.xlabel(r'$\sigma_n^2$')
-#         plt.ylabel(r'$\sigma_p^2$')
-#         plt.title(lab)
-#         return res
+        plt.clabel(cs)
+        plt.xlabel(r'$\sigma_n^2$')
+        plt.ylabel(r'$\sigma_p^2$')
+        plt.title(lab)
+        return log_ML
 
     else:
-        vps = np.linspace(1e-5,1e-1,n)
+        vps = np.linspace(ranges[0], ranges[1], n)
         log_ML = np.empty_like(vps)
         for i,p in enumerate(vps):
             log_ML[i] = -model.logistic_log_ML([p])
@@ -166,29 +134,65 @@ def plot_ML_contour (model, save_as=None, lab='', n=100):
         plt.title(lab)
         return log_ML
 
-
-
+def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexity']):
+    if model.regr:
+        if len(ranges[0]) == 1:
+            indpt = 'var_p**2'
+            held = 'var_n**2'
+            cons = ranges[0][0]
+            lower = ranges[1][0]
+            upper = ranges[1][1]
+        elif len(ranges[1]) == 1:
+            indpt = 'var_n**2'
+            held = 'var_p**2'
+            cons = ranges[1][0]
+            lower = ranges[0][0]
+            upper = ranges[0][1]
+        varied = np.linspace(lower, upper, n)
+        ML = np.empty_like(varied)
+        fit = np.empty_like(varied)
+        complexity = np.empty_like(varied)
+        for i,v in enumerate(varied):
+            if indpt == 'var_p**2':
+                fit[i],complexity[i],_,ML[i] = log_marginal_likelihood((cons,v), model)
+            else:
+                fit[i],complexity[i],_,ML[i] = log_marginal_likelihood((v,cons), model)
+        #log_ML -= log_ML.max()
+        dict = {'log_ML':ML, 'fit':fit, 'complexity':complexity}
+        for pl in plots:
+            plt.plot(varied, dict[pl])
+        plt.legend(plots)
+        plt.xlabel(indpt)
+        plt.title(lab + ' ' + held + ' = %f' %cons)
+        return (fit, complexity, ML)
 
 if __name__ == "__main__":
     import cPickle as pickle
     from scipy.optimize import minimize
 
     #with open('2015-10-08_test_expression_structure_kernel.pkl','r') as f:
-    with open('2015-10-23__mKate_mean_structure_kernel.pkl','r') as f:
+    with open('2015-11-05_normed_mKate_mean_structure_kernel.pkl','r') as f:
     #with open('test/model.pkl','r') as f:
         m = pickle.load(f)
-    vars = (1e-2, 1e-3)
-    print minimize(log_marginal_likelihood,
-                   vars,
-                   args=m,
-                   bounds=[(1e-10,None),
-                                    (1e-10,None)],
-                  )
-    exit('')
+#     vars = (0.7426, 0.0002684)
+#     print log_marginal_likelihood(vars,m)
+#     exit('')
+
+#     print minimize(m.log_ML,
+#                    vars,
+#                    bounds=[(1e-5,None),
+#                                     (1e-5,None)],
+#                   )
+#     exit('')
 #     print minimize(m.logistic_log_ML,
 #                                     10.,
 #                                     bounds=[(1e-4, None)])
-    res = plot_ML_contour(m, n=50, lab='T50 Marginal Likelihood')
+    res = plot_ML_parts(m, ranges=([0.01,10.0],[1.0]),
+                        n=100, lab='Normed mKate_mean Marginal Likelihood')
+
+#     res = plot_ML_contour(m, ranges=([0.72,0.76],[0.0002,.0003]),
+#                         n=100, lab='Normed mKate_mean Marginal Likelihood',
+#                          n_levels=20)
 #     save_as = '2015-11-2_T50_ML.pdf'
 #     plt.savefig(save_as)
     plt.show()

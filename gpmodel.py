@@ -48,7 +48,7 @@ class GPModel(object):
             self.ML = minimize_res['fun']
 
         else:
-            minimize_res = minimize(self.logistic_log_ML,
+            minimize_res = minimize(self.log_ML,
                                     10.,
                                     bounds=[(1e-4, None)])
             self.set_hypers(minimize_res['x'])
@@ -71,8 +71,11 @@ class GPModel(object):
             self.W = self.hess (self.f_hat)
             self.W_root = scipy.linalg.sqrtm(self.W)
             self.Ky = np.matrix (self.K*self.var_p)
-            self.L = np.linalg.cholesky (np.matrix(np.eye(self.l))+self.W_root*self.Ky*self.W_root)
-            self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood (self.Y, self.f_hat)))
+            self.L = np.linalg.cholesky (np.matrix(np.eye(self.l))+self.W_root\
+                                         *self.Ky*self.W_root)
+            self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood\
+                                          (self.Y,
+                                           self.f_hat)))
 
     def normalize(self, data):
         """
@@ -130,37 +133,44 @@ class GPModel(object):
         try:
             first = 1./(1+math.exp(-z))
         except OverflowError:
-            first=0.
+            first = 0.
         second = 1/math.sqrt(2*math.pi*variance)
         third = math.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
 
     def log_ML (self,variances):
-        """ Returns the negative log marginal likelihood for the regression model.
+        """ Returns the negative log marginal likelihood for the model.
 
         Parameters:
             variances (iterable): var_n and var_p
 
         Uses RW Equation 5.8
         """
-        Y_mat = np.matrix(self.normed_Y)
-        var_n,var_p = variances
-        K_mat = np.matrix (self.K)
-        Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-        try:
-            L = np.linalg.cholesky (Ky)
-        except:
-            print variances
-            exit('')
-        alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
-        first = 0.5*Y_mat*alpha
-        second = sum([math.log(l) for l in np.diag(L)])
-        third = len(K_mat)/2.*math.log(2*math.pi)
-        ML = (first+second+third).item()
-        # log[det(Ky)] = 2*sum(log(diag(L))) is a property of the Cholesky decomposition
-        # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
-        return ML
+        if self.regr:
+            Y_mat = np.matrix(self.normed_Y)
+            var_n,var_p = variances
+            K_mat = np.matrix (self.K)
+            Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
+            try:
+                L = np.linalg.cholesky (Ky)
+            except:
+                print variances
+                exit('')
+            alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
+            first = 0.5*Y_mat*alpha
+            second = sum([math.log(l) for l in np.diag(L)])
+            third = len(K_mat)/2.*math.log(2*math.pi)
+            ML = (first+second+third).item()
+            # log[det(Ky)] = 2*sum(log(diag(L))) is a property
+            # of the Cholesky decomposition
+            # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
+            return ML
+        else:
+            var_p = variances[0]
+            f_hat = self.find_F(var_p=var_p) # use Algorithm 3.1 to find mode
+            ML = self.logq(f_hat, var_p=var_p)
+            return ML
 
     def predicts (self, new_seqs, delete=True):
         """ Calculates predicted (mean, variance) for each sequence in new_seqs
@@ -314,20 +324,9 @@ class GPModel(object):
         L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
         b = W*F_mat.T + np.matrix(np.diag(self.grad_log_logistic_likelihood (self.Y,F))).T
         a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
-        logq = 0.5*a.T*F_mat.T - self.log_logistic_likelihood(self.Y, F) + sum(np.log(np.diag(L)))
+        logq = 0.5*a.T*F_mat.T - self.log_logistic_likelihood(self.Y, F) \
+        + sum(np.log(np.diag(L)))
         return logq
-
-    def logistic_log_ML (self, var_p):
-        '''
-        Finds the negative log marginal likelihood for Laplace's approximation
-        Equation 5.20 or 3.12 from RW, as described in Algorithm 5.1
-        Parameters:
-            var_p (list) of size 1
-        '''
-        var_p = var_p[0]
-        f_hat = self.find_F(var_p=var_p) # use Algorithm 3.1 to find mode
-        ML = self.logq(f_hat, var_p=var_p)
-        return ML
 
 
 

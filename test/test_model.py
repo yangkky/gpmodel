@@ -176,7 +176,7 @@ def test_classification ():
         a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
         check_q = 0.5*a.T*F_mat.T - model.log_logistic_likelihood(class_Ys, f_hat) + sum(np.log(np.diag(L)))
         assert close_enough(check_q,logq)
-        assert close_enough(model.logistic_log_ML([vp]), check_q)
+        assert close_enough(model.log_ML([vp]), check_q)
 
         # Test the function that is integrated
         v = 0.4

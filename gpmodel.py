@@ -32,7 +32,7 @@ class GPModel(object):
         self.Y = Y
         self.l = len(Y)
         self.kern = kern
-        self.K = self.kern.make_K(X_seqs)
+        self.K = self.kern.make_K(X_seqs, normalize=True)
         if train:
             self.kern.train(X_seqs)
         # check if regression or classification
@@ -52,6 +52,7 @@ class GPModel(object):
                                     10.,
                                     bounds=[(1e-4, None)])
             self.set_hypers(minimize_res['x'])
+            self.ML = minimize_res['fun']
 
     def set_hypers(self,hypers):
         '''
@@ -174,9 +175,13 @@ class GPModel(object):
         predictions = []
         self.kern.train(new_seqs)
         for ns in new_seqs.index:
-            k = np.matrix([self.kern.calc_kernel(ns,seq1,self.var_p) \
+            k = np.matrix([self.kern.calc_kernel(ns, seq1,
+                                                var_p=self.var_p,
+                                                normalize=True) \
                            for seq1 in self.X_seqs.index])
-            k_star = self.kern.calc_kernel(ns,ns,self.var_p)
+            k_star = self.kern.calc_kernel(ns, ns,
+                                           self.var_p,
+                                          normalize=True)
             predictions.append(self.predict(k, k_star))
         if delete:
             self.kern.delete(new_seqs)

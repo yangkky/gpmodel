@@ -6,6 +6,7 @@ import gpkernel
 import pandas as pd
 from sklearn import metrics
 from sys import exit
+import scipy
 
 import seaborn as sns
 
@@ -20,20 +21,31 @@ sns.set_style('darkgrid', rc=rc)
 # Here are some plotting tools that are generally useful
 ######################################################################
 
-def plot_predictions (real_Ys, predicted_Ys,stds=None,file_name=None,title='',label='', line=True):
+def plot_predictions (real_Ys, predicted_Ys,
+                      stds=None, file_name=None, title='',label='', line=True):
     if stds is None:
         plt.plot (real_Ys, predicted_Ys, 'g.')
     else:
         plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'g.')
     small = min(set(real_Ys) | set(predicted_Ys))*1.1
+    if small == 0:
+        small = real_Ys.mean()/10.0
     large = max(set(real_Ys) | set(predicted_Ys))*1.1
     if line:
         plt.plot ([small, large], [small, large], 'b--')
     plt.xlabel ('Actual ' + label)
     plt.ylabel ('Predicted ' + label)
     plt.title (title)
-    plt.xlim (small, large)
-    plt.text(small*1.2, large*.7, 'R = %.3f' %np.corrcoef(real_Ys, predicted_Ys)[0,1])
+    #plt.xlim (small, large)
+    if small < 0:
+        left = small*0.8
+    else:
+        left = small*1.2
+    if large < 0:
+        right = large*1.3
+    else:
+        right = large*0.7
+    plt.text(left, right, 'R = %.3f' %np.corrcoef(real_Ys, predicted_Ys)[0,1])
     if not file_name is None:
         plt.savefig (file_name)
 
@@ -61,7 +73,6 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
         print 'Building model for ' + str(i)
         model = gpmodel.GPModel(train_Xs,train_Ys, kernel, guesses=[0.74,.0002684], train=(count<1))
         count += 1
-        print model.var_n, model.var_p
         print 'Making prediction for ' + str(i)
         predicted = model.predicts(verify, delete=False)
         if model.is_class():
@@ -73,7 +84,12 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
                 print 'ValueError', i, predicted
             std.append(math.pow(v,0.5))
         predicted_Ys.append (E)
-    plot_predictions (Ys.tolist(), predicted_Ys, stds=None,label=lab, line=True, file_name=save_as)
+    plot_predictions (Ys.tolist(),
+                      predicted_Ys,
+                      stds=None,
+                      label=lab,
+                      line=model.regr,
+                      file_name=save_as)
     return predicted_Ys,std
 
 def log_marginal_likelihood (variances, model):
@@ -85,18 +101,34 @@ def log_marginal_likelihood (variances, model):
 
         Uses RW Equation 5.8
     """
-    Y_mat = np.matrix(model.normed_Y)
-    var_n,var_p = variances
-    K_mat = np.matrix (model.K)
-    Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-    L = np.linalg.cholesky (Ky)
-    alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
-    first = -0.5*Y_mat*alpha
-    second = -sum([math.log(l) for l in np.diag(L)])
-    third = -len(K_mat)/2.*math.log(2*math.pi)
-    ML = (first+second+third).item()
-    return (first, second, third, ML)
-
+    if model.regr:
+        Y_mat = np.matrix(model.normed_Y)
+        var_n,var_p = variances
+        K_mat = np.matrix (model.K)
+        Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
+        L = np.linalg.cholesky (Ky)
+        alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
+        first = -0.5*Y_mat*alpha
+        second = -sum([math.log(l) for l in np.diag(L)])
+        third = -len(K_mat)/2.*math.log(2*math.pi)
+        ML = (first+second+third).item()
+        return (first, second, third, ML)
+    else:
+        Y_mat = np.matrix(model.Y)
+        vp = variances
+        f_hat = model.find_F(var_p=vp)
+        K_mat = vp*np.matrix (model.K)
+        W = model.hess (f_hat)
+        W_root = scipy.linalg.sqrtm(W)
+        F_mat = np.matrix (f_hat)
+        ell = len(model.Y)
+        L = np.linalg.cholesky (np.matrix(np.eye(ell))+W_root*K_mat*W_root)
+        b = W*F_mat.T + \
+        np.matrix(np.diag(model.grad_log_logistic_likelihood (model.Y,f_hat))).T
+        a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
+        fit = -0.5*a.T*F_mat.T + model.log_logistic_likelihood(model.Y, f_hat)
+        complexity = -sum(np.log(np.diag(L)))
+        return (fit, complexity, fit+complexity)
 
 
 def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
@@ -126,7 +158,6 @@ def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
         log_ML = np.empty_like(vps)
         for i,p in enumerate(vps):
             log_ML[i] = -model.logistic_log_ML([p])
-        log_ML -= log_ML.max()
 
         plt.plot(vps, log_ML,'.-')
         plt.xlabel(r'$\sigma_p^2$')
@@ -152,50 +183,37 @@ def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexi
         ML = np.empty_like(varied)
         fit = np.empty_like(varied)
         complexity = np.empty_like(varied)
+        norm = np.empty_like(varied)
         for i,v in enumerate(varied):
             if indpt == 'var_p**2':
-                fit[i],complexity[i],_,ML[i] = log_marginal_likelihood((cons,v), model)
+                fit[i],complexity[i],norm[i],ML[i] = log_marginal_likelihood((cons,v), model)
             else:
-                fit[i],complexity[i],_,ML[i] = log_marginal_likelihood((v,cons), model)
+                fit[i],complexity[i],norm[i],ML[i] = log_marginal_likelihood((v,cons), model)
         #log_ML -= log_ML.max()
-        dict = {'log_ML':ML, 'fit':fit, 'complexity':complexity}
-        for pl in plots:
-            plt.plot(varied, dict[pl])
-        plt.legend(plots)
-        plt.xlabel(indpt)
+    else:
+        indpt = 'var_p**2'
+        varied = np.linspace(ranges[0], ranges[1], n)
+        ML = np.empty_like(varied)
+        fit = np.empty_like(varied)
+        norm = np.empty_like(varied)
+        complexity = np.empty_like(varied)
+        for i,v in enumerate(varied):
+            fit[i], complexity[i], ML[i] = log_marginal_likelihood(v, model)
+
+
+    plot_dict = {'log_ML':ML, 'fit':fit, 'complexity':complexity, 'norm':norm}
+    for pl in plots:
+        plt.plot(varied, plot_dict[pl])
+    plt.legend(plots)
+    plt.xlabel(indpt)
+    if model.regr:
         plt.title(lab + ' ' + held + ' = %f' %cons)
-        return (fit, complexity, ML)
+    else:
+        plt.title(lab)
+    return (fit, complexity, ML)
 
 if __name__ == "__main__":
-    import cPickle as pickle
-    from scipy.optimize import minimize
+    pass
 
-    #with open('2015-10-08_test_expression_structure_kernel.pkl','r') as f:
-    with open('2015-11-05_normed_mKate_mean_structure_kernel.pkl','r') as f:
-    #with open('test/model.pkl','r') as f:
-        m = pickle.load(f)
-#     vars = (0.7426, 0.0002684)
-#     print log_marginal_likelihood(vars,m)
-#     exit('')
 
-#     print minimize(m.log_ML,
-#                    vars,
-#                    bounds=[(1e-5,None),
-#                                     (1e-5,None)],
-#                   )
-#     exit('')
-#     print minimize(m.logistic_log_ML,
-#                                     10.,
-#                                     bounds=[(1e-4, None)])
-    res = plot_ML_parts(m, ranges=([0.01,10.0],[1.0]),
-                        n=100, lab='Normed mKate_mean Marginal Likelihood')
 
-#     res = plot_ML_contour(m, ranges=([0.72,0.76],[0.0002,.0003]),
-#                         n=100, lab='Normed mKate_mean Marginal Likelihood',
-#                          n_levels=20)
-#     save_as = '2015-11-2_T50_ML.pdf'
-#     plt.savefig(save_as)
-    plt.show()
-#     vars = (2.833, 0.1965)
-#     print log_marginal_likelihood(m,vars)
-    #print log_ML(m,vars)

@@ -22,13 +22,16 @@ class HammingKernel (GPKernel):
         self.saved_seqs = {}
         super(HammingKernel,self).__init__()
 
-    def calc_kernel (self, seq1, seq2, var_p=1):
+    def calc_kernel (self, seq1, seq2, var_p=1, normalize=False):
         """ Returns the number of shared amino acids between two sequences"""
         s1 = self.get_sequence(seq1)
         s2 = self.get_sequence(seq2)
-        return sum ([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
+        k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
+        if normalize:
+            k = float(k) / len(s1)
+        return k
 
-    def make_K (self, seqs, var_p=1):
+    def make_K (self, seqs, var_p=1, normalize=False):
         """ Returns a covariance matrix for two or more sequences of the same length
 
         Parameters:
@@ -45,6 +48,10 @@ class HammingKernel (GPKernel):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
                 K[n1,n2] = self.calc_kernel (seq1, seq2, var_p=var_p)
+        K = np.array(K)
+        if normalize:
+            K = K/float(K[0][0])
+
         K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
         return K_df
 
@@ -118,7 +125,7 @@ class StructureKernel (GPKernel):
         return contact_terms
 
 
-    def make_K (self, seqs, var_p=1):
+    def make_K (self, seqs, var_p=1, normalize=False):
         """ Makes the structure-based covariance matrix
 
             Parameters:
@@ -128,9 +135,13 @@ class StructureKernel (GPKernel):
             Dataframe: structure-based covariance matrix
         """
         X = np.matrix(self.make_contacts_X (seqs,var_p=1))
-        return pd.DataFrame(np.einsum('ij,jk->ik', var_p*X, X.T), index=seqs.index, columns=seqs.index)
+        K = np.einsum('ij,jk->ik', var_p*X, X.T)
 
-    def calc_kernel (self, seq1, seq2, var_p=1):
+        if normalize:
+            K = K/float(K[0][0])
+        return pd.DataFrame(K, index=seqs.index, columns=seqs.index)
+
+    def calc_kernel (self, seq1, seq2, var_p=1, normalize=False):
         """ Determine the number of shared contacts between the two sequences
 
         Parameters:
@@ -142,7 +153,10 @@ class StructureKernel (GPKernel):
         """
         contacts1 = self.get_contacts(seq1)
         contacts2 = self.get_contacts(seq2)
-        return len(set(contacts1) & set(contacts2))*var_p
+        k = len(set(contacts1) & set(contacts2))*var_p
+        if normalize:
+            k = float(k) / len(contacts1)
+        return k
 
 
     def make_contacts_X (self, seqs, var_p):

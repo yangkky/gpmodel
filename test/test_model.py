@@ -29,8 +29,8 @@ def test_regression ():
     ham_model = gpmodel.GPModel(seqs,reg_Ys,ham)
     struct_model = gpmodel.GPModel(seqs,reg_Ys,struct)
 
-    assert ham_model.K.equals(ham.make_K(seqs))
-    assert struct_model.K.equals(struct.make_K(seqs))
+    assert ham_model.K.equals(ham.make_K(seqs, normalize=True))
+    assert struct_model.K.equals(struct.make_K(seqs, normalize=True))
     assert ham_model.l == len(seqs.index)
     assert struct_model.l ==  len(seqs.index)
 
@@ -42,8 +42,10 @@ def test_regression ():
     assert struct_model.std == s
 
     normed_Ys = (reg_Ys - m) / s
-    assert (y1==y2 for y1, y2 in zip (normed_Ys, ham_model.normed_Y))
-    assert (y1==y2 for y1, y2 in zip (normed_Ys, struct_model.normed_Y))
+    assert (y1==y2 for y1, y2 in zip (normed_Ys, ham_model.normed_Y)), \
+    'Hamming model does not normalize Y-values correctly.'
+    assert (y1==y2 for y1, y2 in zip (normed_Ys, struct_model.normed_Y)), \
+    'Structure model does not normalize Y-values correctly.'
 
 
 
@@ -68,14 +70,22 @@ def test_regression ():
         name + ' log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
         # test predictions
-        kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'], seq1, model.var_p) for seq1 \
+        kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
+                                               seq1, model.var_p,
+                                              normalize=True) for seq1 \
                         in [seqs.iloc[i] for i in range(len(seqs.index))]])
-        kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'], seq1, model.var_p) for seq1 \
+        kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'],
+                                               seq1, model.var_p,
+                                              normalize=True) for seq1 \
                         in [seqs.iloc[i] for i in range(len(seqs.index))]])
         EA = (kA*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
         ED = (kD*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
-        k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],test_seqs.loc['A'])*model.var_p
-        k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],test_seqs.loc['D'])*model.var_p
+        k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
+                                          test_seqs.loc['A'],
+                                         normalize=True)*model.var_p
+        k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
+                                          test_seqs.loc['D'],
+                                         normalize=True)*model.var_p
         var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
         var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
         predictions = model.predicts(test_seqs,delete=False)
@@ -100,8 +110,8 @@ def test_classification ():
     struct_model = gpmodel.GPModel(seqs,class_Ys,struct)
     test_F = pd.Series([-.5,.5,.6,.1])
 
-    assert ham_model.K.equals(ham.make_K(seqs))
-    assert struct_model.K.equals(struct.make_K(seqs))
+    assert ham_model.K.equals(ham.make_K(seqs, normalize=True))
+    assert struct_model.K.equals(struct.make_K(seqs, normalize=True))
     assert ham_model.l == len(seqs.index)
     assert struct_model.l ==  len(seqs.index)
 
@@ -113,8 +123,11 @@ def test_classification ():
         assert model.logistic_likelihood(-1,0) == 0.5
         pytest.raises(RuntimeError, "model.logistic_likelihood(-2,1)")
 
-        assert model.log_logistic_likelihood(class_Ys,pd.Series([0,0,0,0])) == math.log(0.125/2)
-        pytest.raises(RuntimeError, "model.log_logistic_likelihood(class_Ys,pd.Series([0,0,0]))")
+        assert model.log_logistic_likelihood(class_Ys,
+                                             pd.Series([0,0,0,0])) \
+        == math.log(0.125/2)
+        pytest.raises(RuntimeError,
+                      "model.log_logistic_likelihood(class_Ys,pd.Series([0,0,0]))")
 
         # Test the gradient and hessian functions
         glll = model.grad_log_logistic_likelihood(class_Ys, test_F)
@@ -137,7 +150,7 @@ def test_classification ():
 
         # test find_F (Algorithm 3.1) by seeing if the result satisfies Eq 3.17 from RW
         f_hat = model.find_F()
-        K = model.kern.make_K(seqs)
+        K = model.kern.make_K(seqs, normalize=True)
         K_mat = np.matrix(K)
         glll = np.matrix(np.diag(model.grad_log_logistic_likelihood(class_Ys,f_hat))).T
         f_check = K_mat*glll

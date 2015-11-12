@@ -21,6 +21,7 @@ def test_hamming_kernel():
     K = pd.DataFrame([[4.,2.,3.,4.],[2.,4.,3.,2.],[3.,3.,4.,3.],[4.,2.,3.,4.]],
                     index=seqs.index,
                     columns=seqs.index)
+    norm = 4.0
     print 'Testing HammingKernel...'
     kern = gpkernel.HammingKernel()
 
@@ -35,6 +36,8 @@ def test_hamming_kernel():
     'Failed make_K for var_p = 1'
     assert kern.make_K(seqs,var_p=vp).equals(K*vp),\
     'Failed make_K for var_p ~= 1.'
+    assert kern.make_K(seqs, normalize=True).equals(K/norm),\
+    'Failed make_K with normalization for var_p = 1.'
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
@@ -54,6 +57,8 @@ def test_hamming_kernel():
     'Failed calc_kernel with vp ~= 1.'
     assert kern.calc_kernel('B',seqs.iloc[0]) == 2,\
     'Failed calc_kernel with one untrained and one trained sequence.'
+    assert kern.calc_kernel('C','C',var_p=vp, normalize=True) == 4*vp/norm,\
+    'Failed calc_kernel with normalization.'
 
     print 'HammingKernel passes all tests.'
 
@@ -66,6 +71,7 @@ def test_structure_kernel():
     K = pd.DataFrame([[2,0,1,2],[0,2,1,0],[1,1,2,1],[2,0,1,2]],
                      index=seqs.index,
                      columns=seqs.index)
+    norm = 2.0
     print 'Testing StructureKernel...'
     kern = gpkernel.StructureKernel(contacts, space)
     assert kern.contact_terms == [((0, 'R'), (1, 'Y')),
@@ -90,6 +96,8 @@ def test_structure_kernel():
     'Failed make_contacts_X for var_p ~= 1.'
     assert kern.make_K(seqs).equals(K),\
     'Failed make_K for var_p = 1.'
+    assert kern.make_K(seqs, normalize=True).equals(K/norm),\
+    'Failed make_K with normalization for var_p = 1.'
     assert kern.make_K(seqs,var_p=vp).equals(K*vp),\
     'Failed make_K for var_p ~= 1.'
 
@@ -113,7 +121,8 @@ def test_structure_kernel():
     'Failed calc_kernel with trained, untrained sequences.'
     assert kern.calc_kernel(seqs.iloc[2],'B',var_p=vp) == vp,\
     'Failed calc_kernel with untrained, trained sequences.'
-
+    assert kern.calc_kernel('C','C',var_p=vp, normalize=True) == 2*vp/norm,\
+    'Failed calc_kernel with normalization.'
 
     print 'StructureKernel passes all tests.'
 

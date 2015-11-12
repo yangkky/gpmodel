@@ -92,11 +92,11 @@ class GPModel(object):
         s = data.std()
         return m, s, (data-m) / s
 
-    def unnormalize(self, normed, m, s):
+    def unnormalize(self, normed):
         """
         Inverse of normalize, but works on single values or arrays
         """
-        return normed*s + m
+        return normed*self.std + self.mean
 
     def predict (self, k, k_star):
         """ Predicts the mean and variance for one new sequence given its
@@ -113,7 +113,7 @@ class GPModel(object):
                 classification
         """
         if self.regr:
-            E = self.unnormalize(k*self.alpha, self.mean, self.std)
+            E = self.unnormalize(k*self.alpha)
             v = np.linalg.lstsq(self.L,k.T)[0]
             var = (k_star - v.T*v) * self.std**2
             return (E.item(),var.item())
@@ -327,6 +327,45 @@ class GPModel(object):
         logq = 0.5*a.T*F_mat.T - self.log_logistic_likelihood(self.Y, F) \
         + sum(np.log(np.diag(L)))
         return logq
+
+    def LOO_log_p (self, variances):
+        var_n, var_p = variances
+        if var_n < 0:
+            return np.inf
+        if var_p < 0:
+            return np.inf
+        Ky = var_p*self.K + var_n*np.identity(len(self.X_seqs))
+        K_inv = np.linalg.inv(Ky)
+        Y_mat = np.matrix (self.normed_Y)
+        mus = np.empty_like(self.normed_Y)
+        vs = np.empty_like(self.normed_Y)
+        log_ps = np.empty_like(self.normed_Y)
+        for i,y in enumerate(self.normed_Y):
+            mus[i] = y - (K_inv*Y_mat.T)[i]/K_inv[i][i]
+            vs[i] = 1.0/K_inv[i][i]
+            log_ps[i] = -0.5*np.log(vs[i]) - (y-mus[i])**2 / 2 / vs[i] \
+            - 0.5*np.log(2*np.pi)
+        return_me = -sum (log_ps)
+        if math.isnan(return_me):
+            print variances
+            print log_ps
+            exit('')
+
+        return return_me
+
+    def LOO_MSE (self, variances):
+        var_n, var_p = variances
+        Ky = var_p*self.K + var_n*np.identity(len(self.X_seqs))
+        K_inv = np.linalg.inv(Ky)
+        Y_mat = np.matrix (self.normed_Y)
+        mus = np.empty_like(self.normed_Y)
+        for i,y in enumerate(self.normed_Y):
+            mus[i] = y - (K_inv*Y_mat.T)[i]/K_inv[i][i]
+
+        return sum((self.normed_Y - mus)**2) / len(self.normed_Y)
+
+
+
 
 
 

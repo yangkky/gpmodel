@@ -174,7 +174,8 @@ def test_classification ():
         L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
         b = W*F_mat.T + glll
         a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
-        check_q = 0.5*a.T*F_mat.T - model.log_logistic_likelihood(class_Ys, f_hat) + sum(np.log(np.diag(L)))
+        check_q = 0.5*a.T*F_mat.T - model.log_logistic_likelihood(class_Ys, f_hat) \
+        + sum(np.log(np.diag(L)))
         assert close_enough(check_q,logq)
         assert close_enough(model.log_ML([vp]), check_q)
 

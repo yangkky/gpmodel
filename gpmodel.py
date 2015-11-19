@@ -27,46 +27,52 @@ class GPModel(object):
         ML (float): The negative log marginal likelihood
         l (int): number of training samples
     """
-    def __init__ (self, X_seqs, Y, kern, guesses=[10.,1.], train=True):
+    def __init__ (self, X_seqs, Y, kern, guesses=[1.0,1.0], remember=True, objective='log_ML'):
         self.X_seqs = X_seqs
         self.Y = Y
         self.l = len(Y)
         self.kern = kern
         self.K = self.kern.make_K(X_seqs, normalize=True)
-        if train:
+        if remember:
             self.kern.train(X_seqs)
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
             self.mean, self.std, self.normed_Y = self.normalize (self.Y)
-            minimize_res = minimize(self.log_ML,
-                                    (guesses),
-                                    bounds=[(1e-4,None),
-                                            (1e-5,None)],
-                                    method='L-BFGS-B')
-            self.set_hypers(minimize_res['x'])
-            self.ML = minimize_res['fun']
+        if objective == 'log_ML':
+            objective = self.log_ML
+        elif objective == 'LOO_log_p':
+            if ~self.regr:
+                print 'Warning: Classification model must be trained on marginal likelihood'
+            objective = self.LOO_log_p
+        self.train(objective, guesses)
 
-        else:
-            minimize_res = minimize(self.log_ML,
-                                    10.,
-                                    bounds=[(1e-4, None)])
-            self.set_hypers(minimize_res['x'])
-            self.ML = minimize_res['fun']
 
-    def set_hypers(self,hypers):
+
+    def train(self, objective, guesses):
         '''
         Set the hyperparameters to hypers and update all dependent values
         '''
         if self.regr:
-            self.var_n,self.var_p = hypers
+            minimize_res = minimize(objective,
+                                    (guesses),
+                                    bounds=[(1e-5,None),
+                                            (1e-5,None)],
+                                    method='L-BFGS-B')
+            self.var_n,self.var_p = minimize_res['x']
             self.Ky = self.var_p*self.K+self.var_n*np.identity(len(self.X_seqs))
             self.L = np.linalg.cholesky(self.Ky)
             self.alpha = np.linalg.lstsq(self.L.T,
                                          np.linalg.lstsq (self.L,
                                                           np.matrix(self.normed_Y).T)[0])[0]
+            self.ML = self.log_ML(minimize_res['x'])
+            self.log_p = self.LOO_log_p(minimize_res['x'])
+
         else:
-            self.var_p = hypers[0]
+            minimize_res = minimize(self.log_ML,
+                                    10.,
+                                    bounds=[(1e-5, None)])
+            self.var_p = minimize_res['x'][0]
             self.f_hat = self.find_F(var_p=self.var_p)
             self.W = self.hess (self.f_hat)
             self.W_root = scipy.linalg.sqrtm(self.W)
@@ -76,6 +82,8 @@ class GPModel(object):
             self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood\
                                           (self.Y,
                                            self.f_hat)))
+            self.ML = self.log_ML(minimize_res['x'])
+
 
     def normalize(self, data):
         """
@@ -329,40 +337,43 @@ class GPModel(object):
         return logq
 
     def LOO_log_p (self, variances):
-        var_n, var_p = variances
-        if var_n < 0:
-            return np.inf
-        if var_p < 0:
-            return np.inf
-        Ky = var_p*self.K + var_n*np.identity(len(self.X_seqs))
-        K_inv = np.linalg.inv(Ky)
-        Y_mat = np.matrix (self.normed_Y)
-        mus = np.empty_like(self.normed_Y)
-        vs = np.empty_like(self.normed_Y)
-        log_ps = np.empty_like(self.normed_Y)
-        for i,y in enumerate(self.normed_Y):
-            mus[i] = y - (K_inv*Y_mat.T)[i]/K_inv[i][i]
-            vs[i] = 1.0/K_inv[i][i]
-            log_ps[i] = -0.5*np.log(vs[i]) - (y-mus[i])**2 / 2 / vs[i] \
-            - 0.5*np.log(2*np.pi)
+        """
+        Calculates the negative LOO log predictive probability
+        For now, only for regression
+        Equation 5.10 and 5.11 from RW
+        Parameters:
+            variances (iterable)
+        Returns:
+            log_p
+        """
+        LOO = self.LOO_res(variances)
+        vs = LOO['v']
+        mus = LOO['mu']
+        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs - 0.5*np.log(2*np.pi)
         return_me = -sum (log_ps)
-        if math.isnan(return_me):
-            print variances
-            print log_ps
-            exit('')
-
         return return_me
 
     def LOO_MSE (self, variances):
+        LOO = self.LOO_res(variances)
+        mus = LOO['mu']
+        return sum((self.normed_Y - mus)**2) / len(self.normed_Y)
+
+    def LOO_res (self, variances):
+        """
+        Calculates the LOO predictions according to Equation 5.12 from RW
+        Parameters:
+            variances (iterable)
+        Returns:
+            res (pandas.DataFrame): columns are 'mu' and 'v'
+        """
         var_n, var_p = variances
         Ky = var_p*self.K + var_n*np.identity(len(self.X_seqs))
         K_inv = np.linalg.inv(Ky)
         Y_mat = np.matrix (self.normed_Y)
-        mus = np.empty_like(self.normed_Y)
-        for i,y in enumerate(self.normed_Y):
-            mus[i] = y - (K_inv*Y_mat.T)[i]/K_inv[i][i]
-
-        return sum((self.normed_Y - mus)**2) / len(self.normed_Y)
+        mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
+        vs = np.diag(1/K_inv)
+        return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
+                           columns=['mu', 'v'])
 
 
 

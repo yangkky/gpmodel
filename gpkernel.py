@@ -6,7 +6,7 @@ class GPKernel (object):
     """A Gaussian process kernel for proteins.
 
        Attribute:
-           type (string)
+           hypers (list)
     """
 
     def __init__ (self):
@@ -20,10 +20,12 @@ class HammingKernel (GPKernel):
     """
     def __init__ (self):
         self.saved_seqs = {}
+        self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
 
-    def calc_kernel (self, seq1, seq2, var_p=1, normalize=False):
+    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=False):
         """ Returns the number of shared amino acids between two sequences"""
+        var_p = hypers[0]
         s1 = self.get_sequence(seq1)
         s2 = self.get_sequence(seq2)
         k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
@@ -31,7 +33,7 @@ class HammingKernel (GPKernel):
             k = float(k) / len(s1)
         return k
 
-    def make_K (self, seqs, var_p=1, normalize=False):
+    def make_K (self, seqs, hypers=[1.0], normalize=False):
         """ Returns a covariance matrix for two or more sequences of the same length
 
         Parameters:
@@ -47,7 +49,7 @@ class HammingKernel (GPKernel):
             for n2,j in zip(range (n_seqs), seqs.index):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
-                K[n1,n2] = self.calc_kernel (seq1, seq2, var_p=var_p)
+                K[n1,n2] = self.calc_kernel (seq1, seq2, hypers=hypers)
         K = np.array(K)
         if normalize:
             K = K/float(K[0][0])
@@ -89,6 +91,7 @@ class StructureKernel (GPKernel):
     Attributes:
         contact_terms (iterable): Each element in contact_terms should be of the
           form ((pos1,aa1),(pos2,aa2))
+        hypers (list): list of required hyperparameters
         saved_contacts (dict): a dict matching the labels for sequences to their contacts
         contacts: list of which residues are in contact
     """
@@ -99,6 +102,7 @@ class StructureKernel (GPKernel):
         self.contact_terms = self.contacting_terms (sample_space, contacts)
         self.saved_contacts = {}
         self.contacts = contacts
+        self.hypers = ['var_p']
         super (StructureKernel, self).__init__()
 
     def contacting_terms (self, sample_space, contacts):
@@ -125,7 +129,7 @@ class StructureKernel (GPKernel):
         return contact_terms
 
 
-    def make_K (self, seqs, var_p=1, normalize=False):
+    def make_K (self, seqs, hypers=[1.0], normalize=False):
         """ Makes the structure-based covariance matrix
 
             Parameters:
@@ -134,14 +138,16 @@ class StructureKernel (GPKernel):
         Returns:
             Dataframe: structure-based covariance matrix
         """
-        X = np.matrix(self.make_contacts_X (seqs,var_p=1))
-        K = np.einsum('ij,jk->ik', var_p*X, X.T)
+        var_p = hypers[0]
+        X = np.matrix(self.make_contacts_X (seqs))
+        K = np.einsum('ij,jk->ik', X, X.T)
 
         if normalize:
             K = K/float(K[0][0])
+        K = K*var_p
         return pd.DataFrame(K, index=seqs.index, columns=seqs.index)
 
-    def calc_kernel (self, seq1, seq2, var_p=1, normalize=False):
+    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=False):
         """ Determine the number of shared contacts between the two sequences
 
         Parameters:
@@ -151,6 +157,7 @@ class StructureKernel (GPKernel):
         Returns:
             int: number of shared contacts
         """
+        var_p = hypers[0]
         contacts1 = self.get_contacts(seq1)
         contacts2 = self.get_contacts(seq2)
         k = len(set(contacts1) & set(contacts2))*var_p
@@ -159,14 +166,14 @@ class StructureKernel (GPKernel):
         return k
 
 
-    def make_contacts_X (self, seqs, var_p):
+    def make_contacts_X (self, seqs, hypers=[1.0]):
         """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
         X = []
         for i in range(len(seqs.index)):
-            X.append(self.contacts_X_row(seqs.iloc[i],var_p))
+            X.append(self.contacts_X_row(seqs.iloc[i],hypers))
         return X
 
-    def contacts_X_row (self, seq, var_p=1):
+    def contacts_X_row (self, seq, hypers=[1.0]):
         """ Determine whether the given sequence contains each of the given contacts
 
         Parameters:
@@ -176,6 +183,7 @@ class StructureKernel (GPKernel):
         Returns:
             list: 1 for contacts present, else 0
         """
+        var_p = hypers[0]
         X_row = []
         for term in self.contact_terms:
             if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:

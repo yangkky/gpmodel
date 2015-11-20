@@ -29,12 +29,12 @@ def test_hamming_kernel():
     'Failed calc_kernel.'
     assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2]) == 3,\
     'Failed calc_kernel'
-    assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],var_p=vp) == 3*vp,\
+    assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],hypers=[vp]) == 3*vp,\
     'Failed calc_kernel for var_p ~= 1'
 
     assert kern.make_K(seqs).equals(K),\
     'Failed make_K for var_p = 1'
-    assert kern.make_K(seqs,var_p=vp).equals(K*vp),\
+    assert kern.make_K(seqs,hypers=[vp]).equals(K*vp),\
     'Failed make_K for var_p ~= 1.'
     assert kern.make_K(seqs, normalize=True).equals(K/norm),\
     'Failed make_K with normalization for var_p = 1.'
@@ -53,11 +53,11 @@ def test_hamming_kernel():
                                'C':'RTMA'}
     assert kern.calc_kernel('A','B') == 2,\
     'Failed calc_kernel with two trained sequences.'
-    assert kern.calc_kernel('C','B',var_p=vp) == 3*vp,\
+    assert kern.calc_kernel('C','B',hypers=[vp]) == 3*vp,\
     'Failed calc_kernel with vp ~= 1.'
     assert kern.calc_kernel('B',seqs.iloc[0]) == 2,\
     'Failed calc_kernel with one untrained and one trained sequence.'
-    assert kern.calc_kernel('C','C',var_p=vp, normalize=True) == 4*vp/norm,\
+    assert kern.calc_kernel('C','C',hypers=[vp], normalize=True) == 4*vp/norm,\
     'Failed calc_kernel with normalization.'
 
     print 'HammingKernel passes all tests.'
@@ -68,7 +68,7 @@ def test_hamming_kernel():
 def test_structure_kernel():
     # test with repeats
     vp = 0.4
-    K = pd.DataFrame([[2,0,1,2],[0,2,1,0],[1,1,2,1],[2,0,1,2]],
+    K = pd.DataFrame([[2.0,0.0,1.0,2.0],[0.0,2.0,1.0,0.0],[1.0,1.0,2.0,1.0],[2.0,0.0,1.0,2.0]],
                      index=seqs.index,
                      columns=seqs.index)
     norm = 2.0
@@ -83,22 +83,24 @@ def test_structure_kernel():
     'Failed calc_kernel for sequences with no shared contacts.'
     assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2]) == 1,\
     'Failed calc_kernel for sequences with shared contacts.'
-    assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],var_p=vp) == vp,\
+    assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],hypers=[vp]) == vp,\
     'Failed calc_kernel for var_p ~= 1.'
     assert kern.contacts_X_row(seqs.iloc[0]) == [1,0,0,1],\
     'Failed contacts_X_row for var_p = 1.'
-    assert kern.contacts_X_row(seqs.iloc[0],var_p=vp) == [vp,0,0,vp],\
+    assert kern.contacts_X_row(seqs.iloc[0],hypers=[vp]) == [vp,0,0,vp],\
     'Failed contacts_X_row for var_p ~= 1.'
     # test make_contacts_X
-    assert kern.make_contacts_X(seqs,1) == [[1, 0, 0, 1], [0, 1, 1, 0], [0, 1, 0, 1],[1,0,0,1]],\
+    assert kern.make_contacts_X(seqs,[1.0]) == [[1, 0, 0, 1], [0, 1, 1, 0], [0, 1, 0, 1],[1,0,0,1]],\
     'Failed make_contacts_X for var_p = 1.'
-    assert kern.make_contacts_X(seqs,vp) == [[vp, 0, 0, vp], [0, vp, vp, 0], [0, vp, 0, vp],[vp,0,0,vp]],\
+    assert kern.make_contacts_X(seqs,[vp]) == [[vp, 0, 0, vp], [0, vp, vp, 0], [0, vp, 0, vp],[vp,0,0,vp]],\
     'Failed make_contacts_X for var_p ~= 1.'
     assert kern.make_K(seqs).equals(K),\
     'Failed make_K for var_p = 1.'
     assert kern.make_K(seqs, normalize=True).equals(K/norm),\
     'Failed make_K with normalization for var_p = 1.'
-    assert kern.make_K(seqs,var_p=vp).equals(K*vp),\
+    assert kern.make_K(seqs, hypers=[vp], normalize=True).equals(K/norm*vp),\
+    'Failed make_K with normalization for var_p ~= 1.'
+    assert kern.make_K(seqs,hypers=[vp]).equals(K*vp),\
     'Failed make_K for var_p ~= 1.'
 
 
@@ -119,9 +121,9 @@ def test_structure_kernel():
     'Failed calc_kernel with two trained sequences.'
     assert kern.calc_kernel('A',seqs.iloc[1]) == 0,\
     'Failed calc_kernel with trained, untrained sequences.'
-    assert kern.calc_kernel(seqs.iloc[2],'B',var_p=vp) == vp,\
+    assert kern.calc_kernel(seqs.iloc[2],'B', hypers=[vp]) == vp,\
     'Failed calc_kernel with untrained, trained sequences.'
-    assert kern.calc_kernel('C','C',var_p=vp, normalize=True) == 2*vp/norm,\
+    assert kern.calc_kernel('C','C',hypers=[vp], normalize=True) == 2*vp/norm,\
     'Failed calc_kernel with normalization.'
 
     print 'StructureKernel passes all tests.'

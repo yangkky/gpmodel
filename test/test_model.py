@@ -17,7 +17,6 @@ contacts = [(0,1),(2,3)]
 
 class_Ys = pd.Series([-1,1,1,-1],index=seqs.index)
 reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
-ham = gpkernel.HammingKernel()
 struct = gpkernel.StructureKernel (contacts,space)
 
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
@@ -27,8 +26,15 @@ def test_regression ():
 
     print 'Testing constructors for regression models...'
     model = gpmodel.GPModel(seqs,reg_Ys,struct)
-
-    assert model.K.equals(struct.make_K(seqs, normalize=True))
+    assert close_enough(model.hypers.var_p, 0.63016924576335664),\
+    'Regression model.hypers.var_p is incorrect'
+    assert close_enough(model.hypers.var_n, 0.18044635639161319),\
+    'Regression model.hypers.var_n is incorrect'
+    assert close_enough(model.ML, 4.59859002013),\
+    'Regression model.ML is incorrect'
+    assert close_enough(model.log_p, 3.79099390643),\
+    'Regression model.log_p is incorrect'
+    assert model.K.equals(struct.make_K(seqs, [model.hypers.var_p], normalize=True))
     assert model.l ==  len(seqs.index)
 
     m = reg_Ys.mean()
@@ -48,9 +54,9 @@ def test_regression ():
 
     print 'Testing objective functions for regression models...'
     # test marginal likelihood
-    vp = 0.5
-    vn = .1
-    K_mat = np.matrix(model.K)
+    vp = 1.0
+    vn = model.hypers.var_n
+    K_mat = np.matrix(struct.make_K(seqs, normalize=True))
     Ky = vp*K_mat + np.eye(len(reg_Ys))*vn
     first = 0.5*Y_mat*np.linalg.inv(Ky)*Y_mat.T
     second = math.log(np.linalg.det(Ky))*0.5
@@ -59,7 +65,7 @@ def test_regression ():
 
     # because floating point precision
     assert close_enough(model.log_ML((vn,vp)), ML.item()), \
-    name + ' log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
+    'log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
     # test LOO log predictive probability
     K_inv = np.linalg.inv(Ky)
@@ -82,21 +88,21 @@ def test_regression ():
     print 'Testing regression ... '
     # test predictions
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
-                                           seq1, model.var_p,
+                                           seq1, [model.hypers.var_p],
                                            normalize=True) for seq1 \
                     in [seqs.iloc[i] for i in range(len(seqs.index))]])
     kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'],
-                                           seq1, model.var_p,
+                                           seq1, [model.hypers.var_p],
                                            normalize=True) for seq1 \
                     in [seqs.iloc[i] for i in range(len(seqs.index))]])
     EA = (kA*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
     ED = (kD*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
     k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
                                       test_seqs.loc['A'],
-                                      normalize=True)*model.var_p
+                                      normalize=True)*model.hypers.var_p
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
-                                      normalize=True)*model.var_p
+                                      normalize=True)*model.hypers.var_p
     var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
@@ -119,8 +125,13 @@ def test_classification ():
     print 'Testing constructors for classification models...'
     model = gpmodel.GPModel(seqs,class_Ys,struct)
     test_F = pd.Series([-.5,.5,.6,.1])
+    assert close_enough(model.hypers.var_p, 43.810192819325351),\
+    'Regression model.hypers.var_p is incorrect'
+    assert close_enough(model.ML, 2.45520196), \
+    'Regression model.ML is incorrect'
 
-    assert model.K.equals(struct.make_K(seqs, normalize=True))
+
+    #assert model.K.equals(struct.make_K(seqs, normalize=True))
     assert model.l ==  len(seqs.index)
 
 
@@ -156,24 +167,24 @@ def test_classification ():
                 assert close_enough (hess[i,j], pi_i*(1-pi_i))
 
     # test find_F (Algorithm 3.1) by seeing if the result satisfies Eq 3.17 from RW
-    f_hat = model.find_F()
-    K = model.kern.make_K(seqs, normalize=True)
+    f_hat = model.find_F(hypers=(1,))
+    K = model.kern.make_K(seqs, hypers=(1,), normalize=True)
     K_mat = np.matrix(K)
     glll = np.matrix(np.diag(model.grad_log_logistic_likelihood(class_Ys,f_hat))).T
     f_check = K_mat*glll
     for fh, fc in zip(f_hat, f_check):
-        assert close_enough(fh,fc), 'find_F fails for ' + name + ' model and var_p = 1.'
+        assert close_enough(fh,fc), 'find_F fails for var_p = 1.'
 
     vp = 0.1
-    f_hat = model.find_F(var_p = vp)
+    f_hat = model.find_F(hypers=(vp,))
     K_mat = K_mat*vp
     glll = np.matrix(np.diag(model.grad_log_logistic_likelihood(class_Ys,f_hat))).T
     f_check = K_mat*glll
     for fh, fc in zip(f_hat, f_check):
-        assert close_enough(fh,fc), 'find_F fails for ' + name + ' model and var_p ~= 1.'
+        assert close_enough(fh,fc), 'find_F fails for var_p ~= 1.'
 
     # Test the functions that calculate marginal likelihood
-    logq = model.logq(f_hat, var_p=vp)
+    logq = model.logq(f_hat, hypers=(vp,))
     W = model.hess (f_hat)
     W_root = scipy.linalg.sqrtm(W)
     F_mat = np.matrix (f_hat)
@@ -195,7 +206,9 @@ def test_classification ():
     for z in [np.inf, -np.inf]:
         assert close_enough(0., model.p_integral(z,m,v))
 
-        # test predictions
+    # test predictions
+    preds = model.predicts(test_seqs)
+    assert close_enough(np.array(preds), np.array([0.19135281113445562, 0.7792366872177071]))
 
 
 
@@ -207,5 +220,5 @@ def close_enough(f1,f2):
 
 
 if __name__=="__main__":
-    test_regression()
+    #test_regression()
     test_classification()

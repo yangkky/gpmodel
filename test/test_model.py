@@ -208,7 +208,8 @@ def test_classification ():
 
     # test predictions
     preds = model.predicts(test_seqs)
-    assert close_enough(np.array(preds), np.array([0.19135281113445562, 0.7792366872177071]))
+    for p1, p2 in zip(preds, [0.19135281113445562, 0.7792366872177071]):
+        assert close_enough(p1, p2), 'Predictions failed.'
 
 
 

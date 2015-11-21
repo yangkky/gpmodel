@@ -2,6 +2,63 @@ import numpy as np
 import pandas as pd
 from numba import jit
 
+def se(xs, params):
+    """
+    Calculates the squared exponential covariance function
+    between xs according to RW Eq. 2.31.
+    Each row of xs represents one measurement. Each column represents
+    a dimension. The exception is if xs only has one row with multiple
+    columns, then each column is assumed to be a measurement.
+
+    Parameters:
+        xs: ndarray or np.matrix
+        params: sigma_f and ell. sigma_f must be a scalar. ell may
+            be a scalar.
+
+    Returns:
+        res: the squared exponential covariance evaluated between xs
+            res has shape (n,n), where n is the number of rows in xs
+            or the number of columns if there is only one row unless
+            n = 2, in which case res is a float.
+    """
+    # check dimensions
+    # unpack params
+    sigma_f, ell = params
+
+
+    # calculate the squared radial distances between each pair of
+    # measurements
+    dims = np.shape(xs)
+    n = dims[0]
+    # make sure there are multiple measurements
+    if n == 1:
+        raise RunTimeError ('SE requires at least two items in xs')
+
+    # multiple 1D measurements
+    if len(dims) == 1 or dims[1] == 1:
+        if n == 2:
+            d_squared = (xs[0] - xs[1])**2
+        else:
+            d_squared = np.empty((n,n))
+            for i in range (n):
+                for j in range(n):
+                    d_squared[i][j] = (xs[i] - xs[j])**2
+
+    # column vector of n-dimensional measurements
+    else:
+        if n == 2:
+            d_squared = sum([(x1-x2)**2 for x1, x2 in zip(xs[0], xs[1])])
+        else:
+            d_squared = np.empty((n,n))
+            for i in range (n):
+                for j in range(n):
+                    d_squared[i][j] = sum([(x1-x2)**2 \
+                                     for x1, x2 in zip(xs[i], xs[j])])
+
+    return sigma_f**2 * np.exp(-0.5/np.power(ell,2) * d_squared)
+
+
+
 class GPKernel (object):
     """A Gaussian process kernel for proteins.
 

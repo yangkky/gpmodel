@@ -92,7 +92,8 @@ def test_structure_kernel():
     # test make_contacts_X
     assert kern.make_contacts_X(seqs,[1.0]) == [[1, 0, 0, 1], [0, 1, 1, 0], [0, 1, 0, 1],[1,0,0,1]],\
     'Failed make_contacts_X for var_p = 1.'
-    assert kern.make_contacts_X(seqs,[vp]) == [[vp, 0, 0, vp], [0, vp, vp, 0], [0, vp, 0, vp],[vp,0,0,vp]],\
+    assert kern.make_contacts_X(seqs,[vp]) == [[vp, 0, 0, vp], [0, vp, vp, 0],
+                                               [0, vp, 0, vp],[vp,0,0,vp]],\
     'Failed make_contacts_X for var_p ~= 1.'
     assert kern.make_K(seqs).equals(K),\
     'Failed make_K for var_p = 1.'
@@ -129,11 +130,69 @@ def test_structure_kernel():
     print 'StructureKernel passes all tests.'
 
 
+def test_helpers():
+    # test squared exponential function
+    # test dimension check
 
+    # test on single values
+    first = 4
+    second = 2
+    params = [0.2, 2]
+    sigma_f, ell = params
+    actual = sigma_f**2 * np.exp(-0.5*(first-second)**2/ell**2)
+    assert gpkernel.se([first, second],params) == actual,\
+        'gpkernel.se failed for 1-dimensional, 2 sample, row case.'
+    assert gpkernel.se(np.array([[first], [second]]),params) == actual,\
+        'gpkernel.se failed for 1-dimensional, 2 sample , column case.'
+
+    # test on numpy.ndarray with 3 measurements, 1 dimension
+    xa = np.array([2.0, 3.0, 4.0])
+    xb = np.array([1.0, 3.0, 5.0])
+    xc = np.array([-2.0, 0.0, 2.0])
+    d_squared = np.empty((3,3))
+    for i in range(3):
+        for j in range(3):
+            d_squared[i][j] = (xa[i] - xa[j])**2
+    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
+    from_kernel = gpkernel.se(xa, params)
+    assert np.array_equal(actual, from_kernel), \
+        'gpkernel.se failed for 1-dimensional, 3 sample, row case.'
+    x_columns = np.array([[x] for x in xa])
+    from_kernel = gpkernel.se(x_columns, params)
+    assert np.array_equal(actual, from_kernel), \
+        'gpkernel.se failed for 1-dimensional, 3 sample, column case.'
+
+
+    # test on numpy.ndarray with 2 measurements, 3 dimensions, constant ells
+    xs = np.concatenate((xa, xb))
+    xs = xs.reshape((2,3))
+    d_squared = sum([(x1-x2)**2 for x1, x2 in zip(xs[0], xs[1])])
+    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
+    from_kernel = gpkernel.se(xs, params)
+    assert actual == from_kernel, \
+        'gpkernel.se failed for 3-dimensional, 2 sample case.'
+
+    # test on numpy.ndarray with 3 measurements, 3 dimensions, constant ells
+    xs = np.concatenate((xa, xb, xc))
+    xs = xs.reshape((3,3))
+    d_squared = np.empty((3,3))
+    for i in range(3):
+        for j in range(3):
+            d_squared[i][j] = sum([(x1-x2)**2 for x1, x2 in zip(xs[i], xs[j])])
+    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
+    from_kernel = gpkernel.se(xs, params)
+    assert np.array_equal(actual,from_kernel), \
+        'gpkernel.se failed for 3-dimensional, 3 sample case.'
+
+
+    # test on numpy.ndarray with multiple rows, multile columns, multiple ells
+    # test on numpy.matrix
+    # test with pandas
 
 
 
 
 if __name__=="__main__":
-    test_hamming_kernel()
-    test_structure_kernel()
+    #test_hamming_kernel()
+    #test_structure_kernel()
+    test_helpers()

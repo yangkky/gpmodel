@@ -31,13 +31,16 @@ def test_hamming_kernel():
     'Failed calc_kernel'
     assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],hypers=[vp]) == 3*vp,\
     'Failed calc_kernel for var_p ~= 1'
+    assert kern.calc_kernel(seqs.iloc[1],seqs.iloc[2],
+                            hypers=[vp], normalize=True) == 3*vp/norm,\
+    'Failed calc_kernel for var_p ~= 1, normalized'
 
     assert kern.make_K(seqs).equals(K),\
     'Failed make_K for var_p = 1'
     assert kern.make_K(seqs,hypers=[vp]).equals(K*vp),\
     'Failed make_K for var_p ~= 1.'
-    assert kern.make_K(seqs, normalize=True).equals(K/norm),\
-    'Failed make_K with normalization for var_p = 1.'
+    assert kern.make_K(seqs, normalize=True, hypers=[vp]).equals(K/norm*vp),\
+    'Failed make_K with normalization for var_p ~= 1.'
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
@@ -130,8 +133,9 @@ def test_structure_kernel():
     print 'StructureKernel passes all tests.'
 
 
-def test_helpers():
+def test_se():
     # test squared exponential function
+    print 'Testing gpmodel.se...'
     # test dimension check
 
     # test on single values
@@ -185,7 +189,7 @@ def test_helpers():
         'gpkernel.se failed for 3-dimensional, 3 sample case.'
 
 
-    # test on numpy.ndarray with multiple rows, multile columns, multiple ells
+    # test on numpy.ndarray with multiple rows, multiple columns, multiple ells
     # test on numpy.matrix
     # test with pandas
 
@@ -193,6 +197,6 @@ def test_helpers():
 
 
 if __name__=="__main__":
-    #test_hamming_kernel()
-    #test_structure_kernel()
-    test_helpers()
+    test_hamming_kernel()
+    test_structure_kernel()
+    test_se()

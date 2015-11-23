@@ -85,10 +85,10 @@ class HammingKernel (GPKernel):
         var_p = hypers[0]
         s1 = self.get_sequence(seq1)
         s2 = self.get_sequence(seq2)
-        k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])*var_p
+        k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])
         if normalize:
             k = float(k) / len(s1)
-        return k
+        return k*var_p
 
     def make_K (self, seqs, hypers=[1.0], normalize=False):
         """ Returns a covariance matrix for two or more sequences of the same length
@@ -106,11 +106,8 @@ class HammingKernel (GPKernel):
             for n2,j in zip(range (n_seqs), seqs.index):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
-                K[n1,n2] = self.calc_kernel (seq1, seq2, hypers=hypers)
+                K[n1,n2] = self.calc_kernel (seq1, seq2, hypers=hypers, normalize=normalize)
         K = np.array(K)
-        if normalize:
-            K = K/float(K[0][0])
-
         K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
         return K_df
 

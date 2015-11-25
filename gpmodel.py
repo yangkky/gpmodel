@@ -28,13 +28,12 @@ class GPModel(object):
         ML (float): The negative log marginal likelihood
         l (int): number of training samples
     """
-    def __init__ (self, X_seqs, Y, kern, guesses=None, remember=True, objective='log_ML'):
+    def __init__ (self, X_seqs, Y, kern, guesses=None, objective='log_ML'):
         self.X_seqs = X_seqs
         self.Y = Y
         self.l = len(Y)
         self.kern = kern
-        if remember:
-            self.kern.train(X_seqs)
+        self.kern.train(X_seqs)
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
@@ -72,7 +71,7 @@ class GPModel(object):
             hypers_list = ['var_n'] + self.kern.hypers
             Hypers = namedtuple('Hypers', hypers_list)
             self.hypers = Hypers._make(minimize_res['x'])
-            self.K = self.kern.make_K(self.X_seqs, hypers=self.hypers[1:], normalize=True)
+            self.K = self.kern.make_K(self.X_seqs, hypers=self.hypers[1:])
             self.Ky = self.K+self.hypers.var_n*np.identity(len(self.X_seqs))
             self.L = np.linalg.cholesky(self.Ky)
             self.alpha = np.linalg.lstsq(self.L.T,
@@ -86,7 +85,7 @@ class GPModel(object):
             self.f_hat = self.find_F(hypers=self.hypers)
             self.W = self.hess (self.f_hat)
             self.W_root = scipy.linalg.sqrtm(self.W)
-            self.Ky = np.matrix(self.kern.make_K(self.X_seqs, hypers=self.hypers, normalize=True))
+            self.Ky = np.matrix(self.kern.make_K(self.X_seqs, hypers=self.hypers))
             self.L = np.linalg.cholesky (np.matrix(np.eye(self.l))+self.W_root\
                                          *self.Ky*self.W_root)
             self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood\
@@ -156,8 +155,7 @@ class GPModel(object):
         third = math.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
-
-    def log_ML (self,hypers):
+    def log_ML (self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Parameters:
@@ -167,13 +165,13 @@ class GPModel(object):
         """
         if self.regr:
             Y_mat = np.matrix(self.normed_Y)
-            K = self.kern.make_K(self.X_seqs, hypers=hypers[1::], normalize=True)
+            K = self.kern.make_K(self.X_seqs, hypers=hypers[1::])
             K_mat = np.matrix (K)
             Ky = K_mat + np.identity(len(K_mat))*hypers[0]
             try:
                 L = np.linalg.cholesky (Ky)
             except:
-                print variances
+                print hypers
                 exit('')
             alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
@@ -183,6 +181,9 @@ class GPModel(object):
             # log[det(Ky)] = 2*sum(log(diag(L))) is a property
             # of the Cholesky decomposition
             # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
+            if np.isnan(ML):
+                print hypers
+            print ML
             return ML
         else:
             f_hat = self.find_F(hypers=hypers) # use Algorithm 3.1 to find mode
@@ -207,12 +208,10 @@ class GPModel(object):
             h = self.hypers
         for ns in new_seqs.index:
             k = np.matrix([self.kern.calc_kernel(ns, seq1,
-                                                hypers=h,
-                                                normalize=True) \
+                                                hypers=h) \
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns, ns,
-                                           hypers=h,
-                                          normalize=True)
+                                           hypers=h)
             predictions.append(self.predict(k, k_star))
         if delete:
             self.kern.delete(new_seqs)
@@ -301,7 +300,7 @@ class GPModel(object):
             exit ('Initial guess must have same dimensions as Y')
 
 
-        K = self.kern.make_K(self.X_seqs, hypers=hypers, normalize=True)
+        K = self.kern.make_K(self.X_seqs, hypers=hypers)
         K_mat = np.matrix(K)
         n_below = 0
         for i in range (evals):
@@ -339,7 +338,7 @@ class GPModel(object):
             logq (float)
         '''
         l = self.l
-        K = self.kern.make_K(self.X_seqs, hypers=hypers, normalize=True)
+        K = self.kern.make_K(self.X_seqs, hypers=hypers)
         K_mat = np.matrix(K)
         W = self.hess (F)
         W_root = scipy.linalg.sqrtm(W)
@@ -381,7 +380,7 @@ class GPModel(object):
         Returns:
             res (pandas.DataFrame): columns are 'mu' and 'v'
         """
-        K = self.kern.make_K(self.X_seqs, hypers=hypers[1::], normalize=True)
+        K = self.kern.make_K(self.X_seqs, hypers=hypers[1::])
         Ky = K + hypers[0]*np.identity(len(self.X_seqs))
         K_inv = np.linalg.inv(Ky)
         Y_mat = np.matrix (self.normed_Y)
@@ -389,14 +388,3 @@ class GPModel(object):
         vs = np.diag(1/K_inv)
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
-
-
-
-
-
-
-if __name__=="__main__":
-    Y = pd.Series([1,-1,1,1])
-    F = pd.Series([-1.0, 4.0, 4.0, 0.1])
-    print GPModel.grad_log_logistic_likelihood(Y,F)
-

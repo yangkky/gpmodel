@@ -221,5 +221,5 @@ def close_enough(f1,f2):
 
 
 if __name__=="__main__":
-    #test_regression()
+    test_regression()
     test_classification()

@@ -36,12 +36,12 @@ def plot_predictions (real_Ys, predicted_Ys,
     plt.xlabel ('Actual ' + label)
     plt.ylabel ('Predicted ' + label)
     plt.title (title)
-    #plt.xlim (small, large)
-    if small < 0:
+    plt.xlim (small, large)
+    if small <= 0:
         left = small*0.8
     else:
         left = small*1.2
-    if large < 0:
+    if large <= 0:
         right = large*1.3
     else:
         right = large*0.7
@@ -71,7 +71,8 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
         train_Ys = Ys.loc[train_inds]
         verify = Xs.loc[[i]]
         print 'Building model for ' + str(i)
-        model = gpmodel.GPModel(train_Xs,train_Ys, kernel, guesses=[0.74,.0002684], train=(count<1))
+        model = gpmodel.GPModel(train_Xs,train_Ys, kernel,
+                                guesses=[0.74,.0002684], remember=(count<1))
         count += 1
         print 'Making prediction for ' + str(i)
         predicted = model.predicts(verify, delete=False)

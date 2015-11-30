@@ -19,16 +19,19 @@ class GPModel(object):
         normed_Y (Series): Normalized outputs for the training set
         mean (float): mean of unnormed Ys
         std (float): standard deviation of unnormed Ys
-        kern (kernel): a kernel for calculating covariances
+        kern (GPKernel): a kernel for calculating covariances
         regr (Boolean): classification or regression
-        K (DataFrame): Covariance matrix
+        K (pdDataFrame): Covariance matrix
         Ky (np.matrix): noisy covariance matrix [var_p*K+var_n*I]
         L (np.matrix): lower triangular Cholesky decomposition of Ky
         alpha (np.matrix): L.T\(L\Y)
         ML (float): The negative log marginal likelihood
         l (int): number of training samples
     """
-    def __init__ (self, X_seqs, Y, kern, guesses=None, objective='log_ML'):
+    def __init__ (self, X_seqs, Y, kern, **kwargs):
+        guesses = kwargs.get('guesses', None)
+        objective = kwargs.get('objective', 'log_ML')
+        hypers = kwargs.get('hypers', None)
         self.X_seqs = X_seqs
         self.Y = Y
         self.l = len(Y)
@@ -53,24 +56,34 @@ class GPModel(object):
         else:
             if len(guesses) != n_guesses:
                 exit ('Length of guesses does not match number of hyperparameters')
-        self.train(objective, guesses)
+        self.train(objective=objective, guesses=guesses, hypers=hypers)
 
 
 
-    def train(self, objective, guesses):
+    def train(self, **kwargs):
         '''
         Set the hyperparameters by optimizing the objective function.
         Update all dependent values.
         '''
-        bounds = [(1e-5,None) for _ in guesses]
-        minimize_res = minimize(objective,
-                                (guesses),
-                                bounds=bounds,
-                                method='L-BFGS-B')
-        if self.regr:
-            hypers_list = ['var_n'] + self.kern.hypers
-            Hypers = namedtuple('Hypers', hypers_list)
+        guesses = kwargs.get('guesses', None)
+        objective = kwargs.get('objective', 'log_ML')
+        hypers = kwargs.get('hypers', None)
+        if hypers is None:
+            bounds = [(1e-5,None) for _ in guesses]
+            minimize_res = minimize(objective,
+                                    (guesses),
+                                    bounds=bounds,
+                                    method='L-BFGS-B')
+            if self.regr:
+                hypers_list = ['var_n'] + self.kern.hypers
+                Hypers = namedtuple('Hypers', hypers_list)
+            else:
+                Hypers = namedtuple('Hypers', self.kern.hypers)
             self.hypers = Hypers._make(minimize_res['x'])
+
+
+        if self.regr:
+
             self.K = self.kern.make_K(self.X_seqs, hypers=self.hypers[1:])
             self.Ky = self.K+self.hypers.var_n*np.identity(len(self.X_seqs))
             self.L = np.linalg.cholesky(self.Ky)
@@ -80,8 +93,6 @@ class GPModel(object):
             self.ML = self.log_ML(self.hypers)
             self.log_p = self.LOO_log_p(self.hypers)
         else:
-            Hypers = namedtuple('Hypers', self.kern.hypers)
-            self.hypers = Hypers._make(minimize_res['x'])
             self.f_hat = self.find_F(hypers=self.hypers)
             self.W = self.hess (self.f_hat)
             self.W_root = scipy.linalg.sqrtm(self.W)
@@ -182,8 +193,9 @@ class GPModel(object):
             # of the Cholesky decomposition
             # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
             if np.isnan(ML):
+                print "nan!"
                 print hypers
-            print ML
+                print Ky, L, alpha, Y_mat
             return ML
         else:
             f_hat = self.find_F(hypers=hypers) # use Algorithm 3.1 to find mode

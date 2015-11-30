@@ -1,66 +1,10 @@
 import numpy as np
 import pandas as pd
-from numba import jit
-
-def se(xs, params):
-    """
-    Calculates the squared exponential covariance function
-    between xs according to RW Eq. 2.31.
-    Each row of xs represents one measurement. Each column represents
-    a dimension. The exception is if xs only has one row with multiple
-    columns, then each column is assumed to be a measurement.
-
-    Parameters:
-        xs: ndarray or np.matrix
-        params: sigma_f and ell. sigma_f must be a scalar. ell may
-            be a scalar.
-
-    Returns:
-        res: the squared exponential covariance evaluated between xs
-            res has shape (n,n), where n is the number of rows in xs
-            or the number of columns if there is only one row unless
-            n = 2, in which case res is a float.
-    """
-    # check dimensions
-    # unpack params
-    sigma_f, ell = params
-
-
-    # calculate the squared radial distances between each pair of
-    # measurements
-    dims = np.shape(xs)
-    n = dims[0]
-    # make sure there are multiple measurements
-    if n == 1:
-        raise RunTimeError ('SE requires at least two items in xs')
-
-    # multiple 1D measurements
-    if len(dims) == 1 or dims[1] == 1:
-        if n == 2:
-            d_squared = (xs[0] - xs[1])**2
-        else:
-            d_squared = np.empty((n,n))
-            for i in range (n):
-                for j in range(n):
-                    d_squared[i][j] = (xs[i] - xs[j])**2
-
-    # column vector of n-dimensional measurements
-    else:
-        if n == 2:
-            d_squared = sum([(x1-x2)**2 for x1, x2 in zip(xs[0], xs[1])])
-        else:
-            d_squared = np.empty((n,n))
-            for i in range (n):
-                for j in range(n):
-                    d_squared[i][j] = sum([(x1-x2)**2 \
-                                     for x1, x2 in zip(xs[i], xs[j])])
-
-    return sigma_f**2 * np.exp(-0.5/np.power(ell,2) * d_squared)
-
-
+from sys import exit
 
 class GPKernel (object):
-    """A Gaussian process kernel for proteins.
+    """
+    A Gaussian process kernel for proteins.
 
        Attribute:
            hypers (list)
@@ -68,6 +12,159 @@ class GPKernel (object):
 
     def __init__ (self):
          return
+
+class SEKernel (GPKernel):
+    """
+    A squared exponential kernel
+
+    Attribute:
+        hypers (list)
+    """
+
+    def __init__(self):
+        self.hypers = ['sigma_f', 'ell']
+        super(SEKernel, self).__init__()
+
+    def calc_kernel (self, x1, x2, hypers):
+        """ Returns the squared exponential between the points x1 and x2"""
+        return self.se([x1, x2], hypers)
+
+    def make_K (self, Xs, hypers):
+        """
+        Returns the squared exponential covariance matrix for the points
+        in Xs.
+        """
+        return self.se(Xs, hypers)
+
+
+    def dist_to_se (self, dist, params):
+        """
+        Converts a square matrix of 'distance' measures into a SE covariance
+        matrix.
+
+        Parameters:
+            dist (numpy.ndarray): cov_i_j is the 'distance between the x_i
+                and x_j
+
+        Returns:
+            se (numpy.ndarray)
+        """
+        sigma_f, ell = params
+        return sigma_f**2 * np.exp(-0.5/np.power(ell,2) * np.power(dist, 2))
+
+    def d_squared_to_se (self, d_squared, params):
+        """
+        Converts a square matrix of 'distance' measures into a SE covariance
+        matrix.
+
+        Parameters:
+            d_squared (numpy.ndarray): cov_i_j is the 'distance between the x_i
+                and x_j
+
+        Returns:
+            se (numpy.ndarray)
+        """
+        sigma_f, ell = params
+        se_array = sigma_f**2 * np.exp(-0.5/np.power(ell,2) * d_squared)
+        return se_array
+
+    def get_d_squared (self, xs):
+        """
+        Calculates the square of the geometric distances between x_i in xs.
+        Each row of xs represents one measurement. Each column represents
+        a dimension. The exception is if xs only has one row with multiple
+        columns, then each column is assumed to be a measurement.
+
+        Parameters:
+            xs: ndarray or np.matrix or pd.Dataframe
+
+        Returns:
+            D (np.ndarray or float)
+        """
+        dims = np.shape(xs)
+        n = dims[0]
+
+        # multiple 1D measurements
+        if len(dims) == 1 or dims[1] == 1:
+            if n == 2:
+                d_squared = (xs[0] - xs[1])**2
+            else:
+                d_squared = np.empty((n,n))
+                for i in range (n):
+                    for j in range(n):
+                        d_squared[i][j] = (xs[i] - xs[j])**2
+
+        # column vector of n-dimensional measurements
+        else:
+            if n == 2:
+                d_squared = sum([np.power(x1-x2, 2) for x1, x2 in zip(xs[0], xs[1])])
+            else:
+                d_squared = np.empty((n,n))
+                for i in range (1,n):
+                    for j in range(i):
+                        d_squared[i][j] = sum([(x1-x2)**2 \
+                                         for x1, x2 in zip(xs[i], xs[j])])
+                        d_squared[j][i] = d_squared[i][j]
+                # fill in diagonals
+                for i in range (n):
+                    d_squared[i][i] = 0
+        return d_squared
+
+    def se(self, xs, params):
+        """
+        Calculates the squared exponential covariance function
+        between xs according to RW Eq. 2.31.
+        Each row of xs represents one measurement. Each column represents
+        a dimension. The exception is if xs only has one row with multiple
+        columns, then each column is assumed to be a measurement.
+
+        Parameters:
+            xs: ndarray or np.matrix or pd.DataFrame
+            params: sigma_f and ell. sigma_f must be a scalar. ell may
+                be a scalar.
+
+        Returns:
+            res (np.ndarray or float): the squared exponential covariance
+                evaluated between xs. res has shape (n,n), where n is the
+                number of rows in xs or the number of columns if there is
+                only one row unless n = 2, in which case res is a float.
+        """
+
+        # if xs is a DataFrame, convert it to an np.ndarray
+        is_df = False
+        if isinstance(xs, pd.DataFrame):
+            is_df = True
+            index = xs.index
+            xs = xs.as_matrix()
+
+        # calculate the squared radial distances between each pair of
+        # measurements
+
+        # Check dimensions
+        dims = np.shape(xs)
+        n = dims[0]
+
+        # matrices are weird: make them arrays
+        if n == 1 and isinstance(xs, np.matrix):
+            xs = np.array(xs)[0]
+            dims = np.shape(xs)
+            n = dims[0]
+        elif isinstance(xs, np.matrix):
+            xs = np.array(xs)
+
+        # make sure there are multiple measurements
+        if n == 1:
+            raise RunTimeError ('SE requires at least two items in xs')
+
+        d_squared = self.get_d_squared (xs)
+
+        se_array = self.d_squared_to_se (d_squared, params)
+
+        # convert back to DataFrame if necessary
+        if is_df and n > 2:
+            return pd.DataFrame(se_array, index=index, columns=index)
+        return se_array
+
 
 class HammingKernel (GPKernel):
     """A Hamming Kernel
@@ -80,7 +177,7 @@ class HammingKernel (GPKernel):
         self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
 
-    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=False):
+    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Returns the number of shared amino acids between two sequences"""
         var_p = hypers[0]
         s1 = self.get_sequence(seq1)
@@ -90,7 +187,7 @@ class HammingKernel (GPKernel):
             k = float(k) / len(s1)
         return k*var_p
 
-    def make_K (self, seqs, hypers=[1.0], normalize=False):
+    def make_K (self, seqs=None, hypers=[1.0], normalize=True):
         """ Returns a covariance matrix for two or more sequences of the same length
 
         Parameters:
@@ -99,7 +196,9 @@ class HammingKernel (GPKernel):
         Returns:
             DataFrame
         """
-        # note: could probably do this more elegantly without transposing
+        if seqs is None:
+            var_p = hypers[0]
+            return self.base_K*var_p
         n_seqs = len (seqs.index)
         K = np.zeros((n_seqs, n_seqs))
         for n1,i in zip(range(n_seqs), seqs.index):
@@ -110,6 +209,14 @@ class HammingKernel (GPKernel):
         K = np.array(K)
         K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
         return K_df
+
+    def set_X (self, X_seqs):
+        """
+        Store the sequences in X_seqs in the kernel's contacts dict.
+        Use X_sequences to set the kernel's base K.
+        """
+        self.train (X_seqs)
+        self.base_K = self.make_K(X_seqs)
 
     def train(self, X_seqs):
         """
@@ -155,6 +262,7 @@ class StructureKernel (GPKernel):
             super (StructureKernel, self).__init__()
         self.contact_terms = self.contacting_terms (sample_space, contacts)
         self.saved_contacts = {}
+        self.saved_Xs = {}
         self.contacts = contacts
         self.hypers = ['var_p']
         super (StructureKernel, self).__init__()
@@ -182,8 +290,7 @@ class StructureKernel (GPKernel):
                     contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
         return contact_terms
 
-
-    def make_K (self, seqs, hypers=[1.0], normalize=False):
+    def make_K (self, seqs=None, hypers=[1.0], normalize=True):
         """ Makes the structure-based covariance matrix
 
             Parameters:
@@ -192,16 +299,23 @@ class StructureKernel (GPKernel):
         Returns:
             Dataframe: structure-based covariance matrix
         """
-        var_p = hypers[0]
-        X = np.matrix(self.make_contacts_X (seqs))
-        K = np.einsum('ij,jk->ik', X, X.T)
+        if seqs is None:
+            var_p = hypers[0]
+            return self.base_K*var_p
+        n_seqs = len (seqs.index)
+        K = np.zeros((n_seqs, n_seqs))
+        for n1 in range(n_seqs):
+            for n2 in range(n1+1):
+                seq1 = seqs.iloc[n1]
+                seq2 = seqs.iloc[n2]
+                K[n1,n2] = self.calc_kernel (seq1, seq2,
+                                             hypers=hypers, normalize=normalize)
+                if n1 != n2:
+                    K[n2, n1] = K[n1, n2]
+        K_df = pd.DataFrame (K, index=seqs.index, columns=seqs.index)
+        return K_df
 
-        if normalize:
-            K = K/float(K[0][0])
-        K = K*var_p
-        return pd.DataFrame(K, index=seqs.index, columns=seqs.index)
-
-    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=False):
+    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Determine the number of shared contacts between the two sequences
 
         Parameters:
@@ -219,33 +333,14 @@ class StructureKernel (GPKernel):
             k = float(k) / len(contacts1)
         return k
 
-
-    def make_contacts_X (self, seqs, hypers=[1.0]):
-        """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
-        X = []
-        for i in range(len(seqs.index)):
-            X.append(self.contacts_X_row(seqs.iloc[i],hypers))
-        return X
-
-    def contacts_X_row (self, seq, hypers=[1.0]):
-        """ Determine whether the given sequence contains each of the given contacts
-
-        Parameters:
-            seq (iterable): Amino acid sequence
-            var_p (float): underlying variance of Gaussian process
-
-        Returns:
-            list: 1 for contacts present, else 0
+    def set_X (self, X_seqs):
         """
-        var_p = hypers[0]
-        X_row = []
-        for term in self.contact_terms:
-            if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
-                X_row.append (1)
-            else:
-                X_row.append (0)
+        Store the sequences in X_seqs in the kernel's contacts dict.
+        Use X_sequences to set the kernel's base K.
+        """
+        self.train (X_seqs)
+        self.base_K = self.make_K(X_seqs)
 
-        return [var_p*x for x in X_row]
 
     def train(self, X_seqs):
         """
@@ -255,7 +350,8 @@ class StructureKernel (GPKernel):
             if X_seqs.index[i] in self.saved_contacts.keys():
                 continue
             else:
-                self.saved_contacts[X_seqs.index[i]] = self.get_contacts(X_seqs.iloc[i])
+                self.saved_contacts[X_seqs.index[i]] = \
+                    self.get_contacts(X_seqs.iloc[i])
 
     def delete(self, X_seqs):
         """
@@ -269,20 +365,100 @@ class StructureKernel (GPKernel):
         """
         Gets the contacts for seq.
         """
+        if isinstance (seq, basestring):
+            try:
+                return self.saved_contacts[seq]
+            except:
+                exit('Key not recognized.')
         try:
-            return self.saved_contacts[seq]
+            return self.saved_contacts[seq.name]
 
-        except TypeError:
+        except (KeyError, AttributeError):
             seq = ''.join([s for s in seq])
             contacts = []
             for i,con in enumerate(self.contacts):
                 term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
                 contacts.append(term)
-#             for term in self.contact_terms:
-#                 if seq[term[0][0]] == term[0][1] and seq[term[1][0]] == term[1][1]:
-#                     contacts.append(term)
             return contacts
 
+class StructureSEKernel (StructureKernel, SEKernel):
+    """
+    A squared exponential structure kernel
+    """
+
+    def __init__(self, contacts, sample_space):
+        StructureKernel.__init__(self, contacts, sample_space)
+        SEKernel.__init__(self)
+
+    def make_K (self, X_seqs=None, hypers=(1.0, 1.0, 1.0)):
+        if X_seqs is None:
+            return self.d_squared_to_se(self.d_squared, hypers)
+        X = self.make_contacts_X(X_seqs)
+        K = SEKernel.make_K(self, X, hypers)
+        return pd.DataFrame(K, index=X_seqs.index, columns=X_seqs.index)
+
+    def calc_kernel (self, seq1, seq2, hypers):
+        x1 = self.contacts_X_row(seq1)
+        x2 = self.contacts_X_row(seq2)
+        return SEKernel.calc_kernel (self, x1, x2, hypers)
+
+    def train(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's Xs dict
+        """
+        for i in range(len(X_seqs.index)):
+            if X_seqs.index[i] in self.saved_Xs.keys():
+                continue
+            else:
+                self.saved_Xs[X_seqs.index[i]] = \
+                    self.contacts_X_row(X_seqs.iloc[i])
+
+    def set_X(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        X = self.make_contacts_X(X_seqs)
+        d_squared = self.get_d_squared(X)
+        self.d_squared = pd.DataFrame(d_squared, index=X_seqs.index,
+                                      columns=X_seqs.index)
+
+
+    def delete(self, X_seqs):
+        """
+        Delete these sequences from the kernel's saved_Xs dict.
+        """
+        for i in range (len(X_seqs.index)):
+            if X_seqs.index[i] in self.saved_contacts.keys():
+                del self.saved_contacts[X_seqs.index[i]]
+                del self.saved_Xs[X_seqs.index[i]]
+
+    def make_contacts_X (self, seqs):
+        """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
+        X = []
+        for i in range(len(seqs.index)):
+            X.append(self.contacts_X_row(seqs.iloc[i]))
+        return X
+
+    def contacts_X_row (self, seq):
+        """ Determine whether the given sequence contains each of the given contacts
+
+        Parameters:
+            seq (iterable): Amino acid sequence
+            var_p (float): underlying variance of Gaussian process
+
+        Returns:
+            list: 1 for contacts present, else 0
+        """
+        try:
+            X_row = self.saved_Xs[seq.name]
+        except:
+            contacts = self.get_contacts(seq)
+            X_row = [0 for _ in range(len(self.contact_terms))]
+            for c in contacts:
+               X_row[self.contact_terms.index(c)] = 1
+        return X_row
 
 
 

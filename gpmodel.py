@@ -36,7 +36,7 @@ class GPModel(object):
         self.Y = Y
         self.l = len(Y)
         self.kern = kern
-        self.kern.train(X_seqs)
+        self.kern.set_X(X_seqs)
         # check if regression or classification
         self.regr = not self.is_class()
         if self.regr:
@@ -68,23 +68,26 @@ class GPModel(object):
         guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
         hypers = kwargs.get('hypers', None)
+
+        if self.regr:
+            hypers_list = ['var_n'] + self.kern.hypers
+            Hypers = namedtuple('Hypers', hypers_list)
+        else:
+            Hypers = namedtuple('Hypers', self.kern.hypers)
+
         if hypers is None:
             bounds = [(1e-5,None) for _ in guesses]
             minimize_res = minimize(objective,
                                     (guesses),
                                     bounds=bounds,
                                     method='L-BFGS-B')
-            if self.regr:
-                hypers_list = ['var_n'] + self.kern.hypers
-                Hypers = namedtuple('Hypers', hypers_list)
-            else:
-                Hypers = namedtuple('Hypers', self.kern.hypers)
-            self.hypers = Hypers._make(minimize_res['x'])
 
+            self.hypers = Hypers._make(minimize_res['x'])
+        else:
+            self.hypers = Hypers._make(hypers)
 
         if self.regr:
-
-            self.K = self.kern.make_K(self.X_seqs, hypers=self.hypers[1:])
+            self.K = self.kern.make_K(hypers=self.hypers[1:])
             self.Ky = self.K+self.hypers.var_n*np.identity(len(self.X_seqs))
             self.L = np.linalg.cholesky(self.Ky)
             self.alpha = np.linalg.lstsq(self.L.T,
@@ -96,7 +99,7 @@ class GPModel(object):
             self.f_hat = self.find_F(hypers=self.hypers)
             self.W = self.hess (self.f_hat)
             self.W_root = scipy.linalg.sqrtm(self.W)
-            self.Ky = np.matrix(self.kern.make_K(self.X_seqs, hypers=self.hypers))
+            self.Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
             self.L = np.linalg.cholesky (np.matrix(np.eye(self.l))+self.W_root\
                                          *self.Ky*self.W_root)
             self.grad = np.matrix(np.diag(self.grad_log_logistic_likelihood\
@@ -176,7 +179,7 @@ class GPModel(object):
         """
         if self.regr:
             Y_mat = np.matrix(self.normed_Y)
-            K = self.kern.make_K(self.X_seqs, hypers=hypers[1::])
+            K = self.kern.make_K(hypers=hypers[1::])
             K_mat = np.matrix (K)
             Ky = K_mat + np.identity(len(K_mat))*hypers[0]
             try:
@@ -312,7 +315,7 @@ class GPModel(object):
             exit ('Initial guess must have same dimensions as Y')
 
 
-        K = self.kern.make_K(self.X_seqs, hypers=hypers)
+        K = self.kern.make_K(hypers=hypers)
         K_mat = np.matrix(K)
         n_below = 0
         for i in range (evals):
@@ -350,7 +353,7 @@ class GPModel(object):
             logq (float)
         '''
         l = self.l
-        K = self.kern.make_K(self.X_seqs, hypers=hypers)
+        K = self.kern.make_K(hypers=hypers)
         K_mat = np.matrix(K)
         W = self.hess (F)
         W_root = scipy.linalg.sqrtm(W)
@@ -392,7 +395,7 @@ class GPModel(object):
         Returns:
             res (pandas.DataFrame): columns are 'mu' and 'v'
         """
-        K = self.kern.make_K(self.X_seqs, hypers=hypers[1::])
+        K = self.kern.make_K(hypers=hypers[1::])
         Ky = K + hypers[0]*np.identity(len(self.X_seqs))
         K_inv = np.linalg.inv(Ky)
         Y_mat = np.matrix (self.normed_Y)

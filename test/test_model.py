@@ -17,7 +17,7 @@ contacts = [(0,1),(2,3)]
 
 class_Ys = pd.Series([-1,1,1,-1],index=seqs.index)
 reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
-struct = gpkernel.StructureKernel (contacts,space)
+struct = gpkernel.StructureKernel (contacts)
 
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
@@ -126,9 +126,9 @@ def test_classification ():
     model = gpmodel.GPModel(seqs,class_Ys,struct)
     test_F = pd.Series([-.5,.5,.6,.1])
     assert close_enough(model.hypers.var_p, 43.810192819325351),\
-    'Regression model.hypers.var_p is incorrect'
+    'Classification model.hypers.var_p is incorrect'
     assert close_enough(model.ML, 2.45520196), \
-    'Regression model.ML is incorrect'
+    'Classification model.ML is incorrect'
 
 
     #assert model.K.equals(struct.make_K(seqs, normalize=True))

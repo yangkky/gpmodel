@@ -18,7 +18,10 @@ def test_hamming_kernel():
     Tests for the HammingKernel
     """
     vp = 0.4
-    K = pd.DataFrame([[4.,2.,3.,4.],[2.,4.,3.,2.],[3.,3.,4.,3.],[4.,2.,3.,4.]],
+    K = pd.DataFrame([[4.,2.,3.,4.],
+                      [2.,4.,3.,2.],
+                      [3.,3.,4.,3.],
+                      [4.,2.,3.,4.]],
                     index=seqs.index,
                     columns=seqs.index)
     norm = 4.0
@@ -78,29 +81,28 @@ def test_hamming_kernel():
 def test_structure_kernel():
     # test with repeats
     vp = 0.4
-    K = pd.DataFrame([[2.0,0.0,1.0,2.0],[0.0,2.0,1.0,0.0],[1.0,1.0,2.0,1.0],[2.0,0.0,1.0,2.0]],
+    K = pd.DataFrame([[2.0,0.0,1.0,2.0],
+                      [0.0,2.0,1.0,0.0],
+                      [1.0,1.0,2.0,1.0],
+                      [2.0,0.0,1.0,2.0]],
                      index=seqs.index,
                      columns=seqs.index)
     norm = 2.0
     print 'Testing StructureKernel...'
-    kern = gpkernel.StructureKernel(contacts, space)
+    kern = gpkernel.StructureKernel(contacts)
     assert kern.hypers == ['var_p']
-    assert kern.contact_terms == [((0, 'R'), (1, 'Y')),
-                                  ((0, 'R'), (1, 'T')),
-                                  ((2, 'H'), (3, 'A')),
-                                  ((2, 'M'), (3, 'A'))],\
-    'Failed to make correct contact_terms.'
+
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern.saved_contacts == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+    assert kern.saved_seqs == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
                              'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
                              'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
                              'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\
     'Failed to train structure kernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern.saved_contacts == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+    assert kern.saved_seqs == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
                              'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
                              'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))]}
 
@@ -286,51 +288,81 @@ def test_se_kernel():
 
     print 'SEKernel passes all tests.'
 
-    ssek = gpkernel.StructureSEKernel(contacts, space)
-    assert ssek.contact_terms == [((0, 'R'), (1, 'Y')),
-                                  ((0, 'R'), (1, 'T')),
-                                  ((2, 'H'), (3, 'A')),
-                                  ((2, 'M'), (3, 'A'))]
+    print 'Testing StructureSEKernel...'
+
+    ssek = gpkernel.StructureSEKernel(contacts)
+
     assert ssek.hypers == ['sigma_f', 'ell']
 
-    X = pd.DataFrame([[1, 0, 0, 1],
-                      [0, 1, 1, 0],
-                      [0, 1, 0, 1],
-                      [1,0,0,1]],
+
+    K = pd.DataFrame([[2.0,0.0,1.0,2.0],
+                      [0.0,2.0,1.0,0.0],
+                      [1.0,1.0,2.0,1.0],
+                      [2.0,0.0,1.0,2.0]],
                      index=seqs.index,
                      columns=seqs.index)
+    d2 = 2 - K
 
-    assert ssek.contacts_X_row(seqs.iloc[0]) == [1,0,0,1],\
-    'Failed contacts_X_row for var_p = 1.'
-
-    # test make_contacts_X
-    assert ssek.make_contacts_X(seqs) == [[1, 0, 0, 1],
-                                          [0, 1, 1, 0],
-                                          [0, 1, 0, 1],
-                                          [1,0,0,1]],\
-    'Failed make_contacts_X for var_p = 1.'
+    # test distance and make_D functions
+    assert ssek.distance(seqs.loc['A'], seqs.loc['B']) == 2,\
+        'StructureSEKernel fails to calculate distance.'
+    assert ssek.make_D(seqs).equals(d2), \
+        'StructureSEKernel fails to D.'
 
     # Test make_K and calc_kernel
-    assert ssek.make_K(hypers=params, X_seqs=seqs).equals((sek.se(X, params))),\
+    assert ssek.make_K(hypers=params, X_seqs=seqs)\
+        .equals((sek.d_squared_to_se(d2, params))),\
         'StructureSEKernel fails make_K.'
     assert ssek.calc_kernel(seqs.iloc[0], seqs.iloc[1], params) == \
         sek.dist_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
 
     # Set a d_squared to speed things up
     ssek.set_X(seqs)
-    d2 = pd.DataFrame([[0.0, 4.0, 2.0, 0.0],
-                      [4.0, 0.0, 2.0, 4.0],
-                      [2.0, 2.0, 0.0, 2.0],
-                      [0.0, 4.0, 2.0, 0.0]],
-                     index=seqs.index,
-                     columns=seqs.index)
-    assert ssek.d_squared.equals(d2)
-
+    assert ssek.d_squared.equals(d2), 'ssek.d_squared is wrong.'
     # Retest make_K
-    assert ssek.make_K(hypers=params).equals((sek.se(X, params))),\
+    assert ssek.make_K(hypers=params).equals((sek.d_squared_to_se(d2, params))),\
         'StructureSEKernel fails make_K.'
 
+    print 'StructureSEKernel passes all tests.'
+
+
+    print 'Testing HammingSEKernel...'
+
+    ssek = gpkernel.StructureSEKernel(contacts)
+
+    assert ssek.hypers == ['sigma_f', 'ell']
+
+
+    K = pd.DataFrame([[4.,2.,3.,4.],
+                      [2.,4.,3.,2.],
+                      [3.,3.,4.,3.],
+                      [4.,2.,3.,4.]],
+                    index=seqs.index,
+                    columns=seqs.index)
+    d2 = 4 - K
+
+    # test distance and make_D functions
+    assert ssek.distance(seqs.loc['A'], seqs.loc['B']) == 2,\
+        'HammingSEKernel fails to calculate distance.'
+    assert ssek.make_D(seqs).equals(d2), \
+        'HammingSEKernel fails to D.'
+
+    # Test make_K and calc_kernel
+    assert ssek.make_K(hypers=params, X_seqs=seqs)\
+        .equals((sek.d_squared_to_se(d2, params))),\
+        'HammingSEKernel fails make_K.'
+    assert ssek.calc_kernel(seqs.iloc[0], seqs.iloc[1], params) == \
+        sek.dist_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
+
+    # Set a d_squared to speed things up
+    ssek.set_X(seqs)
+    assert ssek.d_squared.equals(d2), 'ssek.d_squared is wrong.'
+    # Retest make_K
+    assert ssek.make_K(hypers=params).equals((sek.d_squared_to_se(d2, params))),\
+        'HammingSEKernel fails make_K.'
+
+    print 'HammingSEKernel passes all tests.'
 if __name__=="__main__":
-    test_hamming_kernel()
+    #test_hamming_kernel()
     test_structure_kernel()
     test_se_kernel()

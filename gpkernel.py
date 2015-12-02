@@ -257,12 +257,9 @@ class StructureKernel (GPKernel):
         contacts: list of which residues are in contact
     """
 
-    def __init__ (self, contacts=None, sample_space=None):
-        if contacts==None or sample_space==None:
-            super (StructureKernel, self).__init__()
-        self.contact_terms = self.contacting_terms (sample_space, contacts)
-        self.saved_contacts = {}
-        self.saved_Xs = {}
+    def __init__ (self, contacts):
+        self.contacts = contacts
+        self.saved_seqs = {}
         self.contacts = contacts
         self.hypers = ['var_p']
         super (StructureKernel, self).__init__()
@@ -347,10 +344,10 @@ class StructureKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's contacts dict
         """
         for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_contacts.keys():
+            if X_seqs.index[i] in self.saved_seqs.keys():
                 continue
             else:
-                self.saved_contacts[X_seqs.index[i]] = \
+                self.saved_seqs[X_seqs.index[i]] = \
                     self.get_contacts(X_seqs.iloc[i])
 
     def delete(self, X_seqs):
@@ -358,8 +355,8 @@ class StructureKernel (GPKernel):
         Delete these sequences from the kernel's contacts dict
         """
         for i in range (len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_contacts.keys():
-                del self.saved_contacts[X_seqs.index[i]]
+            if X_seqs.index[i] in self.saved_seqs.keys():
+                del self.saved_seqs[X_seqs.index[i]]
 
     def get_contacts(self, seq):
         """
@@ -367,11 +364,11 @@ class StructureKernel (GPKernel):
         """
         if isinstance (seq, basestring):
             try:
-                return self.saved_contacts[seq]
+                return self.saved_seqs[seq]
             except:
                 exit('Key not recognized.')
         try:
-            return self.saved_contacts[seq.name]
+            return self.saved_seqs[seq.name]
 
         except (KeyError, AttributeError):
             seq = ''.join([s for s in seq])
@@ -386,34 +383,21 @@ class StructureSEKernel (StructureKernel, SEKernel):
     A squared exponential structure kernel
     """
 
-    def __init__(self, contacts, sample_space):
-        StructureKernel.__init__(self, contacts, sample_space)
+    def __init__(self, contacts):
+        StructureKernel.__init__(self, contacts)
         SEKernel.__init__(self)
 
     def make_K (self, X_seqs=None, hypers=(1.0, 1.0, 1.0)):
         if X_seqs is None:
             return self.d_squared_to_se(self.d_squared, hypers)
-        X = self.make_contacts_X(X_seqs)
-        K = SEKernel.make_K(self, X, hypers)
+        D = self.make_D(X_seqs)
+        K = SEKernel.d_squared_to_se(self, D, hypers)
         return pd.DataFrame(K, index=X_seqs.index, columns=X_seqs.index)
 
     def calc_kernel (self, seq1, seq2, hypers):
-        x1 = self.contacts_X_row(seq1)
-        x2 = self.contacts_X_row(seq2)
-        return SEKernel.calc_kernel (self, x1, x2, hypers)
+        d = self.distance(seq1, seq2)
+        return SEKernel.dist_to_se(self, d, hypers)
 
-    def train(self, X_seqs):
-        """
-        Stores the X_rows in the kernel's Xs dict
-        """
-        for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_Xs.keys():
-                continue
-            else:
-                self.saved_Xs[X_seqs.index[i]] = \
-                    self.contacts_X_row(X_seqs.iloc[i])
-                self.saved_contacts[X_seqs.index[i]] = \
-                    self.get_contacts(X_seqs.iloc[i])
 
     def set_X(self, X_seqs):
         """
@@ -421,52 +405,111 @@ class StructureSEKernel (StructureKernel, SEKernel):
         Stores the distance matrix.
         """
         self.train(X_seqs)
-        X = self.make_contacts_X(X_seqs)
-        d_squared = self.get_d_squared(X)
-        self.d_squared = pd.DataFrame(d_squared, index=X_seqs.index,
-                                      columns=X_seqs.index)
+        self.d_squared = self.make_D(X_seqs)
 
-
-    def delete(self, X_seqs):
+    def distance(self, seq1, seq2):
         """
-        Delete these sequences from the kernel's saved_Xs dict.
+        Return the contact distance between two sequences of identical length.
+        This is the geometric distance squared.
         """
-        for i in range (len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_contacts.keys():
-                del self.saved_contacts[X_seqs.index[i]]
-                del self.saved_Xs[X_seqs.index[i]]
+        k = StructureKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(self.get_contacts(seq1))
+        return n - k
 
-    def make_contacts_X (self, seqs):
-        """ Makes a list with the result of contacts_X_row for each sequence in seqs"""
-        X = []
-        for i in range(len(seqs.index)):
-            X.append(self.contacts_X_row(seqs.iloc[i]))
-        return X
+    def make_D(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
-    def contacts_X_row (self, seq):
-        """ Determine whether the given sequence contains each of the given contacts
 
-        Parameters:
-            seq (iterable): Amino acid sequence
-            var_p (float): underlying variance of Gaussian process
+#     def make_contacts_X (self, seqs):
+#         """ Makes a list with the result of contacts_X_row for each sequence in seqs.
+#             Deprecated.
+#         """
+#         X = []
+#         for i in range(len(seqs.index)):
+#             X.append(self.contacts_X_row(seqs.iloc[i]))
+#         return X
 
-        Returns:
-            list: 1 for contacts present, else 0
+#     def contacts_X_row (self, seq):
+#         """ Determine whether the given sequence contains each of the given contacts.
+#             Deprecated.
+
+#         Parameters:
+#             seq (iterable): Amino acid sequence
+#             var_p (float): underlying variance of Gaussian process
+
+#         Returns:
+#             list: 1 for contacts present, else 0
+#         """
+#         if isinstance (seq, basestring):
+#             try:
+#                 return self.saved_Xs[seq]
+#             except:
+#                 exit('Key not recognized.')
+#         else:
+#             try:
+#                 X_row = self.saved_Xs[seq.name]
+#             except:
+#                 contacts = self.get_contacts(seq)
+#                 X_row = [0 for _ in range(len(self.contact_terms))]
+#                 for c in contacts:
+#                     X_row[self.contact_terms.index(c)] = 1
+#         return X_row
+
+
+class HammingSEKernel (HammingKernel, SEKernel):
+    """
+    A squared exponential Hamming kernel
+    """
+
+    def __init__(self):
+        HammingKernel.__init__(self)
+        SEKernel.__init__(self)
+
+    def make_K (self, X_seqs=None, hypers=(1.0, 1.0, 1.0)):
+        if X_seqs is None:
+            return self.d_squared_to_se(self.d_squared, hypers)
+        D = self.make_D(X_seqs)
+        K = SEKernel.d_squared_to_se(self, D, hypers)
+        return pd.DataFrame(K, index=X_seqs.index, columns=X_seqs.index)
+
+    def calc_kernel (self, seq1, seq2, hypers):
+        d = self.distance(seq1, seq2)
+        return SEKernel.dist_to_se(self, d, hypers)
+
+
+    def set_X(self, X_seqs):
         """
-        if isinstance (seq, basestring):
-            try:
-                return self.saved_Xs[seq]
-            except:
-                exit('Key not recognized.')
-        else:
-            try:
-                X_row = self.saved_Xs[seq.name]
-            except:
-                contacts = self.get_contacts(seq)
-                X_row = [0 for _ in range(len(self.contact_terms))]
-                for c in contacts:
-                    X_row[self.contact_terms.index(c)] = 1
-        return X_row
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        self.d_squared = self.make_D(X_seqs)
+
+    def distance(self, seq1, seq2):
+        """
+        Return the hamming distance between two sequences of identical length.
+        This is the geometric distance squared.
+        """
+        k = HammingKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(seq1)
+        return n - k
+
+    def make_D(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+
+
 
 
 

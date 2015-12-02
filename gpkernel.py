@@ -412,6 +412,8 @@ class StructureSEKernel (StructureKernel, SEKernel):
             else:
                 self.saved_Xs[X_seqs.index[i]] = \
                     self.contacts_X_row(X_seqs.iloc[i])
+                self.saved_contacts[X_seqs.index[i]] = \
+                    self.get_contacts(X_seqs.iloc[i])
 
     def set_X(self, X_seqs):
         """
@@ -451,13 +453,19 @@ class StructureSEKernel (StructureKernel, SEKernel):
         Returns:
             list: 1 for contacts present, else 0
         """
-        try:
-            X_row = self.saved_Xs[seq.name]
-        except:
-            contacts = self.get_contacts(seq)
-            X_row = [0 for _ in range(len(self.contact_terms))]
-            for c in contacts:
-               X_row[self.contact_terms.index(c)] = 1
+        if isinstance (seq, basestring):
+            try:
+                return self.saved_Xs[seq]
+            except:
+                exit('Key not recognized.')
+        else:
+            try:
+                X_row = self.saved_Xs[seq.name]
+            except:
+                contacts = self.get_contacts(seq)
+                X_row = [0 for _ in range(len(self.contact_terms))]
+                for c in contacts:
+                    X_row[self.contact_terms.index(c)] = 1
         return X_row
 
 

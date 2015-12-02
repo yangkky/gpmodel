@@ -426,42 +426,6 @@ class StructureSEKernel (StructureKernel, SEKernel):
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
 
-#     def make_contacts_X (self, seqs):
-#         """ Makes a list with the result of contacts_X_row for each sequence in seqs.
-#             Deprecated.
-#         """
-#         X = []
-#         for i in range(len(seqs.index)):
-#             X.append(self.contacts_X_row(seqs.iloc[i]))
-#         return X
-
-#     def contacts_X_row (self, seq):
-#         """ Determine whether the given sequence contains each of the given contacts.
-#             Deprecated.
-
-#         Parameters:
-#             seq (iterable): Amino acid sequence
-#             var_p (float): underlying variance of Gaussian process
-
-#         Returns:
-#             list: 1 for contacts present, else 0
-#         """
-#         if isinstance (seq, basestring):
-#             try:
-#                 return self.saved_Xs[seq]
-#             except:
-#                 exit('Key not recognized.')
-#         else:
-#             try:
-#                 X_row = self.saved_Xs[seq.name]
-#             except:
-#                 contacts = self.get_contacts(seq)
-#                 X_row = [0 for _ in range(len(self.contact_terms))]
-#                 for c in contacts:
-#                     X_row[self.contact_terms.index(c)] = 1
-#         return X_row
-
-
 class HammingSEKernel (HammingKernel, SEKernel):
     """
     A squared exponential Hamming kernel

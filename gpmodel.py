@@ -11,7 +11,7 @@ from collections import namedtuple
 
 
 class GPModel(object):
-    """A Gaussian process model.
+    """A Gaussian process model for proteins.
 
     Attributes:
         X_seqs (DataFrame): The sequences in the training set
@@ -20,15 +20,41 @@ class GPModel(object):
         mean (float): mean of unnormed Ys
         std (float): standard deviation of unnormed Ys
         kern (GPKernel): a kernel for calculating covariances
+        Hypers (namedtuple): the hyperparameters
         regr (Boolean): classification or regression
         K (pdDataFrame): Covariance matrix
-        Ky (np.matrix): noisy covariance matrix [var_p*K+var_n*I]
-        L (np.matrix): lower triangular Cholesky decomposition of Ky
+        Ky (np.matrix): noisy covariance matrix [K+var_n*I]
+        L (np.matrix): lower triangular Cholesky decomposition of Ky for
+            regression models. Lower triangular Cholesky decomposition of
+            (I + W_root*Ky*W_root.T) for classification models.
         alpha (np.matrix): L.T\(L\Y)
         ML (float): The negative log marginal likelihood
+        log_p (float): the negative LOO log likelihood
         l (int): number of training samples
+        f_hat (Series): MAP values of the latent function for training set
+        W (np.matrix): negative Hessian of the log likelihood
+        W_root (np.matrix): Square root of W
+        grad (np.matrix): gradient of the log logistic likelihood
     """
+
     def __init__ (self, X_seqs, Y, kern, **kwargs):
+        """
+        Create a new GPModel.
+
+        Parameters:
+            X_seqs (pandas.DataFrame): Sequences in training set
+            Y (pandas.Series): measurements in training set
+            kern (GPKernel): kernel to use
+
+        Optional keyword parameters:
+            guesses (iterable): initial guesses for the hyperparameters.
+                Default is [1 for _ in range(len(hypers))].
+            objective (String): objective function to use in training model. Choices
+                are 'log_ML' and 'LOO_log_p'. Classification must be trained
+                on 'log_ML.' Default is 'log_ML'.
+            hypers (iterable): hyperparameters to set. This overrides the other
+                optional parameters.
+        """
         guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
         hypers = kwargs.get('hypers', None)
@@ -62,8 +88,18 @@ class GPModel(object):
 
     def train(self, **kwargs):
         '''
-        Set the hyperparameters by optimizing the objective function.
-        Update all dependent values.
+        Set the hyperparameters to the passed values or by minimizing the
+        objective. Update all dependent values. Either a set of guesses and an
+        objective function or a set of hyperparameters must be passed.
+
+        Parameters:
+           guesses (iterable): initial guesses for the hyperparameters.
+                Default is [1 for _ in range(len(hypers))].
+            objective (function): objective function to use in training model. Choices
+                are 'log_ML' and 'LOO_log_p'. Classification must be trained
+                on 'log_ML'.
+            hypers (iterable): hyperparameters to set. This overrides the other
+                optional parameters.
         '''
         guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
@@ -125,7 +161,13 @@ class GPModel(object):
 
     def unnormalize(self, normed):
         """
-        Inverse of normalize, but works on single values or arrays
+        Inverse of normalize, but works on single values or arrays.
+
+        Parameters:
+            normed
+
+        Returns:
+            normed*self.std * self.mean
         """
         return normed*self.std + self.mean
 
@@ -146,6 +188,7 @@ class GPModel(object):
         if self.regr:
             E = self.unnormalize(k*self.alpha)
             v = np.linalg.lstsq(self.L,k.T)[0]
+            print k_star, v.T*v
             var = (k_star - v.T*v) * self.std**2
             return (E.item(),var.item())
         else:
@@ -157,10 +200,20 @@ class GPModel(object):
                                            -i*var+f_bar,
                                            f_bar+i*var,
                                            args=(f_bar.item(), var.item()))[0]
-            return (pi_star)
+            return (pi_star,)
 
     def p_integral (self, z, mean, variance):
-        '''Equation to integrate when calculating pi_star for classification'''
+        '''Equation to integrate when calculating pi_star for classification.
+        Equation 3.25 from RW with a sigmoid likelihood.
+
+        Parameters:
+            z (float): value at which to evaluate the function.
+            mean (float): mean of the Gaussian
+            variance (float): variance of the Gaussian
+
+        Returns:
+            res (float)
+        '''
         try:
             first = 1./(1+math.exp(-z))
         except OverflowError:
@@ -171,11 +224,14 @@ class GPModel(object):
 
     def log_ML (self, hypers):
         """ Returns the negative log marginal likelihood for the model.
+        Uses RW Equation 5.8 for regression models and Equation 3.32 for
+        classification models.
 
         Parameters:
-            variances (iterable): var_n and var_p
+            hypers (iterable): the hyperparameters
 
-        Uses RW Equation 5.8
+        Returns:
+            log_ML (float)
         """
         if self.regr:
             Y_mat = np.matrix(self.normed_Y)
@@ -292,7 +348,7 @@ class GPModel(object):
             F (Series): values for the latent function
 
         Returns:
-            W (np.matrix): diagonal negtive Hessian of the log likelihood matrix
+            W (np.matrix): diagonal negative Hessian of the log likelihood matrix
         """
         W = np.matrix(np.zeros([self.l,self.l]))
         for i in range(self.l):

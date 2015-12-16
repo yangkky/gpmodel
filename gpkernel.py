@@ -264,29 +264,6 @@ class StructureKernel (GPKernel):
         self.hypers = ['var_p']
         super (StructureKernel, self).__init__()
 
-    def contacting_terms (self, sample_space, contacts):
-        """ Lists the possible contacts
-
-        Parameters:
-            sample_space (iterable): Each element in sample_space contains the possible
-               amino acids at that position
-            contacts (iterable): Each element in contacts pairs two positions that
-               are considered to be in contact
-
-        Returns:
-            list: Each item in the list is a contact in the form ((pos1,aa1),(pos2,aa2))
-        """
-        contact_terms = []
-        for contact in contacts:
-            first_pos = contact[0]
-            second_pos = contact[1]
-            first_possibilities = set(sample_space[first_pos])
-            second_possibilities = set(sample_space[second_pos])
-            for aa1 in first_possibilities:
-                for aa2 in second_possibilities:
-                    contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
-        return contact_terms
-
     def make_K (self, seqs=None, hypers=[1.0], normalize=True):
         """ Makes the structure-based covariance matrix
 
@@ -366,6 +343,7 @@ class StructureKernel (GPKernel):
             try:
                 return self.saved_seqs[seq]
             except:
+                print seq
                 exit('Key not recognized.')
         try:
             return self.saved_seqs[seq.name]

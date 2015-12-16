@@ -18,6 +18,7 @@ contacts = [(0,1),(2,3)]
 class_Ys = pd.Series([-1,1,1,-1],index=seqs.index)
 reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
 struct = gpkernel.StructureKernel (contacts)
+SE_kern = gpkernel.StructureSEKernel(contacts)
 
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
@@ -103,6 +104,39 @@ def test_regression ():
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
                                       normalize=True)*model.hypers.var_p
+    var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
+    var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
+    predictions = model.predicts(test_seqs,delete=False)
+
+    assert close_enough(EA, predictions[0][0])
+    assert close_enough(ED, predictions[1][0])
+    assert close_enough(var_A, predictions[0][1])
+    assert close_enough(var_D, predictions[1][1])
+
+    [(E,v)] = model.predicts(test_seqs.loc[['D']])
+    assert close_enough(E,ED)
+    assert close_enough(v,var_D)
+
+    # test regression with StructureSEKernel
+    model = gpmodel.GPModel(seqs,reg_Ys,SE_kern)
+    kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
+                                           seq1, [model.hypers.sigma_f,
+                                                  model.hypers.ell]) for seq1 \
+                    in [seqs.iloc[i] for i in range(len(seqs.index))]])
+    kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'],
+                                           seq1, [model.hypers.sigma_f,
+                                                  model.hypers.ell]) for seq1 \
+                    in [seqs.iloc[i] for i in range(len(seqs.index))]])
+    EA = (kA*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
+    ED = (kD*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
+    k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
+                                      test_seqs.loc['A'],
+                                      [model.hypers.sigma_f,
+                                                  model.hypers.ell])
+    k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
+                                      test_seqs.loc['D'],
+                                      [model.hypers.sigma_f,
+                                                  model.hypers.ell])
     var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)

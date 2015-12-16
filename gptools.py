@@ -8,31 +8,31 @@ from sklearn import metrics
 from sys import exit
 import scipy
 
-import seaborn as sns
+# import seaborn as sns
 
-rc = {'lines.linewidth': 3,
-      'axes.labelsize': 18,
-      'axes.titlesize': 18,
-      'axes.facecolor': 'DFDFE5'}
-sns.set_context('notebook', rc=rc)
-sns.set_style('darkgrid', rc=rc)
+# rc = {'lines.linewidth': 3,
+#       'axes.labelsize': 18,
+#       'axes.titlesize': 18,
+#       'axes.facecolor': 'DFDFE5'}
+# sns.set_context('notebook', rc=rc)
+# sns.set_style('darkgrid', rc=rc)
 
 ######################################################################
 # Here are some plotting tools that are generally useful
 ######################################################################
 
 def plot_predictions (real_Ys, predicted_Ys,
-                      stds=None, file_name=None, title='',label='', line=True):
+                      stds=None, file_name=None, title='',label='', line=False):
     if stds is None:
-        plt.plot (real_Ys, predicted_Ys, 'g.')
+        plt.plot (real_Ys, predicted_Ys, 'k.', alpha=0.3)
     else:
-        plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'g.')
+        plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'y.')
     small = min(set(real_Ys) | set(predicted_Ys))*1.1
     if small == 0:
         small = real_Ys.mean()/10.0
     large = max(set(real_Ys) | set(predicted_Ys))*1.1
     if line:
-        plt.plot ([small, large], [small, large], 'b--')
+        plt.plot ([small, large], [small, large], 'k--', alpha=0.3)
     plt.xlabel ('Actual ' + label)
     plt.ylabel ('Predicted ' + label)
     plt.title (title)
@@ -45,13 +45,13 @@ def plot_predictions (real_Ys, predicted_Ys,
         right = large*1.3
     else:
         right = large*0.7
-    plt.text(left, right, 'R = %.3f' %np.corrcoef(real_Ys, predicted_Ys)[0,1])
+    #plt.text(left, right, 'R = %.3f' %np.corrcoef(real_Ys, predicted_Ys)[0,1])
     if not file_name is None:
         plt.savefig (file_name)
 
 def plot_ROC (real_Ys, pis, file_name=None,title=''):
     fpr, tpr, _ = metrics.roc_curve(real_Ys, pis)
-    plt.plot (fpr,tpr,'.-')
+    plt.plot (fpr,tpr,'k.-')
     plt.xlim([-.1,1.1])
     plt.ylim([-.1,1.1])
     plt.xlabel('False Positive Rate')
@@ -60,6 +60,7 @@ def plot_ROC (real_Ys, pis, file_name=None,title=''):
     plt.title(title+' auc = %.4f' %auc)
     if not file_name is None:
         plt.savefig (file_name)
+    return auc
 
 def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
     std = []
@@ -72,7 +73,7 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
         verify = Xs.loc[[i]]
         print 'Building model for ' + str(i)
         model = gpmodel.GPModel(train_Xs,train_Ys, kernel,
-                                guesses=[0.74,.0002684], remember=(count<1))
+                                guesses=[1, 10], remember=(count<1))
         count += 1
         print 'Making prediction for ' + str(i)
         predicted = model.predicts(verify, delete=False)
@@ -85,13 +86,13 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
                 print 'ValueError', i, predicted
             std.append(math.pow(v,0.5))
         predicted_Ys.append (E)
-    plot_predictions (Ys.tolist(),
-                      predicted_Ys,
-                      stds=None,
-                      label=lab,
-                      line=model.regr,
-                      file_name=save_as)
-    return predicted_Ys,std
+#     plot_predictions (Ys.tolist(),
+#                       predicted_Ys,
+#                       stds=None,
+#                       label=lab,
+#                       line=model.regr,
+#                       file_name=save_as)
+    return predicted_Ys
 
 def log_marginal_likelihood (variances, model):
     """ Returns the negative log marginal likelihood.

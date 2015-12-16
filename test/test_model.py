@@ -26,6 +26,9 @@ test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 def test_regression ():
 
     print 'Testing constructors for regression models...'
+    model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
+    assert model.objective == model.LOO_log_p
+    pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
     assert close_enough(model.hypers.var_p, 0.63016924576335664),\
@@ -159,6 +162,8 @@ def test_regression ():
 
 def test_classification ():
     print 'Testing constructors for classification models...'
+    model = gpmodel.GPModel(struct, objective='LOO_log_p')
+    pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5,.5,.6,.1])

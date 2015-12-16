@@ -101,7 +101,8 @@ class GPModel(object):
         else:
             guesses = self.guesses
             if len(guesses) != n_guesses:
-                exit ('Length of guesses does not match number of hyperparameters')
+                raise AttributeError\
+                ('Length of guesses does not match number of hyperparameters')
 
         if self.regr:
             hypers_list = ['var_n'] + self.kern.hypers

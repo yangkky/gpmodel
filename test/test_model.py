@@ -26,7 +26,8 @@ test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 def test_regression ():
 
     print 'Testing constructors for regression models...'
-    model = gpmodel.GPModel(seqs,reg_Ys,struct)
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, reg_Ys)
     assert close_enough(model.hypers.var_p, 0.63016924576335664),\
     'Regression model.hypers.var_p is incorrect'
     assert close_enough(model.hypers.var_n, 0.18044635639161319),\
@@ -118,7 +119,8 @@ def test_regression ():
     assert close_enough(v,var_D)
 
     # test regression with StructureSEKernel
-    model = gpmodel.GPModel(seqs,reg_Ys,SE_kern)
+    model = gpmodel.GPModel(SE_kern)
+    model.fit(seqs, reg_Ys)
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
                                            seq1, [model.hypers.sigma_f,
                                                   model.hypers.ell]) for seq1 \
@@ -157,7 +159,8 @@ def test_regression ():
 
 def test_classification ():
     print 'Testing constructors for classification models...'
-    model = gpmodel.GPModel(seqs,class_Ys,struct)
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5,.5,.6,.1])
     assert close_enough(model.hypers.var_p, 43.810192819325351),\
     'Classification model.hypers.var_p is incorrect'
@@ -243,7 +246,7 @@ def test_classification ():
     # test predictions
     preds = model.predicts(test_seqs)
     for p1, p2 in zip(preds, [0.19135281113445562, 0.7792366872177071]):
-        assert close_enough(p1, p2), 'Predictions failed.'
+        assert close_enough(p1[0], p2), 'Predictions failed.'
 
 
 

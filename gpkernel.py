@@ -373,7 +373,7 @@ class StructureSEKernel (StructureKernel, SEKernel):
 
     def calc_kernel (self, seq1, seq2, hypers):
         d = self.distance(seq1, seq2)
-        return SEKernel.dist_to_se(self, d, hypers)
+        return SEKernel.d_squared_to_se(self, d, hypers)
 
 
     def set_X(self, X_seqs):
@@ -421,7 +421,7 @@ class HammingSEKernel (HammingKernel, SEKernel):
 
     def calc_kernel (self, seq1, seq2, hypers):
         d = self.distance(seq1, seq2)
-        return SEKernel.dist_to_se(self, d, hypers)
+        return SEKernel.d_squared_to_se(self, d, hypers)
 
 
     def set_X(self, X_seqs):

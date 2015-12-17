@@ -100,10 +100,13 @@ def test_regression ():
     ED = (kD*np.linalg.inv(model.Ky)*Y_mat.T) * s + m
     k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
                                       test_seqs.loc['A'],
-                                      normalize=True)*model.hypers.var_p
+                                      normalize=True)*model.hypers.var_p\
+               + model.hypers.var_n
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
-                                      normalize=True)*model.hypers.var_p
+                                      normalize=True)*model.hypers.var_p\
+                   + model.hypers.var_n
+
     var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
@@ -132,15 +135,18 @@ def test_regression ():
     k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
                                       test_seqs.loc['A'],
                                       [model.hypers.sigma_f,
-                                                  model.hypers.ell])
+                                                  model.hypers.ell])\
+                   + model.hypers.var_n
+
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
                                       [model.hypers.sigma_f,
-                                                  model.hypers.ell])
+                                                  model.hypers.ell])\
+                   + model.hypers.var_n
+
     var_A = (k_star_A - kA*np.linalg.inv(model.Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model.Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
-
     assert close_enough(EA, predictions[0][0])
     assert close_enough(ED, predictions[1][0])
     assert close_enough(var_A, predictions[0][1])
@@ -243,7 +249,7 @@ def test_classification ():
     # test predictions
     preds = model.predicts(test_seqs)
     for p1, p2 in zip(preds, [0.19135281113445562, 0.7792366872177071]):
-        assert close_enough(p1, p2), 'Predictions failed.'
+        assert close_enough(p1[0], p2), 'Predictions failed.'
 
 
 

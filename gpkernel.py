@@ -343,8 +343,7 @@ class StructureKernel (GPKernel):
             try:
                 return self.saved_seqs[seq]
             except:
-                print seq
-                exit('Key not recognized.')
+                raise ValueError ('Key %s not recognized' %seq)
         try:
             return self.saved_seqs[seq.name]
 
@@ -365,7 +364,7 @@ class StructureSEKernel (StructureKernel, SEKernel):
         StructureKernel.__init__(self, contacts)
         SEKernel.__init__(self)
 
-    def make_K (self, X_seqs=None, hypers=(1.0, 1.0, 1.0)):
+    def make_K (self, X_seqs=None, hypers=(1.0, 1.0)):
         if X_seqs is None:
             return self.d_squared_to_se(self.d_squared, hypers)
         D = self.make_D(X_seqs)
@@ -413,7 +412,7 @@ class HammingSEKernel (HammingKernel, SEKernel):
         HammingKernel.__init__(self)
         SEKernel.__init__(self)
 
-    def make_K (self, X_seqs=None, hypers=(1.0, 1.0, 1.0)):
+    def make_K (self, X_seqs=None, hypers=(1.0, 1.0)):
         if X_seqs is None:
             return self.d_squared_to_se(self.d_squared, hypers)
         D = self.make_D(X_seqs)

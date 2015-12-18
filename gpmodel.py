@@ -7,6 +7,7 @@ from sys import exit
 import scipy
 import pandas as pd
 from collections import namedtuple
+import cPickle as pickle
 
 
 
@@ -188,7 +189,6 @@ class GPModel(object):
         if self.regr:
             E = self.unnormalize(k*self.alpha)
             v = np.linalg.lstsq(self.L,k.T)[0]
-            v2 = k*np.linalg.inv(self.Ky)*k.T
             var = (k_star - v.T*v) * self.std**2
             return (E.item(),var.item())
         else:
@@ -462,3 +462,36 @@ class GPModel(object):
         vs = np.diag(1/K_inv)
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
+
+    @staticmethod
+    def load(model):
+        '''
+        Use cPickle to load the saved model.
+        '''
+        with open(model,'r') as m_file:
+            attributes = pickle.load(m_file)
+        if all([y==1 or y==-1 for y in attributes['Y']]):
+            hypers = [attributes['hypers'][k] for k in attributes['kern'].hypers]
+        else:
+            hypers = ['var_n']
+            hypers = [attributes['hypers'][k] for k in hypers+attributes['kern'].hypers]
+
+        return GPModel(attributes['X_seqs'],
+                       attributes['Y'],
+                       attributes['kern'],
+                       hypers=hypers)
+
+    def dump(self, f):
+        '''
+        Use cPickle to save a dict containing the model's X, Y, kern, and hypers.
+        '''
+        save_me = {}
+        save_me['X_seqs'] = self.X_seqs
+        save_me['Y'] = self.Y
+        names = self.hypers._fields
+        hypers = {n:h for n,h in zip(names, self.hypers)}
+        save_me['hypers'] = hypers
+        save_me['kern'] = self.kern
+        with open(f, 'wb') as f:
+            pickle.dump(save_me, f)
+

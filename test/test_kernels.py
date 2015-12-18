@@ -314,7 +314,7 @@ def test_se_kernel():
         .equals((sek.d_squared_to_se(d2, params))),\
         'StructureSEKernel fails make_K.'
     assert ssek.calc_kernel(seqs.iloc[0], seqs.iloc[1], params) == \
-        sek.dist_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
+        sek.d_squared_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
 
     # Set a d_squared to speed things up
     ssek.set_X(seqs)
@@ -352,7 +352,7 @@ def test_se_kernel():
         .equals((sek.d_squared_to_se(d2, params))),\
         'HammingSEKernel fails make_K.'
     assert ssek.calc_kernel(seqs.iloc[0], seqs.iloc[1], params) == \
-        sek.dist_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
+        sek.d_squared_to_se(2, params), 'StructureSEKernel fails calc_kernel.'
 
     # Set a d_squared to speed things up
     ssek.set_X(seqs)

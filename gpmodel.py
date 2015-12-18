@@ -279,9 +279,12 @@ class GPModel(object):
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns, ns,
                                            hypers=h)
+            if self.regr:
+                k_star += self.hypers.var_n
             predictions.append(self.predict(k, k_star))
         if delete:
-            self.kern.delete(new_seqs)
+            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
+            self.kern.delete(new_seqs.loc[inds, :])
         return predictions
 
     def is_class (self):

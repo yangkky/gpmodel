@@ -84,14 +84,20 @@ class GPModel(object):
         elif objective == 'LOO_log_p':
             self.objective = self.LOO_log_p
 
-        if hypers is not None:
-            self.set_hypers(hypers)
-
         if X is not None:
             self.X_seqs = X
+            self.kern.set_X(X)
         if Y is not None:
             self.Y = Y
+            self.mean, self.std, self.normed_Y = self.normalize(self.Y)
+            self.regr = not self.is_class()
 
+        self.l = len(self.Y)
+        if len(self.X_seqs) != self.l:
+            raise ValueError ('X_seqs and Y must have the same length.')
+
+        if hypers is not None:
+            self.set_hypers(hypers)
 
     def fit(self, X_seqs, Y):
         '''
@@ -111,6 +117,7 @@ class GPModel(object):
         '''
         self.X_seqs = X_seqs
         self.Y = Y
+        self.mean, self.std, self.normed_Y = self.normalize(self.Y)
         self.l = len(Y)
         self.kern.set_X(X_seqs)
 
@@ -142,20 +149,22 @@ class GPModel(object):
 
     def set_hypers(self, hypers):
         '''
-        Set model.Hypers and quantities used for making predictions.
+        Set model.hypers and quantities used for making predictions.
 
         Parameters:
-            hypers (iterable)
+            hypers (iterable or dict)
         '''
+        if type(hypers) is not dict:
+            if self.regr:
+                hypers_list = ['var_n'] + self.kern.hypers
+                Hypers = namedtuple('Hypers', hypers_list)
+            else:
+                Hypers = namedtuple('Hypers', self.kern.hypers)
+            self.hypers = Hypers._make(hypers)
 
-        if self.regr:
-            hypers_list = ['var_n'] + self.kern.hypers
-            Hypers = namedtuple('Hypers', hypers_list)
         else:
-            Hypers = namedtuple('Hypers', self.kern.hypers)
-
-
-        self.hypers = Hypers._make(hypers)
+            Hypers=namedtuple('Hypers', hypers.keys())
+            self.hypers = Hypers(**hypers)
 
 
         if self.regr:
@@ -499,7 +508,7 @@ class GPModel(object):
                            columns=['mu', 'v'])
 
     @classmethod
-    def load(model):
+    def load(cls, model):
         '''
         Use cPickle to load the saved model.
         '''
@@ -514,35 +523,46 @@ class GPModel(object):
         # if given X and Y but not hypers, fit
         # if given both, put them both in
 
-        if attributes['X_seqs'] is not None and attributes['Y'] is not None:
-            if hypers is None:
-                return model.fit(attributes['X_seqs'], attributes['Y'])
+        try:
+            X_seqs = attributes['X_seqs']
+            Y = attributes['Y']
+        except KeyError:
+            return model
 
+        try:
+            model.set_params(X=X_seqs,
+                             Y=Y,
+                             hypers=attributes['hypers'])
+            return model
 
-            if all([y==1 or y==-1 for y in attributes['Y']]):
-                hypers = [attributes['hypers'][k] for k in attributes['kern'].hypers]
-            else:
-                hypers = ['var_n']
-            hypers = [attributes['hypers'][k] for k in hypers+attributes['kern'].hypers]
-            return model.set_params(X=attributes['X_seqs'],
-                                    Y=attributes['Y'],
-                                    hypers=hypers)
+        except KeyError:
+            model.fit(X_seqs, Y)
+            return model
 
     def dump(self, f):
         '''
         Use cPickle to save a dict containing the model's X, Y, kern, and hypers.
         '''
         save_me = {}
-        save_me['X_seqs'] = self.X_seqs
-        save_me['Y'] = self.Y
+        try:
+            save_me['X_seqs'] = self.X_seqs
+        except AttributeError:
+            pass
+        try:
+            save_me['Y'] = self.Y
+        except AttributeError:
+            pass
         if self.objective == self.log_ML:
             save_me['objective'] = 'log_ML'
         else:
             save_me['objective'] = 'LOO_log_p'
         save_me['guesses'] = self.guesses
-        names = self.hypers._fields
-        hypers = {n:h for n,h in zip(names, self.hypers)}
-        save_me['hypers'] = hypers
+        try:
+            names = self.hypers._fields
+            hypers = {n:h for n,h in zip(names, self.hypers)}
+            save_me['hypers'] = hypers
+        except AttributeError:
+            pass
         save_me['kern'] = self.kern
         with open(f, 'wb') as f:
             pickle.dump(save_me, f)

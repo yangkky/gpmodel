@@ -38,13 +38,12 @@ class GPModel(object):
         grad (np.matrix): gradient of the log logistic likelihood
     """
 
-    def __init__ (self, X_seqs, Y, kern, **kwargs):
+    def __init__ (self, kern, **kwargs):
         """
         Create a new GPModel.
 
         Parameters:
-            X_seqs (pandas.DataFrame): Sequences in training set
-            Y (pandas.Series): measurements in training set
+
             kern (GPKernel): kernel to use
 
         Optional keyword parameters:
@@ -53,48 +52,62 @@ class GPModel(object):
             objective (String): objective function to use in training model. Choices
                 are 'log_ML' and 'LOO_log_p'. Classification must be trained
                 on 'log_ML.' Default is 'log_ML'.
-            hypers (iterable): hyperparameters to set. This overrides the other
-                optional parameters.
         """
-        guesses = kwargs.get('guesses', None)
+        self.guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
-        hypers = kwargs.get('hypers', None)
-        self.X_seqs = X_seqs
-        self.Y = Y
-        self.l = len(Y)
         self.kern = kern
-        self.kern.set_X(X_seqs)
-        # check if regression or classification
-        self.regr = not self.is_class()
-        if self.regr:
-            self.mean, self.std, self.normed_Y = self.normalize (self.Y)
-            n_guesses = 1 + len(kern.hypers)
-        else:
-            n_guesses = len(kern.hypers)
+
         if objective == 'log_ML':
-            objective = self.log_ML
+            self.objective = self.log_ML
         elif objective == 'LOO_log_p':
-            if ~self.regr:
-                print 'Warning: Classification model must be trained on marginal likelihood'
-            objective = self.LOO_log_p
+            self.objective = self.LOO_log_p
 
-        if guesses == None:
-            guesses = [0.9 for _ in range(n_guesses)]
-        else:
-            if len(guesses) != n_guesses:
-                exit ('Length of guesses does not match number of hyperparameters')
-        self.train(objective=objective, guesses=guesses, hypers=hypers)
-
-
-
-    def train(self, **kwargs):
+    def set_params(self, **kwargs):
         '''
-        Set the hyperparameters to the passed values or by minimizing the
-        objective. Update all dependent values. Either a set of guesses and an
-        objective function or a set of hyperparameters must be passed.
+        Sets parameters for the model.
+
+        Optional Keyword Parameters:
+            guesses (iterable)
+            objective (string)
+            hypers (iterable)
+            X (pandas.DataFrame)
+            Y (pandas.Series)
+        '''
+        self.guesses = kwargs.get('guesses', self.guesses)
+        objective = kwargs.get('objective', None)
+        hypers = kwargs.get('hypers', None)
+        X = kwargs.get('X', None)
+        Y = kwargs.get('Y', None)
+
+        if objective == 'log_ML':
+            self.objective = self.log_ML
+        elif objective == 'LOO_log_p':
+            self.objective = self.LOO_log_p
+
+        if X is not None:
+            self.X_seqs = X
+            self.kern.set_X(X)
+        if Y is not None:
+            self.Y = Y
+            self.mean, self.std, self.normed_Y = self.normalize(self.Y)
+            self.regr = not self.is_class()
+
+        self.l = len(self.Y)
+        if len(self.X_seqs) != self.l:
+            raise ValueError ('X_seqs and Y must have the same length.')
+
+        if hypers is not None:
+            self.set_hypers(hypers)
+
+    def fit(self, X_seqs, Y):
+        '''
+        Set the hyperparameters by training on the given data.
+        Update all dependent values.
 
         Parameters:
-           guesses (iterable): initial guesses for the hyperparameters.
+            X_seqs (pandas.DataFrame): Sequences in training set
+            Y (pandas.Series): measurements in training set
+            guesses (iterable): initial guesses for the hyperparameters.
                 Default is [1 for _ in range(len(hypers))].
             objective (function): objective function to use in training model. Choices
                 are 'log_ML' and 'LOO_log_p'. Classification must be trained
@@ -102,26 +115,57 @@ class GPModel(object):
             hypers (iterable): hyperparameters to set. This overrides the other
                 optional parameters.
         '''
-        guesses = kwargs.get('guesses', None)
-        objective = kwargs.get('objective', 'log_ML')
-        hypers = kwargs.get('hypers', None)
+        self.X_seqs = X_seqs
+        self.Y = Y
+        self.mean, self.std, self.normed_Y = self.normalize(self.Y)
+        self.l = len(Y)
+        self.kern.set_X(X_seqs)
 
+        self.regr = not self.is_class()
         if self.regr:
-            hypers_list = ['var_n'] + self.kern.hypers
-            Hypers = namedtuple('Hypers', hypers_list)
+            self.mean, self.std, self.normed_Y = self.normalize (self.Y)
+            n_guesses = 1 + len(self.kern.hypers)
         else:
-            Hypers = namedtuple('Hypers', self.kern.hypers)
+            n_guesses = len(self.kern.hypers)
+            if self.objective == self.LOO_log_p:
+                raise AttributeError\
+                ('Classification models must be trained on marginal likelihood')
 
-        if hypers is None:
-            bounds = [(1e-5,None) for _ in guesses]
-            minimize_res = minimize(objective,
-                                    (guesses),
-                                    bounds=bounds,
-                                    method='L-BFGS-B')
-
-            self.hypers = Hypers._make(minimize_res['x'])
+        if self.guesses == None:
+            guesses = [0.9 for _ in range(n_guesses)]
         else:
+            guesses = self.guesses
+            if len(guesses) != n_guesses:
+                raise AttributeError\
+                ('Length of guesses does not match number of hyperparameters')
+
+        bounds = [(1e-5,None) for _ in guesses]
+        minimize_res = minimize(self.objective,
+                                (guesses),
+                                bounds=bounds,
+                                method='L-BFGS-B')
+
+        self.set_hypers(minimize_res['x'])
+
+    def set_hypers(self, hypers):
+        '''
+        Set model.hypers and quantities used for making predictions.
+
+        Parameters:
+            hypers (iterable or dict)
+        '''
+        if type(hypers) is not dict:
+            if self.regr:
+                hypers_list = ['var_n'] + self.kern.hypers
+                Hypers = namedtuple('Hypers', hypers_list)
+            else:
+                Hypers = namedtuple('Hypers', self.kern.hypers)
             self.hypers = Hypers._make(hypers)
+
+        else:
+            Hypers=namedtuple('Hypers', hypers.keys())
+            self.hypers = Hypers(**hypers)
+
 
         if self.regr:
             self.K = self.kern.make_K(hypers=self.hypers[1:])
@@ -463,34 +507,62 @@ class GPModel(object):
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
 
-    @staticmethod
-    def load(model):
+    @classmethod
+    def load(cls, model):
         '''
         Use cPickle to load the saved model.
         '''
         with open(model,'r') as m_file:
             attributes = pickle.load(m_file)
-        if all([y==1 or y==-1 for y in attributes['Y']]):
-            hypers = [attributes['hypers'][k] for k in attributes['kern'].hypers]
-        else:
-            hypers = ['var_n']
-            hypers = [attributes['hypers'][k] for k in hypers+attributes['kern'].hypers]
 
-        return GPModel(attributes['X_seqs'],
-                       attributes['Y'],
-                       attributes['kern'],
-                       hypers=hypers)
+        model = GPModel(attributes['kern'],
+                        guesses=attributes['guesses'],
+                        objective=attributes['objective'])
+
+        # if given hypers, put them in -- only works if kernel had been trained before
+        # if given X and Y but not hypers, fit
+        # if given both, put them both in
+
+        try:
+            X_seqs = attributes['X_seqs']
+            Y = attributes['Y']
+        except KeyError:
+            return model
+
+        try:
+            model.set_params(X=X_seqs,
+                             Y=Y,
+                             hypers=attributes['hypers'])
+            return model
+
+        except KeyError:
+            model.fit(X_seqs, Y)
+            return model
 
     def dump(self, f):
         '''
         Use cPickle to save a dict containing the model's X, Y, kern, and hypers.
         '''
         save_me = {}
-        save_me['X_seqs'] = self.X_seqs
-        save_me['Y'] = self.Y
-        names = self.hypers._fields
-        hypers = {n:h for n,h in zip(names, self.hypers)}
-        save_me['hypers'] = hypers
+        try:
+            save_me['X_seqs'] = self.X_seqs
+        except AttributeError:
+            pass
+        try:
+            save_me['Y'] = self.Y
+        except AttributeError:
+            pass
+        if self.objective == self.log_ML:
+            save_me['objective'] = 'log_ML'
+        else:
+            save_me['objective'] = 'LOO_log_p'
+        save_me['guesses'] = self.guesses
+        try:
+            names = self.hypers._fields
+            hypers = {n:h for n,h in zip(names, self.hypers)}
+            save_me['hypers'] = hypers
+        except AttributeError:
+            pass
         save_me['kern'] = self.kern
         with open(f, 'wb') as f:
             pickle.dump(save_me, f)

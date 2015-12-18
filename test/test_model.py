@@ -6,6 +6,7 @@ import numpy as np
 import math
 import pytest
 import scipy
+import os
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
@@ -22,11 +23,63 @@ SE_kern = gpkernel.StructureSEKernel(contacts)
 
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
+def test_creation():
+    print 'Testing constructors, fits, and pickling method...'
+    # create a model
+    model = gpmodel.GPModel(struct, guesses=(2,2), objective='LOO_log_p')
+    # pickle the model
+    model.dump('test_creation.pkl')
+    # reload the model
+    model = gpmodel.GPModel.load('test_creation.pkl')
+    # delete the pickle
+    os.remove('test_creation.pkl')
+    # test the model
+    assert model.objective == model.LOO_log_p
+    assert model.guesses == (2,2)
+
+    # fit the model
+    model.fit(seqs, reg_Ys)
+    ML = model.ML
+    lp = model.log_p
+    hypers = model.hypers
+    # pickle the model
+    model.dump('test_creation.pkl')
+    # reload the model
+    model = gpmodel.GPModel.load('test_creation.pkl')
+    # delete the pickle
+    os.remove('test_creation.pkl')
+    # test the model
+    assert model.ML == ML
+    assert model.log_p == lp
+    assert model.hypers == hypers
+
+    model = gpmodel.GPModel(struct, guesses=(2,2), objective='LOO_log_p')
+    model.set_params(X=seqs, Y=reg_Ys)
+    # pickle the model
+    model.dump('test_creation.pkl')
+    # reload the model
+    model = gpmodel.GPModel.load('test_creation.pkl')
+    # delete the pickle
+    os.remove('test_creation.pkl')
+    # test the model
+    assert model.ML == ML
+    assert model.log_p == lp
+    assert model.hypers == hypers
+
+
+
+
 
 def test_regression ():
 
     print 'Testing constructors for regression models...'
-    model = gpmodel.GPModel(seqs,reg_Ys,struct)
+    model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
+    assert model.objective == model.LOO_log_p
+    pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
+    model.set_params(objective='log_ML')
+    assert model.objective == model.log_ML
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, reg_Ys)
     assert close_enough(model.hypers.var_p, 0.63016924576335664),\
     'Regression model.hypers.var_p is incorrect'
     assert close_enough(model.hypers.var_n, 0.18044635639161319),\
@@ -121,7 +174,8 @@ def test_regression ():
     assert close_enough(v,var_D)
 
     # test regression with StructureSEKernel
-    model = gpmodel.GPModel(seqs,reg_Ys,SE_kern)
+    model = gpmodel.GPModel(SE_kern)
+    model.fit(seqs, reg_Ys)
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
                                            seq1, [model.hypers.sigma_f,
                                                   model.hypers.ell]) for seq1 \
@@ -156,6 +210,15 @@ def test_regression ():
     assert close_enough(E,ED)
     assert close_enough(v,var_D)
 
+    h = model.hypers
+    ML = model.ML
+    model.set_params(hypers=(1,1,10))
+    assert np.isclose([1,1,10], model.hypers).all()
+
+    model.set_params(hypers=h)
+    assert np.isclose(h, model.hypers).all()
+    assert model.ML == ML
+
     print 'Regression model passes all tests.\n'
 
 
@@ -163,7 +226,10 @@ def test_regression ():
 
 def test_classification ():
     print 'Testing constructors for classification models...'
-    model = gpmodel.GPModel(seqs,class_Ys,struct)
+    model = gpmodel.GPModel(struct, objective='LOO_log_p')
+    pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5,.5,.6,.1])
     assert close_enough(model.hypers.var_p, 43.810192819325351),\
     'Classification model.hypers.var_p is incorrect'
@@ -261,5 +327,6 @@ def close_enough(f1,f2):
 
 
 if __name__=="__main__":
+    test_creation()
     test_regression()
     test_classification()

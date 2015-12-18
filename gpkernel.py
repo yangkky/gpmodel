@@ -228,10 +228,12 @@ class HammingKernel (GPKernel):
             else:
                 self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
 
-    def delete(self,X_seqs):
+    def delete(self,X_seqs=None):
         """
         Deletes sequences from the saved_seqs dict
         """
+        if X_seqs is None:
+            self.saved_seqs = {}
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_seqs.keys():
                 del self.saved_seqs[X_seqs.index[i]]
@@ -327,10 +329,12 @@ class StructureKernel (GPKernel):
                 self.saved_seqs[X_seqs.index[i]] = \
                     self.get_contacts(X_seqs.iloc[i])
 
-    def delete(self, X_seqs):
+    def delete(self, X_seqs=None):
         """
         Delete these sequences from the kernel's contacts dict
         """
+        if X_seqs is None:
+            self.saved_seqs = {}
         for i in range (len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_seqs.keys():
                 del self.saved_seqs[X_seqs.index[i]]

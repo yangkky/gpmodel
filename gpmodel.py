@@ -55,15 +55,42 @@ class GPModel(object):
         """
         self.guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
-        hypers = kwargs.get('hypers', None)
-
         self.kern = kern
-
 
         if objective == 'log_ML':
             self.objective = self.log_ML
         elif objective == 'LOO_log_p':
             self.objective = self.LOO_log_p
+
+    def set_params(self, **kwargs):
+        '''
+        Sets parameters for the model.
+
+        Optional Keyword Parameters:
+            guesses (iterable)
+            objective (string)
+            hypers (iterable)
+            X (pandas.DataFrame)
+            Y (pandas.Series)
+        '''
+        self.guesses = kwargs.get('guesses', self.guesses)
+        objective = kwargs.get('objective', None)
+        hypers = kwargs.get('hypers', None)
+        X = kwargs.get('X', None)
+        Y = kwargs.get('Y', None)
+
+        if objective == 'log_ML':
+            self.objective = self.log_ML
+        elif objective == 'LOO_log_p':
+            self.objective = self.LOO_log_p
+
+        if hypers is not None:
+            self.set_hypers(hypers)
+
+        if X is not None:
+            self.X_seqs = X
+        if Y is not None:
+            self.Y = Y
 
 
     def fit(self, X_seqs, Y):
@@ -105,19 +132,30 @@ class GPModel(object):
                 raise AttributeError\
                 ('Length of guesses does not match number of hyperparameters')
 
-        if self.regr:
-            hypers_list = ['var_n'] + self.kern.hypers
-            Hypers = namedtuple('Hypers', hypers_list)
-        else:
-            Hypers = namedtuple('Hypers', self.kern.hypers)
-
         bounds = [(1e-5,None) for _ in guesses]
         minimize_res = minimize(self.objective,
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
 
-        self.hypers = Hypers._make(minimize_res['x'])
+        self.set_hypers(minimize_res['x'])
+
+    def set_hypers(self, hypers):
+        '''
+        Set model.Hypers and quantities used for making predictions.
+
+        Parameters:
+            hypers (iterable)
+        '''
+
+        if self.regr:
+            hypers_list = ['var_n'] + self.kern.hypers
+            Hypers = namedtuple('Hypers', hypers_list)
+        else:
+            Hypers = namedtuple('Hypers', self.kern.hypers)
+
+
+        self.hypers = Hypers._make(hypers)
 
 
         if self.regr:
@@ -460,23 +498,35 @@ class GPModel(object):
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
 
-    @staticmethod
+    @classmethod
     def load(model):
         '''
         Use cPickle to load the saved model.
         '''
         with open(model,'r') as m_file:
             attributes = pickle.load(m_file)
-        if all([y==1 or y==-1 for y in attributes['Y']]):
-            hypers = [attributes['hypers'][k] for k in attributes['kern'].hypers]
-        else:
-            hypers = ['var_n']
-            hypers = [attributes['hypers'][k] for k in hypers+attributes['kern'].hypers]
 
-        return GPModel(attributes['X_seqs'],
-                       attributes['Y'],
-                       attributes['kern'],
-                       hypers=hypers)
+        model = GPModel(attributes['kern'],
+                        guesses=attributes['guesses'],
+                        objective=attributes['objective'])
+
+        # if given hypers, put them in -- only works if kernel had been trained before
+        # if given X and Y but not hypers, fit
+        # if given both, put them both in
+
+        if attributes['X_seqs'] is not None and attributes['Y'] is not None:
+            if hypers is None:
+                return model.fit(attributes['X_seqs'], attributes['Y'])
+
+
+            if all([y==1 or y==-1 for y in attributes['Y']]):
+                hypers = [attributes['hypers'][k] for k in attributes['kern'].hypers]
+            else:
+                hypers = ['var_n']
+            hypers = [attributes['hypers'][k] for k in hypers+attributes['kern'].hypers]
+            return model.set_params(X=attributes['X_seqs'],
+                                    Y=attributes['Y'],
+                                    hypers=hypers)
 
     def dump(self, f):
         '''
@@ -485,6 +535,11 @@ class GPModel(object):
         save_me = {}
         save_me['X_seqs'] = self.X_seqs
         save_me['Y'] = self.Y
+        if self.objective == self.log_ML:
+            save_me['objective'] = 'log_ML'
+        else:
+            save_me['objective'] = 'LOO_log_p'
+        save_me['guesses'] = self.guesses
         names = self.hypers._fields
         hypers = {n:h for n,h in zip(names, self.hypers)}
         save_me['hypers'] = hypers

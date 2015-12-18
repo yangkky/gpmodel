@@ -29,6 +29,8 @@ def test_regression ():
     model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
     assert model.objective == model.LOO_log_p
     pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
+    model.set_params(objective='log_ML')
+    assert model.objective == model.log_ML
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
     assert close_enough(model.hypers.var_p, 0.63016924576335664),\
@@ -160,6 +162,15 @@ def test_regression ():
     [(E,v)] = model.predicts(test_seqs.loc[['D']])
     assert close_enough(E,ED)
     assert close_enough(v,var_D)
+
+    h = model.hypers
+    ML = model.ML
+    model.set_params(hypers=(1,1,10))
+    assert np.isclose([1,1,10], model.hypers).all()
+
+    model.set_params(hypers=h)
+    assert np.isclose(h, model.hypers).all()
+    assert model.ML == ML
 
     print 'Regression model passes all tests.\n'
 

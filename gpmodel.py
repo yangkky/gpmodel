@@ -507,6 +507,54 @@ class GPModel(object):
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
 
+    def score (self, X, Y, **args):
+        '''
+        Predicts Y for the sequences in X, then scores the predictions.
+
+        Parameters:
+            X (pandas.DataFrame)
+            Y (pandas.Series)
+            type (string)
+
+        Returns:
+            res: If one score, result is a float. If multiple, result is a dict.
+        '''
+        # Check that X and Y have the same indices
+        if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
+            raise ValueError\
+            ('X and Y must be the same length and have the same indices.')
+        # Make predictions
+        predicted = self.predicts(X)
+
+        # for classification, return the ROC AUC
+        if self.regr:
+            from skklearn.metrics import roc_auc_score
+            return roc_auc_score(Y, predicted)
+
+        else:
+            pred_Y = [y for (Y,v) in predicted]
+
+            # if nothing specified, return Kendall's Tau
+            if ~args:
+                from scipy.stats import kendalltau
+                r1 = stats.rankdata(Y)
+                r2 = stats.rankdata(pred_Y)
+                return kendalltau(r1, r2).correlation
+            for t in args:
+                if t == 'kendalltau':
+                    from scipy.stats import kendalltau
+                    r1 = stats.rankdata(Y)
+                    r2 = stats.rankdata(pred_Y)
+                    return kendalltau(r1, r2).correlation
+                elif t == 'R2':
+                    from sklearn.metrics import r2_score
+                    return r2_score(Y, pred_Y)
+                elif t =='R':
+                    return np.corrcoef(Y, pred_Y)[0,1]
+                else:
+                    raise ValueError ('Invalid metric.')
+
+
     @classmethod
     def load(cls, model):
         '''
@@ -519,7 +567,6 @@ class GPModel(object):
                         guesses=attributes['guesses'],
                         objective=attributes['objective'])
 
-        # if given hypers, put them in -- only works if kernel had been trained before
         # if given X and Y but not hypers, fit
         # if given both, put them both in
 

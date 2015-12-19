@@ -507,7 +507,7 @@ class GPModel(object):
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
 
-    def score (self, X, Y, **args):
+    def score (self, X, Y, *args):
         '''
         Predicts Y for the sequences in X, then scores the predictions.
 
@@ -527,33 +527,38 @@ class GPModel(object):
         predicted = self.predicts(X)
 
         # for classification, return the ROC AUC
-        if self.regr:
-            from skklearn.metrics import roc_auc_score
+        if not self.regr:
+            from sklearn.metrics import roc_auc_score
             return roc_auc_score(Y, predicted)
 
         else:
-            pred_Y = [y for (Y,v) in predicted]
+            pred_Y = [y for (y,v) in predicted]
 
             # if nothing specified, return Kendall's Tau
-            if ~args:
-                from scipy.stats import kendalltau
+            if not args:
+                from scipy import stats
                 r1 = stats.rankdata(Y)
                 r2 = stats.rankdata(pred_Y)
-                return kendalltau(r1, r2).correlation
+                return stats.kendalltau(r1, r2).correlation
+
+            scores = {}
             for t in args:
                 if t == 'kendalltau':
-                    from scipy.stats import kendalltau
+                    from scipy import stats
                     r1 = stats.rankdata(Y)
                     r2 = stats.rankdata(pred_Y)
-                    return kendalltau(r1, r2).correlation
+                    scores[t] = stats.kendalltau(r1, r2).correlation
                 elif t == 'R2':
                     from sklearn.metrics import r2_score
-                    return r2_score(Y, pred_Y)
+                    scores[t] = r2_score(Y, pred_Y)
                 elif t =='R':
-                    return np.corrcoef(Y, pred_Y)[0,1]
+                    scores[t] = np.corrcoef(Y, pred_Y)[0,1]
                 else:
                     raise ValueError ('Invalid metric.')
-
+            if len (scores.keys()) == 1:
+                return scores[scores.keys()[0]]
+            else:
+                return scores
 
     @classmethod
     def load(cls, model):

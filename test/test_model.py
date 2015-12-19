@@ -6,7 +6,9 @@ import numpy as np
 import math
 import pytest
 import scipy
+from scipy import stats
 import os
+from sklearn import metrics
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
@@ -25,6 +27,13 @@ test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
 def test_creation():
     print 'Testing constructors, fits, and pickling method...'
+
+    model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
+    assert model.objective == model.LOO_log_p
+    pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
+    model.set_params(objective='log_ML')
+    assert model.objective == model.log_ML
+
     # create a model
     model = gpmodel.GPModel(struct, guesses=(2,2), objective='LOO_log_p')
     # pickle the model
@@ -68,16 +77,48 @@ def test_creation():
 
 
 
+def test_score():
+    print 'Testing score ...'
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, reg_Ys)
+    preds = model.predicts(seqs)
+    pred_Y = [p[0] for p in preds]
+    r1 = stats.rankdata(reg_Ys)
+    r2 = stats.rankdata(pred_Y)
+    kendall = stats.kendalltau(r1, r2).correlation
+    R = np.corrcoef(reg_Ys, pred_Y)[0,1]
+    u = sum((y1-y2)**2 for y1, y2 in zip(reg_Ys, pred_Y))
+    m = sum(reg_Ys)/len(reg_Ys)
+    v = sum((y1-m)**2 for y1 in reg_Ys)
+    R2 = 1 - u/v
+    scores = model.score(seqs, reg_Ys, 'R', 'kendalltau', 'R2')
+    assert R == scores['R']
+    assert kendall == scores['kendalltau']
+    assert R2 == scores['R2']
+
+    scores = model.score(seqs, reg_Ys)
+    assert kendall == scores
+
+    scores = model.score(seqs, reg_Ys, 'R')
+    assert R == scores
+
+    scores = model.score(seqs, reg_Ys, 'R', 'R2')
+    assert R == scores['R']
+    assert R2 == scores['R2']
+
+    pytest.raises(ValueError, 'model.score(seqs, reg_Ys, "R3")')
+
+    model.fit(seqs, class_Ys)
+    preds = [p[0] for p in model.predicts(seqs)]
+    score = model.score(seqs, class_Ys)
+    fpr, tpr, _ = metrics.roc_curve(class_Ys, preds)
+    AUC = metrics.auc(fpr, tpr)
+    assert AUC == score
+
+    print 'score passes all tests. '
 
 
 def test_regression ():
-
-    print 'Testing constructors for regression models...'
-    model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
-    assert model.objective == model.LOO_log_p
-    pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
-    model.set_params(objective='log_ML')
-    assert model.objective == model.log_ML
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
     assert close_enough(model.hypers.var_p, 0.63016924576335664),\
@@ -330,3 +371,4 @@ if __name__=="__main__":
     test_creation()
     test_regression()
     test_classification()
+    test_score

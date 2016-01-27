@@ -13,6 +13,22 @@ class GPKernel (object):
     def __init__ (self):
          return
 
+    def train (self, X):
+        self.saved_X = {i:np.array(X.loc[i]) for i in X.index}
+
+    def delete (self, X):
+        if X is None:
+            self.saved_X = {}
+        for i in range(len(X.index)):
+            if X.index[i] in self.saved_X.keys():
+                del self.saved_X[X.index[i]]
+
+    def get_X (self, x):
+        try:
+            return self.saved_X[x]
+        except (KeyError, AttributeError, TypeError):
+            return x
+
 class SEKernel (GPKernel):
     """
     A squared exponential kernel
@@ -27,14 +43,23 @@ class SEKernel (GPKernel):
 
     def calc_kernel (self, x1, x2, hypers):
         """ Returns the squared exponential between the points x1 and x2"""
+        x1 = self.get_X(x1)
+        x2 = self.get_X(x2)
         return self.se([x1, x2], hypers)
 
-    def make_K (self, Xs, hypers):
+    def set_X(self, X):
+        X = np.array(X)
+        self.d_squared = self.get_d_squared(X)
+
+    def make_K (self, Xs=None, hypers=[1.0, 1.0]):
         """
         Returns the squared exponential covariance matrix for the points
         in Xs.
         """
-        return self.se(Xs, hypers)
+        if Xs is None:
+            return self.d_squared_to_se(self.d_squared, hypers)
+        else:
+            return self.se(Xs, hypers)
 
 
     def dist_to_se (self, dist, params):
@@ -173,15 +198,15 @@ class HammingKernel (GPKernel):
         seqs (dict)
     """
     def __init__ (self):
-        self.saved_seqs = {}
+        self.saved_X = {}
         self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
 
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Returns the number of shared amino acids between two sequences"""
         var_p = hypers[0]
-        s1 = self.get_sequence(seq1)
-        s2 = self.get_sequence(seq2)
+        s1 = self.get_X(seq1)
+        s2 = self.get_X(seq2)
         k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])
         if normalize:
             k = float(k) / len(s1)
@@ -223,30 +248,56 @@ class HammingKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's saved_seqs dict
         """
         for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_seqs.keys():
+            if X_seqs.index[i] in self.saved_X.keys():
                 pass
             else:
-                self.saved_seqs[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
+                self.saved_X[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
 
     def delete(self,X_seqs=None):
         """
-        Deletes sequences from the saved_seqs dict
+        Deletes sequences from the saved_X dict
         """
         if X_seqs is None:
-            self.saved_seqs = {}
+            self.saved_X = {}
         for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_seqs.keys():
-                del self.saved_seqs[X_seqs.index[i]]
+            if X_seqs.index[i] in self.saved_X.keys():
+                del self.saved_X[X_seqs.index[i]]
 
-    def get_sequence(self,seq):
+    def get_X(self,seq):
         """
         Get the sequence for seq
         """
         try:
-            return self.saved_seqs[seq]
+            return self.saved_X[seq]
         except TypeError:
             return ''.join([s for s in seq])
 
+class WeightedHammingKernel (HammingKernel):
+    '''
+    A Hamming kernel where the covariance between two sequences
+    depends on which amino acids are changed to what.
+    '''
+    def __init__(self):
+        from Bio.SubsMat import MatrixInfo
+        self.weights = MatrixInfo.blosum62
+        self.weights = {k:self.weights[k] for k in self.weights.keys()}
+        for k in self.weights.keys():
+            self.weights[(k[1], k[0])] = self.weights[k]
+        super(WeightedHammingKernel,self).__init__()
+
+    def calc_kernel(self, seq1, seq2, hypers=[1.0], normalize=True):
+        var_p = hypers[0]
+        s1 = self.get_X(seq1)
+        s2 = self.get_X(seq2)
+        k = 0.0
+        for a,b in zip(s1, s2):
+            try:
+                k += self.weights[(a,b)]
+            except KeyError:
+                k+= 0
+        if normalize:
+            k = float(k) / len(s1)
+        return k*var_p
 
 class StructureKernel (GPKernel):
     """A Structure kernel
@@ -255,13 +306,13 @@ class StructureKernel (GPKernel):
         contact_terms (iterable): Each element in contact_terms should be of the
           form ((pos1,aa1),(pos2,aa2))
         hypers (list): list of required hyperparameters
-        saved_contacts (dict): a dict matching the labels for sequences to their contacts
+        saved_X (dict): a dict matching the labels for sequences to their contacts
         contacts: list of which residues are in contact
     """
 
     def __init__ (self, contacts):
         self.contacts = contacts
-        self.saved_seqs = {}
+        self.saved_X = {}
         self.contacts = contacts
         self.hypers = ['var_p']
         super (StructureKernel, self).__init__()
@@ -302,8 +353,8 @@ class StructureKernel (GPKernel):
             int: number of shared contacts
         """
         var_p = hypers[0]
-        contacts1 = self.get_contacts(seq1)
-        contacts2 = self.get_contacts(seq2)
+        contacts1 = self.get_X(seq1)
+        contacts2 = self.get_X(seq2)
         k = len(set(contacts1) & set(contacts2))*var_p
         if normalize:
             k = float(k) / len(contacts1)
@@ -323,33 +374,33 @@ class StructureKernel (GPKernel):
         Stores the sequences in X_seqs in the kernel's contacts dict
         """
         for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_seqs.keys():
+            if X_seqs.index[i] in self.saved_X.keys():
                 continue
             else:
-                self.saved_seqs[X_seqs.index[i]] = \
-                    self.get_contacts(X_seqs.iloc[i])
+                self.saved_X[X_seqs.index[i]] = \
+                    self.get_X(X_seqs.iloc[i])
 
     def delete(self, X_seqs=None):
         """
         Delete these sequences from the kernel's contacts dict
         """
         if X_seqs is None:
-            self.saved_seqs = {}
+            self.saved_X = {}
         for i in range (len(X_seqs.index)):
-            if X_seqs.index[i] in self.saved_seqs.keys():
-                del self.saved_seqs[X_seqs.index[i]]
+            if X_seqs.index[i] in self.saved_X.keys():
+                del self.saved_X[X_seqs.index[i]]
 
-    def get_contacts(self, seq):
+    def get_X(self, seq):
         """
         Gets the contacts for seq.
         """
         if isinstance (seq, basestring):
             try:
-                return self.saved_seqs[seq]
+                return self.saved_X[seq]
             except:
                 raise ValueError ('Key %s not recognized' %seq)
         try:
-            return self.saved_seqs[seq.name]
+            return self.saved_X[seq.name]
 
         except (KeyError, AttributeError):
             seq = ''.join([s for s in seq])
@@ -394,7 +445,7 @@ class StructureSEKernel (StructureKernel, SEKernel):
         This is the geometric distance squared.
         """
         k = StructureKernel.calc_kernel(self, seq1, seq2, normalize=False)
-        n = len(self.get_contacts(seq1))
+        n = len(self.get_X(seq1))
         return n - k
 
     def make_D(self, X_seqs):
@@ -454,9 +505,31 @@ class HammingSEKernel (HammingKernel, SEKernel):
                 D[j,i] = D[i,j]
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
+class LinearKernel(GPKernel):
+    '''
+    Calculates the linear (dot product) kernel for two inputs
+    '''
 
+    def __init__(self):
+        self.hypers = ['var_p']
+        GPKernel.__init__(self)
 
+    def make_K (self, X=None, hypers=(1.0,)):
+        vp = hypers[0]
+        if X is None:
+            return self.base_K * vp
+        X_mat = np.matrix(X)
+        K = X_mat * X_mat.T * vp
+        return pd.DataFrame(K, index=X.index, columns=X.index)
 
+    def calc_kernel (self, x1, x2, hypers=(1,)):
+        vp = hypers[0]
+        x1 = self.get_X(x1)
+        x2 = self.get_X(x2)
+        return sum(a*b for a, b in zip(x1,x2)) * vp
 
+    def set_X(self, X):
+        self.train(X)
+        self.base_K = self.make_K(X)
 
 

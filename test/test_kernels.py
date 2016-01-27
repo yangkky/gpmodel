@@ -49,16 +49,16 @@ def test_hamming_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern.saved_seqs == {'A':'RYMA',
-                               'B':'RTHA',
-                               'C':'RTMA',
-                               'D':'RYMA'},\
+    assert kern.saved_X == {'A':'RYMA',
+                            'B':'RTHA',
+                            'C':'RTMA',
+                            'D':'RYMA'},\
     'Failed to train HammingKernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern.saved_seqs == {'A':'RYMA',
-                               'B':'RTHA',
-                               'C':'RTMA'}
+    assert kern.saved_X == {'A':'RYMA',
+                            'B':'RTHA',
+                            'C':'RTMA'}
     assert kern.calc_kernel('A','B', normalize=False) == 2,\
     'Failed calc_kernel with two trained sequences.'
     assert kern.calc_kernel('C','B',hypers=[vp], normalize=False) == 3*vp,\
@@ -74,6 +74,10 @@ def test_hamming_kernel():
     'Failed make_K using saved base_K'
 
     print 'HammingKernel passes all tests.'
+
+#     kern = gpkernel.WeightedHammingKernel()
+#     print kern.make_K(seqs, normalize=False)
+
 
 
 
@@ -95,16 +99,16 @@ def test_structure_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern.saved_seqs == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
-                             'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
-                             'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
-                             'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\
+    assert kern.saved_X == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+                      'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
+                      'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
+                      'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\
     'Failed to train structure kernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern.saved_seqs == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
-                             'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
-                             'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))]}
+    assert kern.saved_X == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
+                            'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
+                            'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))]}
 
     kern.set_X(seqs)
     assert kern.base_K.equals(K/norm)
@@ -328,7 +332,7 @@ def test_se_kernel():
 
     print 'Testing HammingSEKernel...'
 
-    ssek = gpkernel.StructureSEKernel(contacts)
+    ssek = gpkernel.HammingSEKernel()
 
     assert ssek.hypers == ['sigma_f', 'ell']
 
@@ -362,7 +366,68 @@ def test_se_kernel():
         'HammingSEKernel fails make_K.'
 
     print 'HammingSEKernel passes all tests.'
+
+def test_linear_kernel():
+    print 'Testing linear kernel...'
+    kern = gpkernel.LinearKernel()
+    X = pd.DataFrame([[4.,2.,3.,4.],
+                      [2.,0.,1.,2.],
+                      [1.,1.,4.,3.],
+                      [-3.,2.,3.,0.]],
+                     index=seqs.index)
+    K = pd.DataFrame([[45.,19.,30.,1.],
+                      [19.,9.,12.,-3.],
+                      [30.,12.,27.,11.],
+                      [1.,-3.,11.,22.]],
+                     index=seqs.index,
+                    columns=seqs.index)
+
+    assert kern.hypers == ['var_p']
+
+
+    # now let's make sure we can train it and use keys to access functions
+    kern.train(X)
+    saved_X = {i:np.array(X.loc[i]) for i in X.index}
+    assert np.array([(saved_X[k] == kern.saved_X[k]).all() \
+                     for k in saved_X.keys()]).all(),\
+    'Failed to train linear kernel.'
+
+    kern.delete(X.loc[['D']])
+    saved_X = {i:X.loc[i] for i in ['A','B','C']}
+    assert np.array([(saved_X[k] == kern.saved_X[k]).all() \
+                     for k in saved_X.keys()]).all()
+    kern.set_X(X)
+    assert kern.base_K.equals(K)
+
+
+    assert kern.calc_kernel(X.iloc[0],X.iloc[1]) == 19,\
+    'Failed calc_kernel for vp=1.'
+    assert kern.calc_kernel(X.iloc[0],X.iloc[1],
+                            hypers=[2]) == 38,\
+    'Failed calc_kernel for var_p ~= 1.'
+
+    # test make_K
+    assert kern.make_K(X).equals(K),\
+    'Failed make_K for var_p = 1.'
+    assert kern.make_K(X, hypers=[2]).equals(K*2),\
+    'Failed make_K for var_p ~= 1.'
+    assert kern.make_K(hypers=[2]).equals(K*2),\
+    'Failed make_K using saved base_K'
+
+
+    assert kern.calc_kernel('A','B') == 19,\
+    'Failed calc_kernel with two trained sequences.'
+    assert kern.calc_kernel('A',X.iloc[1]) == 19,\
+    'Failed calc_kernel with trained, untrained sequences.'
+    assert kern.calc_kernel(X.iloc[2],'B') == 12,\
+    'Failed calc_kernel with untrained, trained sequences.'
+
+
+    print 'LinearKernel passes all tests.'
+
 if __name__=="__main__":
-    #test_hamming_kernel()
+    test_linear_kernel()
+    test_hamming_kernel()
     test_structure_kernel()
     test_se_kernel()
+

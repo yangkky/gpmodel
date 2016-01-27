@@ -8,25 +8,55 @@ from sklearn import metrics
 from sys import exit
 import scipy
 
-# import seaborn as sns
+import seaborn as sns
 
-# rc = {'lines.linewidth': 3,
-#       'axes.labelsize': 18,
-#       'axes.titlesize': 18,
-#       'axes.facecolor': 'DFDFE5'}
-# sns.set_context('notebook', rc=rc)
-# sns.set_style('darkgrid', rc=rc)
+rc = {'lines.linewidth': 3,
+      'axes.labelsize': 30,
+      'axes.titlesize': 40,
+      'axes.edgecolor': 'black'}
+      #'axes.facecolor': 'DFDFE5'}
+sns.set_context('talk', rc=rc)
+sns.set_style('whitegrid', rc=rc)
 
 ######################################################################
 # Here are some plotting tools that are generally useful
 ######################################################################
 
+def cv (Xs, Ys, model, n_train, replicates):
+    '''
+    Returns cross-validation predictions
+    '''
+    # check that n_train is less than the number of observations
+    if not n_train < len(Xs):
+        raise ValueError('n_train must be less than len(Xs)')
+    if n_train == len(Xs) - 1:
+        LOOs = model.LOO_res (model.hypers)
+        predicted = model.unnormalize(LOOs['mu'])
+        actual = model.Y
+        return predicted, actual
+    actual = []
+    predicted = []
+    for r in range(replicates):
+        # pick indices for train and test sets
+        train_inds = np.random.choice(Xs.index, n_train, replace=False)
+        test_inds = list(set(Xs.index) - set(train_inds))
+        # fit the model
+        model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
+        # make predictions
+        preds = model.predicts(Xs.loc[test_inds])
+        pred_Ys = [p[0] for p in preds]
+        predicted += pred_Ys
+        actual += list(Ys.loc[test_inds])
+    return predicted, actual
+
+
+
 def plot_predictions (real_Ys, predicted_Ys,
                       stds=None, file_name=None, title='',label='', line=False):
     if stds is None:
-        plt.plot (real_Ys, predicted_Ys, 'k.', alpha=0.3)
+        plt.plot (real_Ys, predicted_Ys, '.', color='black')
     else:
-        plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'y.')
+        plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'k.')
     small = min(set(real_Ys) | set(predicted_Ys))*1.1
     if small == 0:
         small = real_Ys.mean()/10.0
@@ -37,6 +67,7 @@ def plot_predictions (real_Ys, predicted_Ys,
     plt.ylabel ('Predicted ' + label)
     plt.title (title)
     plt.xlim (small, large)
+
     if small <= 0:
         left = small*0.8
     else:
@@ -49,7 +80,7 @@ def plot_predictions (real_Ys, predicted_Ys,
     if not file_name is None:
         plt.savefig (file_name)
 
-def plot_ROC (real_Ys, pis, file_name=None,title=''):
+def plot_ROC (real_Ys, pis, file_name=None, title=''):
     fpr, tpr, _ = metrics.roc_curve(real_Ys, pis)
     plt.plot (fpr,tpr,'k.-')
     plt.xlim([-.1,1.1])

@@ -7,7 +7,10 @@ from sys import exit
 import scipy
 import pandas as pd
 from collections import namedtuple
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except:
+    import pickle
 
 
 
@@ -259,11 +262,15 @@ class GPModel(object):
             res (float)
         '''
         try:
-            first = 1./(1+math.exp(-z))
+            first = 1./(1+np.exp(-z))
         except OverflowError:
             first = 0.
-        second = 1/math.sqrt(2*math.pi*variance)
-        third = math.exp(-(z-mean)**2/(2*variance))
+        try:
+            second = 1/np.sqrt(2*math.pi*variance)
+        except:
+            second = -1
+            #print variance
+        third = np.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
     def log_ML (self, hypers):
@@ -285,7 +292,7 @@ class GPModel(object):
             try:
                 L = np.linalg.cholesky (Ky)
             except:
-                print hypers
+                #print hypers
                 exit('')
             alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
@@ -295,10 +302,10 @@ class GPModel(object):
             # log[det(Ky)] = 2*sum(log(diag(L))) is a property
             # of the Cholesky decomposition
             # Y.T*Ky^-1*Y = L.T\(L\Y.T) (another property of the Cholesky)
-            if np.isnan(ML):
-                print "nan!"
-                print hypers
-                print Ky, L, alpha, Y_mat
+#             if np.isnan(ML):
+#                 print "nan!"
+#                 print hypers
+#                 print Ky, L, alpha, Y_mat
             return ML
         else:
             f_hat = self.find_F(hypers=hypers) # use Algorithm 3.1 to find mode
@@ -424,7 +431,11 @@ class GPModel(object):
         for i in range (evals):
             # find new f_hat
             W = self.hess (f_hat)
-            W_root = scipy.linalg.sqrtm(W)
+            try:
+                W_root = scipy.linalg.sqrtm(W)
+            except:
+                print i
+                exit('')
             f_hat_mat = np.matrix (f_hat)
             L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
             b = W*f_hat_mat.T + np.matrix(np.diag(self.grad_log_logistic_likelihood (self.Y,f_hat))).T

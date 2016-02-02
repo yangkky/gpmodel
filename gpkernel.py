@@ -11,10 +11,14 @@ class GPKernel (object):
     """
 
     def __init__ (self):
-         return
+         self.saved_X = {}
 
     def train (self, X):
-        self.saved_X = {i:np.array(X.loc[i]) for i in X.index}
+        for i in range(len(X.index)):
+            if X.index[i] in self.saved_X.keys():
+                pass
+            else:
+                self.saved_X[X.index[i]] = X.iloc[i]
 
     def delete (self, X):
         if X is None:
@@ -45,9 +49,10 @@ class SEKernel (GPKernel):
         """ Returns the squared exponential between the points x1 and x2"""
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
-        return self.se([x1, x2], hypers)
+        return float(self.se([x1, x2], hypers))
 
     def set_X(self, X):
+        self.train(X)
         X = np.array(X)
         self.d_squared = self.get_d_squared(X)
 
@@ -198,7 +203,6 @@ class HammingKernel (GPKernel):
         seqs (dict)
     """
     def __init__ (self):
-        self.saved_X = {}
         self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
 
@@ -312,7 +316,6 @@ class StructureKernel (GPKernel):
 
     def __init__ (self, contacts):
         self.contacts = contacts
-        self.saved_X = {}
         self.contacts = contacts
         self.hypers = ['var_p']
         super (StructureKernel, self).__init__()

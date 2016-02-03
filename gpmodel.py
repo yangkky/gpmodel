@@ -120,7 +120,6 @@ class GPModel(object):
         '''
         self.X_seqs = X_seqs
         self.Y = Y
-        self.mean, self.std, self.normed_Y = self.normalize(self.Y)
         self.l = len(Y)
         self.kern.set_X(X_seqs)
 

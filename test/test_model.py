@@ -271,8 +271,9 @@ def test_classification ():
     pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
+    print model.regr
     test_F = pd.Series([-.5,.5,.6,.1])
-    assert close_enough(model.hypers.var_p, 43.810192819325351),\
+    assert close_enough(model.hypers.var_p, 43.814739881967405),\
     'Classification model.hypers.var_p is incorrect'
     assert close_enough(model.ML, 2.45520196), \
     'Classification model.ML is incorrect'

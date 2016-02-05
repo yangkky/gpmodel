@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from sys import exit
 
+
 class GPKernel (object):
     """
     A Gaussian process kernel for proteins.
@@ -32,6 +33,95 @@ class GPKernel (object):
             return self.saved_X[x]
         except (KeyError, AttributeError, TypeError):
             return x
+
+class MaternKernel (GPKernel):
+    '''
+    A Matern kernel
+    '''
+
+    def __init__(self, nu):
+        self.hypers = ['ell']
+        self.nu = nu
+        super (MaternKernel, self).__init__()
+
+    def calc_kernel (self, x1, x2, hypers):
+        ''' Returns the Matern kernel between x1 and x2'''
+        x1 = self.get_X(x1)
+        x2 = self.get_X(x2)
+        d = self.get_d (np.array([x1, x2]))
+        return float(self.matern(d, hypers))
+
+
+    def make_K (self, Xs=None, hypers=[1.0]):
+        """
+        Returns the Matern covariance matrix for the points
+        in Xs.
+        """
+        if Xs is None:
+            return self.matern(self.d, hypers)
+        else:
+            d = self.get_d(Xs)
+            K = self.matern(d, hypers)
+            return K
+
+
+    def set_X (self, X):
+        self.train(X)
+        X = np.array(X)
+        self.d = self.get_d(X)
+
+    def matern (self, d, hypers=[1.0]):
+        # account for DataFrames????
+        ell = hypers[0]
+        if self.nu == '3/2':
+            M =  (1.0 + np.sqrt(3.0) * d / ell) * np.exp(-np.sqrt(3) * d / ell)
+        elif self.nu == '5/2':
+            first = (1.0 + np.sqrt(5.0)*d/ell) + 5.0*np.power(d, 2)/3.0/ell**2
+            second = np.exp(-np.sqrt(5.0) * d / ell)
+            M =  first * second
+        return M
+
+
+    def get_d (self, xs):
+        """
+        Calculates the geometric distances between x_i in xs.
+        Each row of xs represents one measurement. Each column represents
+        a dimension. The exception is if xs only has one row with multiple
+        columns, then each column is assumed to be a measurement.
+
+        Parameters:
+            xs: ndarray or np.matrix or pd.Dataframe
+
+        Returns:
+            D (np.ndarray or float)
+        """
+        dims = np.shape(xs)
+        n = dims[0]
+
+        # multiple 1D measurements
+        if len(dims) == 1 or dims[1] == 1:
+            if n == 2:
+                d = np.sqrt((xs[0] - xs[1])**2)
+            else:
+                d = np.empty((n,n))
+                for i in range (n):
+                    for j in range(n):
+                        d[i][j] = np.linalg.norm(xs[i] - xs[j])
+
+        # column vector of n-dimensional measurements
+        else:
+            if n == 2:
+                d = np.linalg.norm(xs[0] - xs[1])
+            else:
+                d = np.empty((n,n))
+                for i in range (1,n):
+                    for j in range(i):
+                        d[i][j] = np.linalg.norm(xs[j] - xs[i])
+                        d[j][i] = d[i][j]
+                # fill in diagonals
+                for i in range (n):
+                    d[i][i] = 0
+        return d
 
 class SEKernel (GPKernel):
     """
@@ -132,8 +222,7 @@ class SEKernel (GPKernel):
                 d_squared = np.empty((n,n))
                 for i in range (1,n):
                     for j in range(i):
-                        d_squared[i][j] = sum([(x1-x2)**2 \
-                                         for x1, x2 in zip(xs[i], xs[j])])
+                        d_squared[i][j] = np.linalg.norm(xs[i]-xs[j])**2
                         d_squared[j][i] = d_squared[i][j]
                 # fill in diagonals
                 for i in range (n):

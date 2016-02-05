@@ -13,6 +13,37 @@ space = [('R'), ('Y', 'T'), ('M', 'H'), ('A')]
 contacts = [(0,1),(2,3)]
 
 
+def test_matern_kernel():
+    '''
+    Tests for the matern kernels.
+    '''
+    print 'Testing Matern kernels...'
+
+    # test on single values
+    kern1 = gpkernel.MaternKernel(nu='3/2')
+    kern2 = gpkernel.MaternKernel(nu='5/2')
+    first = 4
+    second = 2
+    params = [0.9]
+    ell = params[0]
+    r = np.sqrt((first - second)**2)
+    actual1 = (1 + np.sqrt(3.0) / ell * r) * np.exp(-np.sqrt(3.0) * r / ell)
+    actual2 = (1 + np.sqrt(5.0) / ell * r + 5.0*r**2/3/ell**2) * np.exp(-np.sqrt(5.0) * r / ell)
+
+    assert kern1.calc_kernel(first, second, params) == actual1
+    assert kern2.calc_kernel(first, second, params) == actual2
+
+    # Test calc_kernel on vectors
+    xa = np.array([2.0, 3.0, 4.0])
+    xb = np.array([1.0, 3.0, 5.0])
+    xc = np.array([-2.0, 0.0, 2.0])
+
+    Xs = pd.DataFrame ([xa, xb, xc])
+    Xs.index = ['A', 'B', 'C']
+
+
+
+
 def test_hamming_kernel():
     """
     Tests for the HammingKernel
@@ -232,17 +263,21 @@ def test_se(kern):
             d_squared[i][j] = sum([(x1-x2)**2 for x1, x2 in zip(xs[i], xs[j])])
     actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
     from_kernel = kern.se(xs, params)
-    assert np.array_equal(actual,from_kernel), \
+    assert np.allclose(actual,from_kernel), \
         'kern.se failed for 3-dimensional, 3 sample case.'
     # with a matrix
     from_kernel = kern.se(np.matrix(xs), params)
-    assert np.array_equal(actual,from_kernel), \
+    assert np.allclose(actual,from_kernel), \
         'kern.se failed for 3-dimensional, 3 sample matrix case.'
     # with a DataFrame
     df = pd.DataFrame(xs, index=inds)
     actual = pd.DataFrame(actual, index=inds, columns=inds)
     from_kernel = kern.se(df, params)
-    assert actual.equals(from_kernel), \
+    assert np.allclose(np.array(from_kernel), np.array(actual)), \
+        'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
+    assert all([a==f for a, f in zip(actual.index, from_kernel.index)]), \
+        'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
+    assert all([a==f for a, f in zip(actual.columns, from_kernel.columns)]), \
         'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
 
     # test dist_to_se
@@ -426,8 +461,9 @@ def test_linear_kernel():
     print 'LinearKernel passes all tests.'
 
 if __name__=="__main__":
-    test_linear_kernel()
-    test_hamming_kernel()
-    test_structure_kernel()
-    test_se_kernel()
+    test_matern_kernel()
+#     test_linear_kernel()
+#     test_hamming_kernel()
+#     test_structure_kernel()
+#     test_se_kernel()
 

@@ -46,6 +46,7 @@ else:
     model.set_params(X=X, Y=Y, hypers=args.hypers)
 
 X_new = np.arange(-10, 10, 0.1)
+
 if args.binary:
     xx, yy = np.meshgrid(X_new, X_new, sparse=False)
     X_df = []

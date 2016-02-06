@@ -246,7 +246,7 @@ class GPModel(object):
                                            -i*var+f_bar,
                                            f_bar+i*var,
                                            args=(f_bar.item(), var.item()))[0]
-            return (pi_star,)
+            return (pi_star, f_bar.item(), var.item())
 
     def p_integral (self, z, mean, variance):
         '''Equation to integrate when calculating pi_star for classification.

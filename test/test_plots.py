@@ -9,7 +9,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-k', '--kernel',required=True)
-parser.add_argument('-b', '--binary', action='store_true')
+parser.add_argument('-type', '--type')
 parser.add_argument('-g', '--hypers', nargs='*', required=False, type=float)
 
 args = parser.parse_args()
@@ -19,15 +19,30 @@ elif args.kernel == '5/2':
     kern = gpkernel.MaternKernel(nu='5/2')
 elif args.kernel == 'se':
     kern = gpkernel.SEKernel()
+elif args.kernel == 'linear':
+    kern = gpkernel.LinearKernel()
 else:
     raise ValueError('Invalid kernel.')
 
-if args.binary:
+if args.type == 'b2':
     X = pd.DataFrame(np.array([[-5.0, -3.0], [1.0, -9.5], [6.5, 2.5],
-                               [0.5, 0.6], [2.0, 0.0]]))
+                               [0.5, 0.6], [2.0, 0.0],[-2.0, 5.0]]))
     X.columns = ['x1','x2']
-    X.index = ['A', 'B', 'C', 'D', 'E']
-    Y = pd.Series([-1, 1, 1, -1, -1], index=X.index)
+    X.index = ['A', 'B', 'C', 'D', 'E', 'F']
+    Y = pd.Series([1, 1, 1, -1, -1, -1], index=X.index)
+
+elif args.type == 'b1':
+    np.random.seed(0)
+    x1 = np.random.normal(-6, 0.8, 20)
+    x2 = np.random.normal(0, 0.8, 30)
+    x3 = np.random.normal(2, 0.8, 10)
+    X = np.concatenate((x1, x2, x3))
+    X = pd.DataFrame(X)
+    y1 = [1 for _ in range(20)]
+    y2 = [-1 for _ in range(30)]
+    y3 = [1 for _ in range(10)]
+    Y = y1 + y2 + y3
+    Y = pd.Series(Y, index=X.index)
 
 
 else:
@@ -48,7 +63,7 @@ else:
 
 X_new = np.arange(-10, 10, 0.1)
 
-if args.binary:
+if args.type == 'b2':
     xx, yy = np.meshgrid(X_new, X_new, sparse=False)
     X_df = []
     for i,x in enumerate(X_new):
@@ -66,6 +81,13 @@ if args.binary:
     plt.plot(X[pos]['x1'], X[pos]['x2'], 'go')
     plt.plot(X[neg]['x1'], X[neg]['x2'], 'ro')
 
+if args.type == 'b1':
+    preds = model.predicts(pd.DataFrame(X_new.T))
+    preds = [p[0] for p in preds]
+    print model.f_hat
+    plt.plot(X_new, preds)
+    plt.plot (X, (Y+1.0)/2.0, 'o')
+
 
 
 else:
@@ -78,4 +100,6 @@ else:
     plt.plot(preds['x'], preds['mean']+preds['var'], 'k--')
     plt.plot(preds['x'], preds['mean']-preds['var'], 'k--')
     plt.plot(X, Y, 'o')
+plt.title(args.kernel)
+plt.margins(0.02)
 plt.show()

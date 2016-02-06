@@ -61,9 +61,9 @@ if args.hypers is None:
 else:
     model.set_params(X=X, Y=Y, hypers=args.hypers)
 
-X_new = np.arange(-10, 10, 0.1)
 
 if args.type == 'b2':
+    X_new = np.arange(-10, 10, 0.1)
     xx, yy = np.meshgrid(X_new, X_new, sparse=False)
     X_df = []
     for i,x in enumerate(X_new):
@@ -82,10 +82,16 @@ if args.type == 'b2':
     plt.plot(X[neg]['x1'], X[neg]['x2'], 'ro')
 
 if args.type == 'b1':
+    X_new = np.arange(-8, 4, 0.1)
+    np.random.shuffle(X_new)
     preds = model.predicts(pd.DataFrame(X_new.T))
-    preds = [p[0] for p in preds]
-    print model.f_hat
-    plt.plot(X_new, preds)
+    pis = [p[0] for p in preds]
+    f_bars = np.array([p[1] for p in preds])
+    var = np.array([p[2] for p in preds])
+    plt.plot(X_new, pis, '.')
+#     plt.plot(X_new, f_bars+var, 'k--')
+#     plt.plot(X_new, f_bars-var, 'k--')
+#     plt.plot(X_new, f_bars)
     plt.plot (X, (Y+1.0)/2.0, 'o')
 
 

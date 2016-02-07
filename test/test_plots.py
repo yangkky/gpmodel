@@ -1,4 +1,5 @@
 import sys
+import string
 sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
 import gpkernel, gpmodel
@@ -25,11 +26,22 @@ else:
     raise ValueError('Invalid kernel.')
 
 if args.type == 'b2':
-    X = pd.DataFrame(np.array([[-5.0, -3.0], [1.0, -9.5], [6.5, 2.5],
-                               [0.5, 0.6], [2.0, 0.0],[-2.0, 5.0]]))
+    np.random.seed(0)
+    cov =  np.array([[1.2, 0.1],[0.1, 1.2]])
+    x1 = np.random.multivariate_normal(np.array([-3.0, -3.0]),
+                                      cov, size=10)
+    x2 = np.random.multivariate_normal(np.array([1.0, 1.0]),
+                                       cov, size=20)
+    x3 = np.random.multivariate_normal(np.array([0.0, 3.0]),
+                                       cov, size=30)
+    X = np.concatenate((x1, x2, x3))
+    X = pd.DataFrame(X)
+    X.index = [chr(i) for i in range(len(X))]
     X.columns = ['x1','x2']
-    X.index = ['A', 'B', 'C', 'D', 'E', 'F']
-    Y = pd.Series([1, 1, 1, -1, -1, -1], index=X.index)
+    y1 = [1 for _ in range(30)]
+    y2 = [-1 for _ in range(30)]
+    Y = y1 + y2
+    Y = pd.Series(Y, index=X.index)
 
 elif args.type == 'b1':
     np.random.seed(0)
@@ -38,6 +50,7 @@ elif args.type == 'b1':
     x3 = np.random.normal(2, 0.8, 10)
     X = np.concatenate((x1, x2, x3))
     X = pd.DataFrame(X)
+    X.index = [chr(i) for i in range(len(X))]
     y1 = [1 for _ in range(20)]
     y2 = [-1 for _ in range(30)]
     y3 = [1 for _ in range(10)]
@@ -63,7 +76,7 @@ else:
 
 
 if args.type == 'b2':
-    X_new = np.arange(-10, 10, 0.1)
+    X_new = np.arange(-7, 7, 0.1)
     xx, yy = np.meshgrid(X_new, X_new, sparse=False)
     X_df = []
     for i,x in enumerate(X_new):
@@ -81,18 +94,18 @@ if args.type == 'b2':
     plt.plot(X[pos]['x1'], X[pos]['x2'], 'go')
     plt.plot(X[neg]['x1'], X[neg]['x2'], 'ro')
 
-if args.type == 'b1':
-    X_new = np.arange(-8, 4, 0.1)
-    np.random.shuffle(X_new)
+elif args.type == 'b1':
+    X_new = np.arange(5, -8, -0.1)
     preds = model.predicts(pd.DataFrame(X_new.T))
     pis = [p[0] for p in preds]
     f_bars = np.array([p[1] for p in preds])
+    print f_bars
     var = np.array([p[2] for p in preds])
-    plt.plot(X_new, pis, '.')
+    plt.plot(X_new, pis, 'g.', alpha=0.7)
 #     plt.plot(X_new, f_bars+var, 'k--')
 #     plt.plot(X_new, f_bars-var, 'k--')
 #     plt.plot(X_new, f_bars)
-    plt.plot (X, (Y+1.0)/2.0, 'o')
+    plt.plot (X, (Y+1.0)/2.0, 'ko', alpha=0.7)
 
 
 

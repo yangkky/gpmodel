@@ -42,7 +42,7 @@ class MaternKernel (GPKernel):
     def __init__(self, nu):
         self.hypers = ['ell']
         self.nu = nu
-        super (MaternKernel, self).__init__()
+        GPKernel.__init__(self)
 
     def calc_kernel (self, x1, x2, hypers):
         ''' Returns the Matern kernel between x1 and x2'''
@@ -50,7 +50,6 @@ class MaternKernel (GPKernel):
         x2 = self.get_X(x2)
         d = self.get_d (np.array([x1, x2]))
         return float(self.matern(d, hypers))
-
 
     def make_K (self, Xs=None, hypers=[1.0]):
         """
@@ -63,7 +62,6 @@ class MaternKernel (GPKernel):
             d = self.get_d(Xs)
             K = self.matern(d, hypers)
             return K
-
 
     def set_X (self, X):
         self.train(X)
@@ -405,9 +403,8 @@ class StructureKernel (GPKernel):
 
     def __init__ (self, contacts):
         self.contacts = contacts
-        self.contacts = contacts
         self.hypers = ['var_p']
-        super (StructureKernel, self).__init__()
+        GPKernel.__init__(self)
 
     def make_K (self, seqs=None, hypers=[1.0], normalize=True):
         """ Makes the structure-based covariance matrix
@@ -501,6 +498,74 @@ class StructureKernel (GPKernel):
                 term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
                 contacts.append(term)
             return contacts
+
+class StructureMaternKernel(MaternKernel, StructureKernel):
+    ''' A Matern structure kernel'''
+
+    def __init__(self, contacts, nu):
+        StructureKernel.__init__(self, contacts)
+        MaternKernel.__init__(self, nu)
+
+    def distance(self, seq1, seq2):
+        """
+        Return the contact distance between two sequences of identical length.
+        This is the geometric distance.
+        """
+        k = StructureKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(self.get_X(seq1))
+        return np.sqrt(n - k)
+
+    def set_X(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        self.d = self.get_d(X_seqs)
+
+    def get_d(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+
+
+class HammingMaternKernel(MaternKernel, HammingKernel):
+    ''' A Matern structure kernel'''
+
+    def __init__(self, contacts, nu):
+        HammingKernel.__init__(self)
+        MaternKernel.__init__(self, nu)
+
+
+    def distance(self, seq1, seq2):
+        """
+        Return the Hamming distance between two sequences of identical length.
+        This is the geometric distance.
+        """
+        k = HammingKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(self.get_X(seq1))
+        return np.sqrt(n - k)
+
+    def set_X(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        self.d = self.get_d(X_seqs)
+
+    def get_d(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
 class StructureSEKernel (StructureKernel, SEKernel):
     """

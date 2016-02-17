@@ -5,7 +5,7 @@ from sys import exit
 
 class GPKernel (object):
     """
-    A Gaussian process kernel for proteins.
+    A Gaussian process kernel.
 
        Attribute:
            hypers (list)
@@ -13,6 +13,15 @@ class GPKernel (object):
 
     def __init__ (self):
          self.saved_X = {}
+
+    def make_K(self, X=None, hypers=None):
+        pass
+
+    def calc_kernel(self, x1, x2, hypers=None):
+        pass
+
+    def set_X(self, X):
+        self.train(X)
 
     def train (self, X):
         for i in range(len(X.index)):
@@ -288,6 +297,8 @@ class HammingKernel (GPKernel):
 
     Attributes:
         seqs (dict)
+        hypers (list)
+        base_K (DataFrame)
     """
     def __init__ (self):
         self.hypers = ['var_p']
@@ -307,7 +318,9 @@ class HammingKernel (GPKernel):
         """ Returns a covariance matrix for two or more sequences of the same length
 
         Parameters:
-            seqs (DataFrame)
+            seqs (ArrayLike)
+            hypers (iterable)
+            normalize (Boolean)
 
         Returns:
             DataFrame
@@ -661,6 +674,69 @@ class HammingSEKernel (HammingKernel, SEKernel):
                 D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+
+class SumKernel(GPKernel):
+    '''
+    A kernel that sums over other kernels
+
+    Attributes:
+        kernels (list): list of member kernels
+    '''
+
+    def __init__(self, kernels):
+        '''
+        Initiate a SumKernel containing a list of other kernels.
+
+        Parameters:
+            kernels(list): list of member kernels
+        '''
+        self.kernels = kernels
+        hypers = []
+        for k in self.kernels:
+            hypers += k.hypers
+        self.hypers = [hypers[i] + \
+                       str(hypers[0:i].count(hypers[i])) \
+                       for i in range(len(hypers))]
+        hypers_inds = [len(k.hypers) for k in self.kernels]
+        hypers_inds = np.cumsum(np.array(hypers_inds))
+        hypers_inds.insert(0, 0)
+        self.hypers_inds = hypers_inds.astype(int)
+
+
+    def make_K(self, X=None, hypers=None):
+        if hypers is None:
+            Ks = [k.make_K(X, hypers) for k in self.kernels]
+        else:
+            Ks = [k.make_K(X, hypers[i:i+1]) for i,
+                  k in enumerate(self.kernels)]
+        if len(Ks) == 1:
+            return Ks[0]
+        else:
+            K = Ks.pop()
+            while len(Ks) > 0:
+                K.add(Ks.pop())
+        return K
+
+
+    def calc_kernel(self, x1, x2, hypers=None):
+        if hypers is None:
+            ks = [kern.calc_kernel(x1, x2) for kern in self.kernels]
+        else:
+            ks = [kern.calc_kernel(x1,x2,hypers[i:i+1]) for i,
+                  k in enumerate(self.kernels)]
+        return sum(ks)
+
+    def train(self, Xs):
+        for k in self.kernels:
+            k.train(Xs)
+
+    def delete(self, X):
+        for k in self.kernels:
+            k.delete(Xs)
+
+    def set_X(self, X):
+        for k in self.kernels:
+            k.set_X(X)
 
 class LinearKernel(GPKernel):
     '''

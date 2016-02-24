@@ -519,6 +519,10 @@ class StructureMaternKernel(MaternKernel, StructureKernel):
         StructureKernel.__init__(self, contacts)
         MaternKernel.__init__(self, nu)
 
+    def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        d = self.distance(seq1, seq2)
+        return self.matern(d, hypers)
+
     def distance(self, seq1, seq2):
         """
         Return the contact distance between two sequences of identical length.
@@ -552,6 +556,10 @@ class HammingMaternKernel(MaternKernel, HammingKernel):
     def __init__(self, contacts, nu):
         HammingKernel.__init__(self)
         MaternKernel.__init__(self, nu)
+
+    def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        d = self.distance(seqs, seq2)
+        return self.matern(d, hypers)
 
 
     def distance(self, seq1, seq2):
@@ -699,7 +707,7 @@ class SumKernel(GPKernel):
                        for i in range(len(hypers))]
         hypers_inds = [len(k.hypers) for k in self.kernels]
         hypers_inds = np.cumsum(np.array(hypers_inds))
-        hypers_inds.insert(0, 0)
+        hypers_inds = np.insert(hypers_inds, 0, 0)
         self.hypers_inds = hypers_inds.astype(int)
 
 
@@ -707,14 +715,21 @@ class SumKernel(GPKernel):
         if hypers is None:
             Ks = [k.make_K(X, hypers) for k in self.kernels]
         else:
-            Ks = [k.make_K(X, hypers[i:i+1]) for i,
+            hypers_inds = self.hypers_inds
+            Ks = [k.make_K(X, hypers[hypers_inds[i]:hypers_inds[i+1]]) for i,
                   k in enumerate(self.kernels)]
+
         if len(Ks) == 1:
             return Ks[0]
         else:
             K = Ks.pop()
+            if isinstance(K, pd.DataFrame):
+                K = K.values
             while len(Ks) > 0:
-                K.add(Ks.pop())
+                new_K = Ks.pop()
+                if isinstance(new_K, pd.DataFrame):
+                    new_K = new_K.values
+                K += new_K
         return K
 
 
@@ -722,8 +737,9 @@ class SumKernel(GPKernel):
         if hypers is None:
             ks = [kern.calc_kernel(x1, x2) for kern in self.kernels]
         else:
-            ks = [kern.calc_kernel(x1,x2,hypers[i:i+1]) for i,
-                  k in enumerate(self.kernels)]
+            hypers_inds = self.hypers_inds
+            ks = [kern.calc_kernel(x1,x2,hypers[hypers_inds[i]:hypers_inds[i+1]]) for i,
+                  kern in enumerate(self.kernels)]
         return sum(ks)
 
     def train(self, Xs):
@@ -732,7 +748,7 @@ class SumKernel(GPKernel):
 
     def delete(self, X):
         for k in self.kernels:
-            k.delete(Xs)
+            k.delete(X)
 
     def set_X(self, X):
         for k in self.kernels:

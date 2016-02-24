@@ -64,6 +64,8 @@ class GPModel(object):
             self.objective = self.log_ML
         elif objective == 'LOO_log_p':
             self.objective = self.LOO_log_p
+        else:
+            raise AttributeError ('Invalid objective')
 
     def set_params(self, **kwargs):
         '''

@@ -29,17 +29,19 @@ if args.type == 'b2':
     np.random.seed(0)
     cov =  np.array([[1.2, 0.1],[0.1, 1.2]])
     x1 = np.random.multivariate_normal(np.array([-3.0, -3.0]),
-                                      cov, size=10)
+                                      cov, size=20)
     x2 = np.random.multivariate_normal(np.array([1.0, 1.0]),
                                        cov, size=20)
     x3 = np.random.multivariate_normal(np.array([0.0, 3.0]),
-                                       cov, size=30)
-    X = np.concatenate((x1, x2, x3))
+                                       cov, size=20)
+    x4 = np.random.multivariate_normal(np.array([4.0, -4.0]),
+                                       cov, size=20)
+    X = np.concatenate((x1, x2, x3, x4))
     X = pd.DataFrame(X)
     X.index = [chr(i) for i in range(len(X))]
     X.columns = ['x1','x2']
-    y1 = [1 for _ in range(30)]
-    y2 = [-1 for _ in range(30)]
+    y1 = [1 for _ in range(40)]
+    y2 = [-1 for _ in range(40)]
     Y = y1 + y2
     Y = pd.Series(Y, index=X.index)
 
@@ -86,7 +88,7 @@ if args.type == 'b2':
     preds = model.predicts(X_df)
     preds = [p[0] for p in preds]
     preds = np.array(preds)
-    preds = np.reshape(preds, (len(X_new), len(X_new)))
+    preds = np.reshape(preds, (len(X_new), len(X_new))).T
     CS = plt.contour(xx, yy, preds)
     plt.clabel(CS, inline=1, fontsize=10)
     pos = Y==1
@@ -102,9 +104,6 @@ elif args.type == 'b1':
     print f_bars
     var = np.array([p[2] for p in preds])
     plt.plot(X_new, pis, 'g.', alpha=0.7)
-#     plt.plot(X_new, f_bars+var, 'k--')
-#     plt.plot(X_new, f_bars-var, 'k--')
-#     plt.plot(X_new, f_bars)
     plt.plot (X, (Y+1.0)/2.0, 'ko', alpha=0.7)
 
 

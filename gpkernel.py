@@ -82,7 +82,7 @@ class MaternKernel (GPKernel):
         Parameters:
             nu (string): '3/2' or '5/2'
         """
-        if nu is not in ['3/2', '5/2']:
+        if nu not in ['3/2', '5/2']:
             raise ValueError("nu must be '3/2' or '5/2'")
         self.hypers = ['ell']
         self.nu = nu

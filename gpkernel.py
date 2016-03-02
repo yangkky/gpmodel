@@ -1,77 +1,152 @@
+"""Kernel functions that calculate the covariance between two inputs."""
+
 import numpy as np
 import pandas as pd
 from sys import exit
 
 
 class GPKernel (object):
-    """
-    A Gaussian process kernel for proteins.
 
-       Attribute:
+    """ A Gaussian Process kernel.
+
+       Attributes:
            hypers (list)
+           saved_X (dict)
     """
 
     def __init__ (self):
-         self.saved_X = {}
+        """ Create a GPKernel. """
+        self.saved_X = {}
 
-    def train (self, X):
+    def set_X(self, X):
+        """ Set a default set of inputs X.
+
+        Parameters:
+            X (iterable)
+        """
+        self.train(X)
+
+    def train(self, X):
+        """ Remember the inputs in X.
+
+        Parameters:
+            X (pd.DataFrame): Saves the inputs in X to a dictionary
+                using the index as the keys.
+        """
         for i in range(len(X.index)):
             if X.index[i] in self.saved_X.keys():
                 pass
             else:
                 self.saved_X[X.index[i]] = X.iloc[i]
 
-    def delete (self, X):
-        if X is None:
-            self.saved_X = {}
+    def delete(self, X):
+        """ Forget the inputs in X.
+
+        Parameters:
+            X (pd.DataFrame): Saves the inputs in X to a dictionary
+                using the index as the keys.
+        """
         for i in range(len(X.index)):
             if X.index[i] in self.saved_X.keys():
                 del self.saved_X[X.index[i]]
 
-    def get_X (self, x):
+    def get_X(self, x):
+        """ Retrieve an input x.
+
+        Parameters:
+            x: x can be the key used to remember x or the actual values.
+
+        Returns:
+            x
+        """
         try:
             return self.saved_X[x]
         except (KeyError, AttributeError, TypeError):
             return x
 
 class MaternKernel (GPKernel):
-    '''
-    A Matern kernel
-    '''
+
+    """ A Matern kernel with nu = 5/2 or 3/2.
+
+    Attributes:
+        hypers (list): names of the hyperparameters required
+        saved_X (dict): dict of saved index:X pairs
+        nu (string): '3/2' or '5/2'
+        d (np.ndarray): saved default geometric distances
+    """
+
 
     def __init__(self, nu):
+        """ Initiate a Matern kernel.
+
+        Parameters:
+            nu (string): '3/2' or '5/2'
+        """
+        if nu is not in ['3/2', '5/2']:
+            raise ValueError("nu must be '3/2' or '5/2'")
         self.hypers = ['ell']
         self.nu = nu
-        super (MaternKernel, self).__init__()
+        GPKernel.__init__(self)
 
-    def calc_kernel (self, x1, x2, hypers):
-        ''' Returns the Matern kernel between x1 and x2'''
+    def calc_kernel(self, x1, x2, hypers):
+        """ Calculate the Matern kernel between x1 and x2.
+
+        Parameters:
+            x1 (iterable)
+            x2 (iterable)
+            hypers (iterable): default is ell=1.0.
+
+        Returns:
+            k (float)
+        """
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
-        d = self.get_d (np.array([x1, x2]))
+        d = self.calc_d (np.array([x1, x2]))
         return float(self.matern(d, hypers))
 
+    def make_K(self, Xs=None, hypers=[1.0]):
+        """ Calculate the Matern kernel matrix for the points in Xs.
 
-    def make_K (self, Xs=None, hypers=[1.0]):
-        """
-        Returns the Matern covariance matrix for the points
-        in Xs.
+        Parameters:
+            Xs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is ell=1.0.
+
+        Returns:
+            K (np.ndarray)
         """
         if Xs is None:
             return self.matern(self.d, hypers)
         else:
-            d = self.get_d(Xs)
+            d = self.calc_d(Xs)
             K = self.matern(d, hypers)
             return K
 
-
     def set_X (self, X):
+        """ Remember a default set of inputs X.
+
+        Extends the method from GPKernel by also remembering an array
+        of distances between the inputs in X.
+
+        Parameters:
+            X (np.ndarray or pd.DataFrame)
+        """
         self.train(X)
         X = np.array(X)
-        self.d = self.get_d(X)
+        self.d = self.calc_d(X)
 
     def matern (self, d, hypers=[1.0]):
-        # account for DataFrames????
+        """ Calculate the Matern kernel given the distances d.
+
+        Returns a float if a single distance is given. Otherwise,
+        returns a nxn array.
+
+        Parameters:
+            d (float or iterable):
+
+        Returns:
+            M (float or np.ndarray)
+        """
         ell = hypers[0]
         if self.nu == '3/2':
             M =  (1.0 + np.sqrt(3.0) * d / ell) * np.exp(-np.sqrt(3) * d / ell)
@@ -82,9 +157,9 @@ class MaternKernel (GPKernel):
         return M
 
 
-    def get_d (self, xs):
-        """
-        Calculates the geometric distances between x_i in xs.
+    def calc_d (self, xs):
+        """ Calculates the geometric distances between x_i in xs.
+
         Each row of xs represents one measurement. Each column represents
         a dimension. The exception is if xs only has one row with multiple
         columns, then each column is assumed to be a measurement.
@@ -124,19 +199,24 @@ class MaternKernel (GPKernel):
         return d
 
 class SEKernel (GPKernel):
-    """
-    A squared exponential kernel
+
+    """ A squared exponential kernel.
 
     Attribute:
         hypers (list)
+        d_squared (np.ndarray)
+        saved_X (dict)
     """
 
     def __init__(self):
+        """ Initiate a Matern kernel. """
         self.hypers = ['sigma_f', 'ell']
         super(SEKernel, self).__init__()
 
     def calc_kernel (self, x1, x2, hypers):
-        """ Returns the squared exponential between the points x1 and x2"""
+        """ Calculate the squared exponential between x1 and x2.
+
+        """
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
         return float(self.se([x1, x2], hypers))
@@ -147,9 +227,15 @@ class SEKernel (GPKernel):
         self.d_squared = self.get_d_squared(X)
 
     def make_K (self, Xs=None, hypers=[1.0, 1.0]):
-        """
-        Returns the squared exponential covariance matrix for the points
-        in Xs.
+        """ Calculate the Matern kernel matrix for the points in Xs.
+
+        Parameters:
+            Xs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is ell=1.0.
+
+        Returns:
+            K (np.ndarray)
         """
         if Xs is None:
             return self.d_squared_to_se(self.d_squared, hypers)
@@ -290,6 +376,8 @@ class HammingKernel (GPKernel):
 
     Attributes:
         seqs (dict)
+        hypers (list)
+        base_K (DataFrame)
     """
     def __init__ (self):
         self.hypers = ['var_p']
@@ -306,13 +394,17 @@ class HammingKernel (GPKernel):
         return k*var_p
 
     def make_K (self, seqs=None, hypers=[1.0], normalize=True):
-        """ Returns a covariance matrix for two or more sequences of the same length
+        """ Calculate the Hamming kernel matrix.
 
         Parameters:
-            seqs (DataFrame)
+            seqs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is
+                sigma_p=1.0.
+            normalize (boolean): default is True
 
         Returns:
-            DataFrame
+            K (np.ndarray)
         """
         if seqs is None:
             var_p = hypers[0]
@@ -324,9 +416,7 @@ class HammingKernel (GPKernel):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
                 K[n1,n2] = self.calc_kernel (seq1, seq2, hypers=hypers, normalize=normalize)
-        K = np.array(K)
-        K_df = pd.DataFrame (K, index = seqs.index, columns = seqs.index)
-        return K_df
+        return np.array(K)
 
     def set_X (self, X_seqs):
         """
@@ -378,6 +468,22 @@ class WeightedHammingKernel (HammingKernel):
             self.weights[(k[1], k[0])] = self.weights[k]
         super(WeightedHammingKernel,self).__init__()
 
+    def make_K(self, seqs=None, hypers=[1.0], normalize=True):
+        """ Calculate the weighted Hamming kernel matrix.
+
+        Parameters:
+            seqs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is
+                sigma_p=1.0.
+            normalize (boolean): Default is true
+
+        Returns:
+            K (np.ndarray)
+        """
+        return super(WeightedHammingKernel, self).make_K(seqs,
+                                                         hypers, normalize)
+
     def calc_kernel(self, seq1, seq2, hypers=[1.0], normalize=True):
         var_p = hypers[0]
         s1 = self.get_X(seq1)
@@ -405,18 +511,21 @@ class StructureKernel (GPKernel):
 
     def __init__ (self, contacts):
         self.contacts = contacts
-        self.contacts = contacts
         self.hypers = ['var_p']
-        super (StructureKernel, self).__init__()
+        GPKernel.__init__(self)
 
     def make_K (self, seqs=None, hypers=[1.0], normalize=True):
-        """ Makes the structure-based covariance matrix
+        """ Calculate the structure kernel matrix.
 
-            Parameters:
-                seqs (DataFrame): amino acid sequences
+        Parameters:
+            seqs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is
+                sigma_p=1.0.
+            normalize (boolean): Default is true
 
         Returns:
-            Dataframe: structure-based covariance matrix
+            K (np.ndarray)
         """
         if seqs is None:
             var_p = hypers[0]
@@ -431,8 +540,7 @@ class StructureKernel (GPKernel):
                                              hypers=hypers, normalize=normalize)
                 if n1 != n2:
                     K[n2, n1] = K[n1, n2]
-        K_df = pd.DataFrame (K, index=seqs.index, columns=seqs.index)
-        return K_df
+        return K
 
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Determine the number of shared contacts between the two sequences
@@ -442,7 +550,7 @@ class StructureKernel (GPKernel):
             seq2 (iterable): Amino acid sequence
 
         Returns:
-            int: number of shared contacts
+            k (float): number of shared contacts * var_p
         """
         var_p = hypers[0]
         contacts1 = self.get_X(seq1)
@@ -501,6 +609,82 @@ class StructureKernel (GPKernel):
                 term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
                 contacts.append(term)
             return contacts
+
+class StructureMaternKernel(MaternKernel, StructureKernel):
+    ''' A Matern structure kernel'''
+
+    def __init__(self, contacts, nu):
+        StructureKernel.__init__(self, contacts)
+        MaternKernel.__init__(self, nu)
+
+    def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        d = self.distance(seq1, seq2)
+        return self.matern(d, hypers)
+
+    def distance(self, seq1, seq2):
+        """
+        Return the contact distance between two sequences of identical length.
+        This is the geometric distance.
+        """
+        k = StructureKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(self.get_X(seq1))
+        return np.sqrt(n - k)
+
+    def set_X(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        self.d = self.get_d(X_seqs)
+
+    def get_d(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+
+
+class HammingMaternKernel(MaternKernel, HammingKernel):
+    ''' A Matern structure kernel'''
+
+    def __init__(self, contacts, nu):
+        HammingKernel.__init__(self)
+        MaternKernel.__init__(self, nu)
+
+    def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        d = self.distance(seqs, seq2)
+        return self.matern(d, hypers)
+
+
+    def distance(self, seq1, seq2):
+        """
+        Return the Hamming distance between two sequences of identical length.
+        This is the geometric distance.
+        """
+        k = HammingKernel.calc_kernel(self, seq1, seq2, normalize=False)
+        n = len(self.get_X(seq1))
+        return np.sqrt(n - k)
+
+    def set_X(self, X_seqs):
+        """
+        Stores the X_rows in the kernel's saved_Xs dict.
+        Stores the distance matrix.
+        """
+        self.train(X_seqs)
+        self.d = self.get_d(X_seqs)
+
+    def get_d(self, X_seqs):
+        n = len(X_seqs)
+        D = np.zeros((n,n))
+        for i in range(n):
+            for j in range(i):
+                D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j,i] = D[i,j]
+        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
 class StructureSEKernel (StructureKernel, SEKernel):
     """
@@ -596,6 +780,77 @@ class HammingSEKernel (HammingKernel, SEKernel):
                 D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+
+class SumKernel(GPKernel):
+    '''
+    A kernel that sums over other kernels
+
+    Attributes:
+        kernels (list): list of member kernels
+    '''
+
+    def __init__(self, kernels):
+        '''
+        Initiate a SumKernel containing a list of other kernels.
+
+        Parameters:
+            kernels(list): list of member kernels
+        '''
+        self.kernels = kernels
+        hypers = []
+        for k in self.kernels:
+            hypers += k.hypers
+        self.hypers = [hypers[i] + \
+                       str(hypers[0:i].count(hypers[i])) \
+                       for i in range(len(hypers))]
+        hypers_inds = [len(k.hypers) for k in self.kernels]
+        hypers_inds = np.cumsum(np.array(hypers_inds))
+        hypers_inds = np.insert(hypers_inds, 0, 0)
+        self.hypers_inds = hypers_inds.astype(int)
+
+
+    def make_K(self, X=None, hypers=None):
+        if hypers is None:
+            Ks = [k.make_K(X, hypers) for k in self.kernels]
+        else:
+            hypers_inds = self.hypers_inds
+            Ks = [k.make_K(X, hypers[hypers_inds[i]:hypers_inds[i+1]]) for i,
+                  k in enumerate(self.kernels)]
+
+        if len(Ks) == 1:
+            return Ks[0]
+        else:
+            K = Ks.pop()
+            if isinstance(K, pd.DataFrame):
+                K = K.values
+            while len(Ks) > 0:
+                new_K = Ks.pop()
+                if isinstance(new_K, pd.DataFrame):
+                    new_K = new_K.values
+                K += new_K
+        return K
+
+
+    def calc_kernel(self, x1, x2, hypers=None):
+        if hypers is None:
+            ks = [kern.calc_kernel(x1, x2) for kern in self.kernels]
+        else:
+            hypers_inds = self.hypers_inds
+            ks = [kern.calc_kernel(x1,x2,hypers[hypers_inds[i]:hypers_inds[i+1]]) for i,
+                  kern in enumerate(self.kernels)]
+        return sum(ks)
+
+    def train(self, Xs):
+        for k in self.kernels:
+            k.train(Xs)
+
+    def delete(self, X):
+        for k in self.kernels:
+            k.delete(X)
+
+    def set_X(self, X):
+        for k in self.kernels:
+            k.set_X(X)
 
 class LinearKernel(GPKernel):
     '''

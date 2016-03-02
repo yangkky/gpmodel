@@ -64,6 +64,8 @@ class GPModel(object):
             self.objective = self.log_ML
         elif objective == 'LOO_log_p':
             self.objective = self.LOO_log_p
+        else:
+            raise AttributeError ('Invalid objective')
 
     def set_params(self, **kwargs):
         '''
@@ -291,8 +293,8 @@ class GPModel(object):
             try:
                 L = np.linalg.cholesky (Ky)
             except:
-                #print hypers
-                exit('')
+                print hypers
+                exit('Cannot find L in log_ML')
             alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
             second = sum([math.log(l) for l in np.diag(L)])

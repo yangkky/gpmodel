@@ -88,7 +88,7 @@ def plot_ROC (real_Ys, pis, file_name=None, title=''):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     auc = metrics.auc(fpr,tpr)
-    plt.title(title+' auc = %.4f' %auc)
+    #plt.title(title+' auc = %.4f' %auc)
     if not file_name is None:
         plt.savefig (file_name)
     return auc

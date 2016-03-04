@@ -101,7 +101,7 @@ class MaternKernel (GPKernel):
         """
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
-        d = self.calc_d (np.array([x1, x2]))
+        d = self.get_d(np.array([x1, x2]))
         return float(self.matern(d, hypers))
 
     def make_K(self, Xs=None, hypers=[1.0]):
@@ -118,7 +118,7 @@ class MaternKernel (GPKernel):
         if Xs is None:
             return self.matern(self.d, hypers)
         else:
-            d = self.calc_d(Xs)
+            d = self.get_d(Xs)
             K = self.matern(d, hypers)
             return K
 
@@ -133,7 +133,7 @@ class MaternKernel (GPKernel):
         """
         self.train(X)
         X = np.array(X)
-        self.d = self.calc_d(X)
+        self.d = self.get_d(X)
 
     def matern (self, d, hypers=[1.0]):
         """ Calculate the Matern kernel given the distances d.
@@ -156,8 +156,7 @@ class MaternKernel (GPKernel):
             M =  first * second
         return M
 
-
-    def calc_d (self, xs):
+    def get_d (self, xs):
         """ Calculates the geometric distances between x_i in xs.
 
         Each row of xs represents one measurement. Each column represents
@@ -209,25 +208,32 @@ class SEKernel (GPKernel):
     """
 
     def __init__(self):
-        """ Initiate a Matern kernel. """
+        """ Initiate a squared exponential kernel. """
         self.hypers = ['sigma_f', 'ell']
         super(SEKernel, self).__init__()
 
     def calc_kernel (self, x1, x2, hypers):
         """ Calculate the squared exponential between x1 and x2.
-
         """
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
         return float(self.se([x1, x2], hypers))
 
     def set_X(self, X):
+        """ Set a default set of inputs X.
+
+        Extends the method from GPKernel by also remembering an array
+        of squared distances between the inputs in X.
+
+        Parameters:
+            X (iterable)
+        """
         self.train(X)
         X = np.array(X)
         self.d_squared = self.get_d_squared(X)
 
     def make_K (self, Xs=None, hypers=[1.0, 1.0]):
-        """ Calculate the Matern kernel matrix for the points in Xs.
+        """ Calculate the SE kernel matrix for the points in Xs.
 
         Parameters:
             Xs (np.ndarray or pd.DataFrame): If none given, uses
@@ -364,27 +370,43 @@ class SEKernel (GPKernel):
         d_squared = self.get_d_squared (xs)
 
         se_array = self.d_squared_to_se (d_squared, params)
-
-        # convert back to DataFrame if necessary
-        if is_df and n > 2:
-            return pd.DataFrame(se_array, index=index, columns=index)
         return se_array
 
 
 class HammingKernel (GPKernel):
-    """A Hamming Kernel
+
+    """A linear Hamming kernel.
 
     Attributes:
         seqs (dict)
         hypers (list)
         base_K (DataFrame)
     """
+
     def __init__ (self):
+        """ Initiate a Hamming kernel."""
         self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
 
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
-        """ Returns the number of shared amino acids between two sequences"""
+        """ Calculates the Hamming kernel between two sequences.
+
+        The Hamming kernel is the number (if not normalized) or the
+        the fraction (if normalized) of shared residues between two
+        sequences, multiplied by a scale factor (var_p).
+
+        Parameters:
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+            hypers (interable): var_p. Default is 1.0.
+            normalize (Boolean): whether to divide by the length of
+                sequences. Default is true.
+
+        Returns:
+            k (float)
+        """
         var_p = hypers[0]
         s1 = self.get_X(seq1)
         s2 = self.get_X(seq2)
@@ -419,16 +441,23 @@ class HammingKernel (GPKernel):
         return np.array(K)
 
     def set_X (self, X_seqs):
-        """
-        Store the sequences in X_seqs in the kernel's contacts dict.
-        Use X_sequences to set the kernel's base K.
+        """ Set a default set of inputs X_seqs.
+
+        Extends the method from GPKernel by also remembering the
+        Hamming matrix when var_p = 1.
+
+        Parameters:
+            X_seqs (iterable)
         """
         self.train (X_seqs)
         self.base_K = self.make_K(X_seqs)
 
     def train(self, X_seqs):
-        """
-        Stores the sequences in X_seqs in the kernel's saved_seqs dict
+        """ Remember the inputs in X_seqs.
+
+        Parameters:
+            X_seqs (pd.DataFrame): Saves the inputs in X_seqs to a dictionary
+                using the index as the keys.
         """
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_X.keys():
@@ -437,8 +466,11 @@ class HammingKernel (GPKernel):
                 self.saved_X[X_seqs.index[i]] = ''.join(s for s in X_seqs.iloc[i])
 
     def delete(self,X_seqs=None):
-        """
-        Deletes sequences from the saved_X dict
+        """ Forget the inputs in X_seqs.
+
+        Optional parameters:
+            X_seqs (pd.DataFrame): sequences to forget. If none
+                provided, forget all.
         """
         if X_seqs is None:
             self.saved_X = {}
@@ -447,8 +479,13 @@ class HammingKernel (GPKernel):
                 del self.saved_X[X_seqs.index[i]]
 
     def get_X(self,seq):
-        """
-        Get the sequence for seq
+        """ Retrieve an input sequence.
+
+        Parameters:
+            seq: seq can be the key used to remember x or the actual values.
+
+        Returns:
+            seq
         """
         try:
             return self.saved_X[seq]
@@ -456,11 +493,15 @@ class HammingKernel (GPKernel):
             return ''.join([s for s in seq])
 
 class WeightedHammingKernel (HammingKernel):
+
     '''
     A Hamming kernel where the covariance between two sequences
-    depends on which amino acids are changed to what.
+    depends on which amino acids are changed to what. The changes
+    are weighted using blosum62.
     '''
+
     def __init__(self):
+        """ Intiate a WeightedHammingKernel. """
         from Bio.SubsMat import MatrixInfo
         self.weights = MatrixInfo.blosum62
         self.weights = {k:self.weights[k] for k in self.weights.keys()}
@@ -485,6 +526,18 @@ class WeightedHammingKernel (HammingKernel):
                                                          hypers, normalize)
 
     def calc_kernel(self, seq1, seq2, hypers=[1.0], normalize=True):
+        """ Calculates the weighted Hamming kernel between two sequences.
+
+        Parameters:
+            seq1 (pd.DataFrame)
+            seq2 (pd.DataFrame)
+            hypers (interable): var_p
+            normalize (Boolean): whether to divide by the length of
+                sequences
+
+        Returns:
+            k (float)
+        """
         var_p = hypers[0]
         s1 = self.get_X(seq1)
         s2 = self.get_X(seq2)
@@ -499,17 +552,22 @@ class WeightedHammingKernel (HammingKernel):
         return k*var_p
 
 class StructureKernel (GPKernel):
+
     """A Structure kernel
 
     Attributes:
-        contact_terms (iterable): Each element in contact_terms should be of the
-          form ((pos1,aa1),(pos2,aa2))
         hypers (list): list of required hyperparameters
         saved_X (dict): a dict matching the labels for sequences to their contacts
-        contacts: list of which residues are in contact
+        contacts (list): list of which residues are in contact
     """
 
     def __init__ (self, contacts):
+        """ Initiate a StructureKernel.
+
+        Parameters:
+            contacts: A list of tuples, where each tuple defines two
+                positions in contact with each other.
+        """
         self.contacts = contacts
         self.hypers = ['var_p']
         GPKernel.__init__(self)
@@ -543,11 +601,20 @@ class StructureKernel (GPKernel):
         return K
 
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
-        """ Determine the number of shared contacts between the two sequences
+        """ Calculate the structure kernel between two sequences.
+
+        The structure kernel is the number (if not normalized) or the
+        the fraction (if normalized) of shared contacts between two
+        sequences, multiplied by a scale factor (var_p).
 
         Parameters:
-            seq1 (iterable): Amino acid sequence
-            seq2 (iterable): Amino acid sequence
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+            hypers (interable): var_p. Default is 1.0.
+            normalize (Boolean): whether to divide by the length of
+                sequences. Default is true.
 
         Returns:
             k (float): number of shared contacts * var_p
@@ -561,17 +628,24 @@ class StructureKernel (GPKernel):
         return k
 
     def set_X (self, X_seqs):
-        """
-        Store the sequences in X_seqs in the kernel's contacts dict.
-        Use X_sequences to set the kernel's base K.
+        """ Set a default set of inputs X_seqs.
+
+        Extends the method from GPKernel by also remembering the
+        contacts matrix when var_p = 1.
+
+        Parameters:
+            X_seqs (iterable)
         """
         self.train (X_seqs)
         self.base_K = self.make_K(X_seqs)
 
 
     def train(self, X_seqs):
-        """
-        Stores the sequences in X_seqs in the kernel's contacts dict
+        """ Remember the inputs in X_seqs.
+
+        Parameters:
+            X_seqs (pd.DataFrame): Saves the inputs in X_seqs to a dictionary
+                using the index as the keys.
         """
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self.saved_X.keys():
@@ -581,8 +655,11 @@ class StructureKernel (GPKernel):
                     self.get_X(X_seqs.iloc[i])
 
     def delete(self, X_seqs=None):
-        """
-        Delete these sequences from the kernel's contacts dict
+        """ Forget the inputs in X_seqs.
+
+        Optional parameters:
+            X_seqs (pd.DataFrame): sequences to forget. If none
+                provided, forget all.
         """
         if X_seqs is None:
             self.saved_X = {}
@@ -591,8 +668,13 @@ class StructureKernel (GPKernel):
                 del self.saved_X[X_seqs.index[i]]
 
     def get_X(self, seq):
-        """
-        Gets the contacts for seq.
+        """ Retrieve an input sequence.
+
+        Parameters:
+            seq: seq can be the key used to remember x or the actual values.
+
+        Returns:
+            seq
         """
         if isinstance (seq, basestring):
             try:
@@ -611,74 +693,191 @@ class StructureKernel (GPKernel):
             return contacts
 
 class StructureMaternKernel(MaternKernel, StructureKernel):
-    ''' A Matern structure kernel'''
+
+    """ A Matern structure kernel with nu = 5/2 or 3/2.
+
+    Attributes:
+        hypers (list): names of the hyperparameters required
+        saved_X (dict): dict of saved index:X pairs
+        nu (string): '3/2' or '5/2'
+        d (np.ndarray): saved default geometric distances
+        saved_X (dict): a dict matching the labels for sequences
+            to their contacts
+        contacts (list): list of which residues are in contact
+    """
 
     def __init__(self, contacts, nu):
+        """ Initiate a StructureMaternKernel.
+
+        Parameters:
+            contacts: A list of tuples, where each tuple defines two
+                positions in contact with each other.
+            nu (string): '3/2' or '5/2'
+        """
         StructureKernel.__init__(self, contacts)
         MaternKernel.__init__(self, nu)
 
     def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        """ Calculate the Matern structure kernel between two sequences.
+
+        The Matern structure kernel uses the square root of the number
+        of different contacts between two sequences as the distance
+        measure with which to calculate the Matern kernel
+
+        Parameters:
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+            hypers (interable): ell. Default is 1.0.
+
+        Returns:
+            k (float): number of shared contacts * var_p
+        """
         d = self.distance(seq1, seq2)
         return self.matern(d, hypers)
 
     def distance(self, seq1, seq2):
-        """
-        Return the contact distance between two sequences of identical length.
-        This is the geometric distance.
+        """ Calculate the contact distance between two sequences.
+
+        The contact distance between two sequences of identical length
+        is the square root number of contacts at which they differ.
+        This is the 'geometric distance.'
+
+        Parameters:
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+
+        Returns:
+            d (float)
         """
         k = StructureKernel.calc_kernel(self, seq1, seq2, normalize=False)
         n = len(self.get_X(seq1))
         return np.sqrt(n - k)
 
     def set_X(self, X_seqs):
-        """
-        Stores the X_rows in the kernel's saved_Xs dict.
-        Stores the distance matrix.
+        """ Set a default set of inputs X_seqs.
+
+        Extends the method from GPKernel by also remembering the
+        storing the distance matrix.
+
+        Parameters:
+            X_seqs (iterable)
         """
         self.train(X_seqs)
         self.d = self.get_d(X_seqs)
 
     def get_d(self, X_seqs):
+        """ Calculate the contact distances between a set of sequences.
+
+        Dij is the contact distance between Xi and Xj. The geometric
+        distance is the square root of the number of contacts at which
+        two sequences differ.
+
+        Parameters:
+            X_seqs (pd.DataFrame)
+
+        Returns:
+            D (np.ndarray)
+        """
         n = len(X_seqs)
         D = np.zeros((n,n))
         for i in range(n):
             for j in range(i):
                 D[i,j] = self.distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
-        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+        return D
 
 
 class HammingMaternKernel(MaternKernel, HammingKernel):
-    ''' A Matern structure kernel'''
+
+    """ A Matern Hamming kernel with nu = 5/2 or 3/2.
+
+    Attributes:
+        hypers (list): names of the hyperparameters required
+        saved_X (dict): dict of saved index:X pairs
+        nu (string): '3/2' or '5/2'
+        d (np.ndarray): saved default geometric distances
+        saved_X (dict): a dict matching the labels for sequences
+            to the sequences
+    """
 
     def __init__(self, contacts, nu):
-        HammingKernel.__init__(self)
+        """ Initiate a HammingMaternKernel.
+
+        Parameters:
+            nu (string): '3/2' or '5/2'
+        """        HammingKernel.__init__(self)
         MaternKernel.__init__(self, nu)
 
     def calc_kernel(self, seq1, seq2, hypers=[1.0]):
+        """ Calculate the Hamming Matern kernel between two sequences.
+
+        The Matern hamming kernel uses the square root of the number
+        of different residues between two sequences as the distance
+        measure with which to calculate the Matern kernel.
+
+        Parameters:
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+            hypers (interable): ell. Default is 1.0.
+
+        Returns:
+            k (float): number of shared contacts * var_p
+        """
         d = self.distance(seqs, seq2)
         return self.matern(d, hypers)
 
 
     def distance(self, seq1, seq2):
-        """
-        Return the Hamming distance between two sequences of identical length.
-        This is the geometric distance.
+        """ Calculate the Hamming distance between two sequences.
+
+        The Hamming distance between two sequences of identical length
+        is the square root number of residues at which they differ.
+        This is the 'geometric distance.'
+
+        Parameters:
+            seq1 (pd.DataFrame or string): either a DataFrame
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            seq2 (pd.DataFrame or string)
+
+        Returns:
+            d (float)
         """
         k = HammingKernel.calc_kernel(self, seq1, seq2, normalize=False)
         n = len(self.get_X(seq1))
         return np.sqrt(n - k)
 
     def set_X(self, X_seqs):
-        """
-        Stores the X_rows in the kernel's saved_Xs dict.
-        Stores the distance matrix.
+       """ Set a default set of inputs X_seqs.
+
+        Extends the method from GPKernel by also remembering the
+        storing the distance matrix.
+
+        Parameters:
+            X_seqs (iterable)
         """
         self.train(X_seqs)
         self.d = self.get_d(X_seqs)
 
     def get_d(self, X_seqs):
-        n = len(X_seqs)
+        """ Calculate the Hamming distances between a set of sequences.
+
+        Dij is the Hamming distance between Xi and Xj. The geometric
+        distance is the square root of the number of residues at which
+        two sequences differ.
+
+        Parameters:
+            X_seqs (pd.DataFrame)
+
+        Returns:
+            D (np.ndarray)
+        """        n = len(X_seqs)
         D = np.zeros((n,n))
         for i in range(n):
             for j in range(i):

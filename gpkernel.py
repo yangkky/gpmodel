@@ -92,7 +92,7 @@ class MaternKernel (GPKernel):
         """ Calculate the Matern kernel between x1 and x2.
 
         Parameters:
-            x1 (np.ndarray or string): either a array
+            x1 (np.ndarray or string): either an array
                 representing the sequence or the key for that sequence
                 if it has been saved.
             x2 (np.ndarray or string)
@@ -767,7 +767,6 @@ class StructureMaternKernel(MaternKernel, StructureKernel):
                 D[j,i] = D[i,j]
         return D
 
-
 class HammingMaternKernel(MaternKernel, HammingKernel):
 
     """ A Matern Hamming kernel with nu = 5/2 or 3/2.
@@ -878,7 +877,6 @@ class StructureSEKernel (StructureKernel, SEKernel):
                 D[j,i] = D[i,j]
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
-
 class HammingSEKernel (HammingKernel, SEKernel):
     """
     A squared exponential Hamming kernel
@@ -927,12 +925,13 @@ class HammingSEKernel (HammingKernel, SEKernel):
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
 class SumKernel(GPKernel):
-    '''
-    A kernel that sums over other kernels
+    """
+    A kernel that sums over other kernels.
 
     Attributes:
         kernels (list): list of member kernels
-    '''
+        hypers (list): the names of the hyperparameters
+    """
 
     def __init__(self, kernels):
         '''
@@ -940,6 +939,7 @@ class SumKernel(GPKernel):
 
         Parameters:
             kernels(list): list of member kernels
+            hypers (list): list of hyperparameter names
         '''
         self.kernels = kernels
         hypers = []
@@ -955,6 +955,20 @@ class SumKernel(GPKernel):
 
 
     def make_K(self, X=None, hypers=None):
+        """ Calculate the summed covariance matrix.
+
+        Calculates K for each member kernel using the hyperparameters
+        given and sums them.
+
+        Optional parameters:
+            X (pd.DataFrame or np.ndarray): the inputs. The default is
+                to use the saved inputs.
+            hypers (iterable): the hyperparameters. Default is to use
+                the defaults for each kernel.
+
+        Returns:
+            K (np.ndarray)
+        """
         if hypers is None:
             Ks = [k.make_K(X, hypers) for k in self.kernels]
         else:
@@ -977,6 +991,19 @@ class SumKernel(GPKernel):
 
 
     def calc_kernel(self, x1, x2, hypers=None):
+        """ Calculate the sum kernel between two inputs.
+
+        Parameters:
+            x1 (np.ndarray or pd.DataFeame string): either a array
+                or DataFrame representing the sequence or the key
+                for that sequence if it has been saved.
+            x2
+            hypers (iterable): the hyperparameters. Default is to use
+                the defaults for each kernel.
+
+        Returns:
+            k (float)
+        """
         if hypers is None:
             ks = [kern.calc_kernel(x1, x2) for kern in self.kernels]
         else:
@@ -986,27 +1013,62 @@ class SumKernel(GPKernel):
         return sum(ks)
 
     def train(self, Xs):
+        """ Remember the inputs in X.
+
+        Extends the parent method by training each member kernel.
+
+        Parameters:
+            X (pd.DataFrame): Saves the inputs in X to a dictionary
+                using the index as the keys.
+        """
         for k in self.kernels:
             k.train(Xs)
 
     def delete(self, X):
+        """ Forget the inputs in X.
+
+        Extends the parent method by forgetting the input for each
+        member kernel.
+
+        Parameters:
+            X (pd.DataFrame): Saves the inputs in X to a dictionary
+                using the index as the keys.
+        """
         for k in self.kernels:
             k.delete(X)
 
     def set_X(self, X):
+        """ Set a default set of inputs X.
+
+        Extends the parent method by setting the default input for each
+        member kernel.
+
+        Parameters:
+            X (iterable)
+        """
         for k in self.kernels:
             k.set_X(X)
 
 class LinearKernel(GPKernel):
-    '''
-    Calculates the linear (dot product) kernel for two inputs
-    '''
+
+    """ The linear (dot product) kernel for two inputs. """
 
     def __init__(self):
+        """ Initiates a LinearKernel. """
         self.hypers = ['var_p']
         GPKernel.__init__(self)
 
-    def make_K (self, X=None, hypers=(1.0,)):
+    def make_K (self, X=None, hypers=[1.0]):
+        """ Calculate the linear kernel matrix for the points in Xs.
+
+        Parameters:
+            Xs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): The hyperparameters. Default is var_p=1.0.
+
+        Returns:
+            K (np.ndarray)
+        """
         vp = hypers[0]
         if X is None:
             return self.base_K * vp
@@ -1014,14 +1076,36 @@ class LinearKernel(GPKernel):
         K = X_mat * X_mat.T * vp
         return pd.DataFrame(K, index=X.index, columns=X.index)
 
-    def calc_kernel (self, x1, x2, hypers=(1,)):
+    def calc_kernel (self, x1, x2, hypers=[1.0]):
+        """ Calculate the linear kernel between x1 and x2.
+
+        The linear kernel is the dot product of x1 and x2 multiplied
+        by a scaling variable var_p.
+
+        Parameters:
+            x1 (np.ndarray or string): either an array
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            x2 (np.ndarray or string)
+            hypers (iterable): default is var_p=1.0.
+
+        Returns:
+            k (float)
+        """
         vp = hypers[0]
         x1 = self.get_X(x1)
         x2 = self.get_X(x2)
         return sum(a*b for a, b in zip(x1,x2)) * vp
 
     def set_X(self, X):
-        self.train(X)
+        """ Set a default set of inputs X.
+
+        Extends the parent method by also setting a default K with
+        var_p = 1.0.
+
+        Parameters:
+            X (iterable)
+        """        self.train(X)
         self.base_K = self.make_K(X)
 
 

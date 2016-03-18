@@ -17,12 +17,13 @@ class GPKernel (object):
     def __init__ (self):
         """ Create a GPKernel. """
         self._saved_X = {}
+        self.hypers = []
 
     def set_X(self, X):
         """ Set a default set of inputs X.
 
         Parameters:
-            X (iterable)
+            X (pd.DataFrame)
         """
         self.train(X)
 
@@ -43,8 +44,7 @@ class GPKernel (object):
         """ Forget the inputs in X.
 
         Parameters:
-            X (pd.DataFrame): Saves the inputs in X to a dictionary
-                using the index as the keys.
+            X (pd.DataFrame): Deletes the inputs in X
         """
         for i in range(len(X.index)):
             if X.index[i] in self._saved_X.keys():
@@ -82,11 +82,12 @@ class MaternKernel (GPKernel):
         Parameters:
             nu (string): '3/2' or '5/2'
         """
+        GPKernel.__init__(self)
         if nu not in ['3/2', '5/2']:
             raise ValueError("nu must be '3/2' or '5/2'")
         self.hypers = ['ell']
         self.nu = nu
-        GPKernel.__init__(self)
+        self._d = np.array([[]])
 
     def calc_kernel(self, x1, x2, hypers):
         """ Calculate the Matern kernel between x1 and x2.
@@ -215,10 +216,11 @@ class SEKernel (GPKernel):
 
     def __init__(self):
         """ Initiate a SEKernel. """
-        self.hypers = ['sigma_f', 'ell']
         GPKernel.__init__(self)
+        self.hypers = ['sigma_f', 'ell']
+        self._d_squared = np.array([[]])
 
-    def calc_kernel (self, x1, x2, hypers):
+    def calc_kernel (self, x1, x2, hypers=[1.0, 1.0]):
         """ Calculate the squared exponential kernel between x1 and x2.
 
         Parameters:
@@ -260,7 +262,7 @@ class SEKernel (GPKernel):
         if Xs is None:
             return self._squared_exponential(self._d_squared, hypers)
         else:
-            d = self._get_d(Xs)
+            d = self._get_d_squared(Xs)
             K = self._squared_exponential(d, hypers)
             return K
 
@@ -328,57 +330,6 @@ class SEKernel (GPKernel):
                 d[i][i] = 0
         return d
 
-    def _se(self, xs, params):
-        """
-        Calculates the squared exponential covariance function
-        between xs according to RW Eq. 2.31.
-        Each row of xs represents one measurement. Each column represents
-        a dimension. The exception is if xs only has one row with multiple
-        columns, then each column is assumed to be a measurement.
-
-        Parameters:
-            xs: ndarray or np.matrix or pd.DataFrame
-            params: sigma_f and ell. sigma_f must be a scalar. ell may
-                be a scalar.
-
-        Returns:
-            res (np.ndarray or float): the squared exponential covariance
-                evaluated between xs. res has shape (n,n), where n is the
-                number of rows in xs or the number of columns if there is
-                only one row unless n = 2, in which case res is a float.
-        """
-
-        # if xs is a DataFrame, convert it to an np.ndarray
-        is_df = False
-        if isinstance(xs, pd.DataFrame):
-            is_df = True
-            index = xs.index
-            xs = xs.as_matrix()
-
-        # calculate the squared radial distances between each pair of
-        # measurements
-
-        # Check dimensions
-        dims = np.shape(xs)
-        n = dims[0]
-
-        # matrices are weird: make them arrays
-        if n == 1 and isinstance(xs, np.matrix):
-            xs = np.array(xs)[0]
-            dims = np.shape(xs)
-            n = dims[0]
-        elif isinstance(xs, np.matrix):
-            xs = np.array(xs)
-
-        # make sure there are multiple measurements
-        if n == 1:
-            raise RunTimeError ('SE requires at least two items in xs')
-
-        d_squared = self._get_d_squared (xs)
-
-        se_array = self._d_squared_to_se (d_squared, params)
-        return se_array
-
 class HammingKernel (GPKernel):
 
     """A linear Hamming kernel.
@@ -391,8 +342,8 @@ class HammingKernel (GPKernel):
 
     def __init__ (self):
         """ Initiate a Hamming kernel."""
-        self.hypers = ['var_p']
         super(HammingKernel,self).__init__()
+        self.hypers = ['var_p']
 
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Calculates the Hamming kernel between two sequences.
@@ -577,9 +528,9 @@ class StructureKernel (GPKernel):
             contacts: A list of tuples, where each tuple defines two
                 positions in contact with each other.
         """
+        GPKernel.__init__(self)
         self.contacts = contacts
         self.hypers = ['var_p']
-        GPKernel.__init__(self)
 
     def make_K (self, seqs=None, hypers=[1.0], normalize=True):
         """ Calculate the structure kernel matrix.
@@ -954,6 +905,7 @@ class HammingSEKernel (SEKernel, HammingKernel):
         return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
 
 class SumKernel(GPKernel):
+
     """
     A kernel that sums over other kernels.
 
@@ -961,6 +913,7 @@ class SumKernel(GPKernel):
         _kernels (list): list of member kernels
         hypers (list): the names of the hyperparameters
     """
+
     def __init__(self, kernels):
         '''
         Initiate a SumKernel containing a list of other kernels.
@@ -976,7 +929,7 @@ class SumKernel(GPKernel):
         self.hypers = [hypers[i] + \
                        str(hypers[0:i].count(hypers[i])) \
                        for i in range(len(hypers))]
-        hypers_inds = [len(k.hypers) for k in self.kernels]
+        hypers_inds = [len(k.hypers) for k in self._kernels]
         hypers_inds = np.cumsum(np.array(hypers_inds))
         hypers_inds = np.insert(hypers_inds, 0, 0)
         self.hypers_inds = hypers_inds.astype(int)
@@ -1081,8 +1034,9 @@ class LinearKernel(GPKernel):
 
     def __init__(self):
         """ Initiates a LinearKernel. """
-        self.hypers = ['var_p']
         GPKernel.__init__(self)
+        self.hypers = ['var_p']
+
 
     def make_K (self, X=None, hypers=[1.0]):
         """ Calculate the linear kernel matrix for the points in Xs.

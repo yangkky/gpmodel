@@ -436,7 +436,7 @@ class GPModel(object):
                 W_root = scipy.linalg.sqrtm(W)
             except:
                 print i
-                exit('')
+                exit('Cannot find F')
             f_hat_mat = np.matrix (f_hat)
             L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
             b = W*f_hat_mat.T + np.matrix(

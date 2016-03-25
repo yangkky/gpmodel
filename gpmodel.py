@@ -633,7 +633,7 @@ class GPModel(object):
         except AttributeError:
             pass
         if self.objective == self._log_ML:
-            save_me['objective'] = '_log_ML'
+            save_me['objective'] = 'log_ML'
         else:
             save_me['objective'] = 'LOO_log_p'
         save_me['guesses'] = self.guesses

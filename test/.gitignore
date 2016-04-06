@@ -1,0 +1,14 @@
+*.py.lprof
+/2015-11-12_LOO_MSE.pdf
+/2015-11-12_LOO_log_p.pdf
+/2015-11-12_ML.pdf
+/2015-11-12_model.pkl
+/2015-12-02_SEStructure_LOO.pdf
+/2015-12-02_SEStructure_model.pkl
+/2015-12-02_structureSE_model.pkl
+/T50_data.pkl
+/T50_data_for_kevin.pkl
+/X_seqs.pkl
+/Ys.pkl
+/alignment_and_contacts.pkl
+/model.pkl

@@ -1,0 +1,9 @@
+*.DS_Store
+*.pyc
+/2015-10-08_test_expression_structure_kernel.pkl
+/2015-10-14_test_mKate_mean_structure_kernel.pkl
+/2015-10-23__mKate_mean_structure_kernel.pkl
+/2015-11-05_normed_mKate_mean_structure_kernel.pkl
+/2015-11-6_ML.pdf
+/2015-11-6_ML_plot_3.pdf
+/2015-11-6_ML_plot_4.pdf

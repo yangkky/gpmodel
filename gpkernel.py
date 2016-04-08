@@ -179,8 +179,7 @@ class MaternKernel (GPKernel):
         """ Calculates the geometric distances between x_i in xs.
 
         Each row of xs represents one measurement. Each column represents
-        a dimension. The exception is if xs only has one row with multiple
-        columns, then each column is assumed to be a measurement.
+        a dimension.
 
         Parameters:
             xs: ndarray or np.matrix or pd.Dataframe
@@ -191,17 +190,14 @@ class MaternKernel (GPKernel):
         xs = np.array(xs)
         dims = np.shape(xs)
         n = dims[0]
-        if n == 2:
-            d = self._distance(xs[0],xs[1])
-        else:
-            d = np.empty((n,n))
-            for i in range (1,n):
-                for j in range(i):
-                    d[i][j] = self._distance(xs[j], xs[i])
-                    d[j][i] = d[i][j]
+        d = np.empty((n,n))
+        for i in range (1,n):
+            for j in range(i):
+                d[i][j] = self._distance(xs[j], xs[i])
+                d[j][i] = d[i][j]
             # fill in diagonals
-            for i in range (n):
-                d[i][i] = 0
+        for i in range (n):
+            d[i][i] = 0
         return d
 
 class SEKernel (GPKernel):

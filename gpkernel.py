@@ -384,7 +384,7 @@ class HammingKernel (GPKernel):
         if seqs is None:
             var_p = hypers[0]
             return self._base_K*var_p
-        n_seqs = len (seqs.index)
+        n_seqs = len (seqs)
         K = np.zeros((n_seqs, n_seqs))
         for n1,i in zip(range(n_seqs), seqs.index):
             for n2,j in zip(range (n_seqs), seqs.index):
@@ -544,7 +544,9 @@ class StructureKernel (GPKernel):
         if seqs is None:
             var_p = hypers[0]
             return self._base_K*var_p
-        n_seqs = len (seqs.index)
+        if not isinstance(seqs, pd.DataFrame):
+            seqs = pd.DataFrame(seqs)
+        n_seqs = len (seqs)
         K = np.zeros((n_seqs, n_seqs))
         for n1 in range(n_seqs):
             for n2 in range(n1+1):

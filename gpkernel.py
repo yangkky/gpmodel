@@ -544,20 +544,22 @@ class StructureKernel (GPKernel):
         if seqs is None:
             var_p = hypers[0]
             return self._base_K*var_p
-        if not isinstance(seqs, pd.DataFrame):
-            seqs = pd.DataFrame(seqs)
         n_seqs = len (seqs)
         K = np.zeros((n_seqs, n_seqs))
         for n1 in range(n_seqs):
             for n2 in range(n1+1):
-                seq1 = seqs.iloc[n1]
-                seq2 = seqs.iloc[n2]
-                K[n1,n2] = self.calc_kernel (seq1, seq2,
-                                             hypers=hypers, normalize=normalize)
+                if isinstance(seqs, pd.DataFrame):
+                    seq1 = seqs.iloc[n1]
+                    seq2 = seqs.iloc[n2]
+                else:
+                    seq1 = seqs[n1]
+                    seq2 = seqs[n2]
+                K[n1,n2] = self.calc_kernel(seq1, seq2,
+                                            hypers=hypers, normalize=normalize)
                 if n1 != n2:
                     K[n2, n1] = K[n1, n2]
         return K
-
+    @profile
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Calculate the structure kernel between two sequences.
 
@@ -645,7 +647,7 @@ class StructureKernel (GPKernel):
         except (KeyError, AttributeError):
             seq = ''.join([s for s in seq])
             contacts = []
-            for i,con in enumerate(self.contacts):
+            for i, con in enumerate(self.contacts):
                 term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
                 contacts.append(term)
             return contacts

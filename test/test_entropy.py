@@ -45,7 +45,7 @@ assert np.isclose(ent.k_star(seqs.loc[['A', 'B', 'D']]),
                              K_no_noise[[0,1,3]]).all()
 # posterior covariance
 new_seqs = pd.DataFrame([['B','Y','M','A'],['N','T','H','A'], ['G','T','M','A']],
-                    index=['A','B','C'], columns=[0,1,2,3])
+                    index=[1, 2, 3], columns=[0,1,2,3])
 k_off = np.matrix(ent.k_star(new_seqs))
 cov = kernel.make_K(new_seqs, hypers=[vp])
 real_post = cov - k_off * np.linalg.inv(ent._Ky) * k_off.T
@@ -57,7 +57,7 @@ assert np.isclose(ent.entropy(new_seqs), H)
 # expected entropy
 probabilities = np.array([[0.1, 0.9, 0.4]]).T
 assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.11849477318)
-
+print '_____'
 print ent.maximize_expected_entropy(new_seqs, probabilities, 2)
 
 

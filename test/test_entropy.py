@@ -26,7 +26,7 @@ K = pd.DataFrame([[2.0,0.0,1.0,2.0],
                  index=seqs.index,
                  columns=seqs.index)
 
-ent = gpentropy.GPEntropy(kernel, [vp], var_n=vn, observations=seqs)
+ent = gpentropy.GPEntropy(kernel=kernel, hypers=[vp], var_n=vn, observations=seqs)
 
 assert np.isclose(ent._Ky, K.values / 2*vp + np.eye(4) * vn).all()
 

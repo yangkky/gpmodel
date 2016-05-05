@@ -25,7 +25,7 @@ class GPModel(object):
         mean (float): mean of unnormed Ys
         std (float): standard deviation of unnormed Ys
         kern (GPKernel): a kernel for calculating covariances
-        Hypers (namedtuple): the hyperparameters
+        hypers (namedtuple): the hyperparameters
         regr (Boolean): classification or regression
         _K (pdDataFrame): Covariance matrix
         _Ky (np.matrix): noisy covariance matrix [K+var_n*I]

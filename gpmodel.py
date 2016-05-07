@@ -49,22 +49,24 @@ class GPModel(object):
             kern (GPKernel): kernel to use
 
         Optional keyword parameters:
-            guesses (iterable): initial guesses for the hyperparameters.
+            guesses (iterable): initial guesses for the
+                hyperparameters.
                 Default is [1 for _ in range(len(hypers))].
-            objective (String): objective function to use in training model. Choices
-                are 'log_ML' and 'LOO_log_p'. Classification must be trained
-                on 'log_ML.' Default is 'log_ML'.
+            objective (String): objective function to use in training
+                model. Choices are 'log_ML' and 'LOO_log_p'.
+                Classification must be trained on 'log_ML.' Default
+                is 'log_ML'.
         """
         self.guesses = kwargs.get('guesses', None)
         objective = kwargs.get('objective', 'log_ML')
         self.kern = kern
 
-        if objective == 'log_ML':
+        if objective == 'log_ML' or objective == '_log_ML':
             self.objective = self._log_ML
-        elif objective == 'LOO_log_p':
+        elif objective == 'LOO_log_p' or objective == '_LOO_log_p':
             self.objective = self._LOO_log_p
         else:
-            raise AttributeError ('Invalid objective')
+            raise AttributeError (objective + ' is not a valid objective')
 
     def _set_params(self, **kwargs):
         ''' Sets parameters for the model.
@@ -167,8 +169,8 @@ class GPModel(object):
             self._Ky = self._K+self.hypers.var_n*np.identity(len(self.X_seqs))
             self._L = np.linalg.cholesky(self._Ky)
             self._alpha = np.linalg.lstsq(self._L.T,
-                                         np.linalg.lstsq (self._L,
-                                                          np.matrix(self.normed_Y).T)[0])[0]
+                                         np.linalg.lstsq(self._L,
+                                            np.matrix(self.normed_Y).T)[0])[0]
             self.ML = self._log_ML(self.hypers)
             self.log_p = self._LOO_log_p(self.hypers)
         else:
@@ -183,6 +185,80 @@ class GPModel(object):
                                            self._f_hat)))
             self.ML = self._log_ML(self.hypers)
 
+    def batch_UB_bandit(self, sequences, n=10, predictions=None):
+        observed_X = self.X_seqs
+        observed_Y = self.normed_Y
+        Ky = self._Ky
+        selected = []
+        print 'Training kernel on new sequences...'
+        self.kern.train(sequences)
+        print 'Making initial predictions...'
+        if self.regr:
+            h = self.hypers[1::]
+        else:
+            h = self.hypers
+        # find all k*s
+        k_stars = [self.kern.calc_kernel(ns, ns, hypers=h)
+                   for ns in sequences.index]
+        # find k vectors
+        ks = [np.matrix([self.kern.calc_kernel(s, seq1, hypers=h)
+                         for seq1 in self.X_seqs.index])
+              for s in sequences.index]
+        # calculate initial UBs if necessary
+        if predictions is None:
+            predictions = np.array([self._predict(k, k_star, unnorm=False)
+                                    for k, k_star
+                     in zip(ks, k_stars)])
+        UBs = predictions[:,0] + np.sqrt(predictions[:,1]) * 2
+        # initialize df, with same indices as sequences
+        df = pd.DataFrame(predictions, index=sequences.index,
+                          columns=['mean', 'var'])
+        df['UB'] = UBs
+        df['k_star'] = k_stars
+        df['k'] = ks
+        print 'Entering loop...'
+        for i in range(n):
+            print '\t%d' %i
+            # first selection
+            id_max = df[['UB']].idxmax()
+            print max(df['UB'])
+            selected.append(id_max.iloc[0])
+            if i != n-1:
+                observed_X = observed_X.append(sequences.loc[id_max])
+                observed_Y = observed_Y.append(df.loc[id_max]['mean'])
+                # update
+                Ky = np.append(Ky, df.loc[id_max]['k'].values[0], axis=0)
+                new_column = np.append(df.loc[id_max]['k'].values[0].flatten(),
+                                np.array([df.loc[id_max]['k_star'].values
+                                          + self.hypers.var_n]),
+                               axis=1)
+                Ky = np.append(Ky, new_column.T, axis=1)
+                L = np.linalg.cholesky(Ky)
+                alpha = np.linalg.lstsq(L.T,
+                                        np.linalg.lstsq(L,
+                                                np.matrix(observed_Y).T)[0])[0]
+                df = df.drop(id_max, axis=0)
+                ks = []
+                for ind in df.index:
+                    new_k = np.append(df.loc[ind]['k'],
+                              np.array([[self.kern.calc_kernel(ind,
+                                                    id_max.values[0],
+                                                    hypers=h)]]),
+                             axis=1)
+                    ks.append(new_k)
+                df['k'] = ks
+                predictions = np.array([self._predict(k, k_star,
+                                                      alpha=alpha,
+                                                      L=L,
+                                                      unnorm=False)
+                                    for k, k_star
+                     in zip(df['k'], df['k_star'])])
+                UBs = predictions[:,0] + np.sqrt(predictions[:,1]) * 2
+                df['UB'] = UBs
+                df['mean'] = predictions[:,0]
+                df['var'] = predictions[:,1]
+
+        return sequences.loc[selected], selected
 
     def _normalize(self, data):
         """ Normalize the given data.
@@ -211,7 +287,7 @@ class GPModel(object):
         """
         return normed*self.std + self.mean
 
-    def _predict (self, k, k_star):
+    def _predict (self, k, k_star, alpha=None, L=None, unnorm=True):
         """ Make prediction for one sequence.
 
         Predicts the mean and variance for one new sequence given its
@@ -228,9 +304,16 @@ class GPModel(object):
                 classification
         """
         if self.regr:
-            E = self.unnormalize(k*self._alpha)
-            v = np.linalg.lstsq(self._L,k.T)[0]
-            var = (k_star - v.T*v) * self.std**2
+            if alpha is None:
+                alpha = self._alpha
+            if L is None:
+                L = self._L
+            E = k*alpha
+            v = np.linalg.lstsq(L,k.T)[0]
+            var = k_star - v.T*v
+            if unnorm:
+                E = self.unnormalize(E)
+                var *= 2 * self.std
             return (E.item(),var.item())
         else:
             f_bar = k*self._grad.T

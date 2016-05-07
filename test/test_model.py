@@ -75,8 +75,6 @@ def test_creation():
     assert model.log_p == lp
     assert model.hypers == hypers
 
-
-
 def test_score():
     print 'Testing score ...'
     model = gpmodel.GPModel(struct)
@@ -116,7 +114,6 @@ def test_score():
     assert AUC == score
 
     print 'score passes all tests. '
-
 
 def test_regression ():
     model = gpmodel.GPModel(struct)
@@ -262,16 +259,12 @@ def test_regression ():
 
     print 'Regression model passes all tests.\n'
 
-
-
-
 def test_classification ():
     print 'Testing constructors for classification models...'
     model = gpmodel.GPModel(struct, objective='LOO_log_p')
     pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
-    print model.regr
     test_F = pd.Series([-.5,.5,.6,.1])
     assert close_enough(model.hypers.var_p, 43.814739881967405),\
     'Classification model.hypers.var_p is incorrect'
@@ -366,12 +359,23 @@ def test_classification ():
 
     print 'Classification models pass all tests.'
 
+def test_UB():
+    model = gpmodel.GPModel(struct)
+    model.fit(seqs, reg_Ys)
+    new_seqs = pd.DataFrame([['R','Y','H','A'],
+                             ['N','T','H','A'],
+                             ['G','T','M','A'],
+                             ['N', 'T', 'M', 'A']],
+                            index=['1', '2', '3', '4'], columns=[0,1,2,3])
+    print model.batch_UB_bandit(new_seqs, n=3)
+
 def close_enough(f1,f2):
     return (f1-f2)**2 < 1e-7
 
 
 if __name__=="__main__":
-    test_creation()
-    test_regression()
-    test_classification()
-    test_score
+#     test_creation()
+#     test_regression()
+#     test_classification()
+#     test_score
+    test_UB()

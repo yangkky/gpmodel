@@ -559,7 +559,7 @@ class StructureKernel (GPKernel):
                 if n1 != n2:
                     K[n2, n1] = K[n1, n2]
         return K
-    @profile
+
     def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Calculate the structure kernel between two sequences.
 

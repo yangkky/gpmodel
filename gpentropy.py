@@ -55,19 +55,30 @@ class GPEntropy(object):
         v = np.linalg.lstsq(self._L,k_off.T)[0]
         return cov - v.T*v
 
+    def maximize_entropy(self, X, n):
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        return self._lazy_greedy(X, self.entropy, n)
+
     def maximize_expected_entropy(self, X, probabilities, n):
         if isinstance(X, pd.DataFrame):
             X = X.values
+        return self._lazy_greedy(X, self.expected_entropy, n,
+                                probabilities=probabilities)
+
+    def _lazy_greedy(self, X, func, n, **kwargs):
         UBs = [np.inf for _ in X]
         UBs = pd.DataFrame(UBs, columns=['UB'])
         selected = []
         H = 0
         for i in range(n):
             found = False
+            print selected
             while not found:
                 try_inds = selected + [UBs.index[0]]
-                del_H = self.expected_entropy(X[try_inds],
-                                              probabilities[try_inds]) - H
+                new_args = {k:kwargs[k][try_inds] for k in kwargs.keys()}
+                del_H = func(X[try_inds],**new_args) - H
+                print del_H
                 UBs.iloc[0,0] = del_H
                 found = (del_H > UBs.iloc[1,0])
                 if found:

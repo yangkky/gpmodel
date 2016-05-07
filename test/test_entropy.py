@@ -60,4 +60,13 @@ assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.11849477318)
 print '_____'
 print ent.maximize_expected_entropy(new_seqs, probabilities, 2)
 
+new_seqs = pd.DataFrame([['R','Y','H','A'],
+                         ['N','T','H','A'],
+                         ['G','T','M','A'],
+                         ['N', 'T', 'M', 'A']],
+                        index=['1', '2', '3', '4'], columns=[0,1,2,3])
+probabilities = np.array([[0.1, 0.9, 0.4, 0.3]]).T
+
+print ent.maximize_entropy(new_seqs, 2)
+
 

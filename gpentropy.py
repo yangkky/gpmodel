@@ -73,12 +73,10 @@ class GPEntropy(object):
         H = 0
         for i in range(n):
             found = False
-            print selected
             while not found:
                 try_inds = selected + [UBs.index[0]]
                 new_args = {k:kwargs[k][try_inds] for k in kwargs.keys()}
                 del_H = func(X[try_inds],**new_args) - H
-                print del_H
                 UBs.iloc[0,0] = del_H
                 found = (del_H > UBs.iloc[1,0])
                 if found:

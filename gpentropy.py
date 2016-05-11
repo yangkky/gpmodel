@@ -5,9 +5,32 @@ import itertools
 
 class GPEntropy(object):
 
-    """ An object for calculating the entropy of GPs. """
+    """ An object for calculating the entropy of Gaussian Processes.
 
-    def __init__(self, kernel=None, hypers=None, var_n=0, observations=None, model=None):
+    Attributes:
+        kernel (GPKernel): kernel to use for calculating covariances
+        var_n (float): measurement variance
+        hypers (iterable): hyperparameters for the kernel
+        observed (pd.DataFrame): observed inputs
+        _Ky (np.matrix): noisy covariance matrix [K+var_n*I]
+        _L (np.matrix): lower triangular Cholesky decomposition of Ky
+    """
+
+    def __init__(self, kernel=None, hypers=None, var_n=0,
+                 observations=None, model=None):
+        """ Create a new GPEntropy object.
+
+        Create a new GPEntropy object either from a GPModel or by specifying
+        the kernel, hyperparameters, and observations. If both are given, the
+        model attributes will be used, and the others ignored.
+
+        Optional keyword parameters:
+            model (GPModel)
+            kernel (GPKernel)
+            hypers (iterable)
+            var_n (float)
+            observations (pd.DataFrame)
+        """
         if model is not None:
             self.kernel = model.kern
             self.var_n = model.hypers[0]
@@ -25,12 +48,38 @@ class GPEntropy(object):
             self.observe(observations)
 
     def entropy(self, X):
-        K = self.posterior_covariance(X)
+        """ Calculate the entropy for a given set of points.
+
+        The entropy is calculated from the posterior covariance of
+        the given points conditioned on the observed points for the
+        GPEntropy object.
+
+        Parameters:
+            X (np.ndarray): new inputs at which to calculate the entropy.
+
+        Returns:
+            H (float)
+        """
+        K = self._posterior_covariance(X)
         L = np.linalg.cholesky(K)
         D = len(X)
         return np.sum(np.log(np.diag(L))) + 0.5 * D * np.log(2*np.pi*np.exp(1))
 
     def expected_entropy(self, X, probabilities):
+        """ Calculate the expected entropy for a given set of points.
+
+        The expected entropy is the sum of theentropy of each subset
+        in the power set of X, weighted by the probability that that
+        is exactly the subset that is functional.
+
+        Parameters:
+            X (np.ndarray): new inputs at which to calculate the entropy.
+            probabilities (np.ndarray): probability that each input
+                is functional
+
+        Returns:
+            H (float)
+        """
         if isinstance(X, pd.DataFrame):
             X = X.values
         if isinstance(probabilities, pd.DataFrame):
@@ -49,24 +98,80 @@ class GPEntropy(object):
                 total += H * prob_for * prob_against
         return total
 
-    def posterior_covariance(self, X):
+    def _posterior_covariance(self, X):
+        """ Calculate the covariance conditioned on observations.
+
+        Parameters:
+            X (np.ndarray): new inputs at which to calculate the entropy.
+
+        Returns:
+            K (np.matrix)
+        """
         cov = self.kernel.make_K(X, hypers=self.hypers)
-        k_off = np.matrix(self.k_star(X))
+        k_off = np.matrix(self._k_star(X))
         v = np.linalg.lstsq(self._L,k_off.T)[0]
         return cov - v.T*v
 
     def maximize_entropy(self, X, n):
+        """ Choose the subset of X that maximizes the entropy.
+
+        Uses the lazy-greedy algorithm to choose a subset of X that
+        maximizes the entropy, conditioned on the observed sequences.
+
+        Parameters:
+            X (np.ndarray): set of inputs
+            n (int): number of inputs to select
+
+        Returns:
+            selected (np.ndarray): selected inputs
+            H (float): entropy of selected inputs
+            selected: positional indices of selected inputs relative
+                to original X
+        """
         if isinstance(X, pd.DataFrame):
             X = X.values
         return self._lazy_greedy(X, self.entropy, n)
 
     def maximize_expected_entropy(self, X, probabilities, n):
+        """ Choose the subset of X that maximizes the expected entropy.
+
+        Uses the lazy-greedy algorithm to choose a subset of X that
+        maximizes the exptected entropy, conditioned on the observed
+        sequences.
+
+        Parameters:
+            X (np.ndarray): set of inputs
+            probabilities (np.ndarray): probability that each input
+                is functional
+            n (int): number of inputs to select
+
+        Returns:
+            selected (np.ndarray): selected inputs
+            H (float): expected entropy of selected inputs
+            selected: positional indices of selected inputs relative
+                to original X
+        """
         if isinstance(X, pd.DataFrame):
             X = X.values
         return self._lazy_greedy(X, self.expected_entropy, n,
                                 probabilities=probabilities)
 
     def _lazy_greedy(self, X, func, n, **kwargs):
+        """ Implementation of lazy-greedy for optimizing set functions.
+
+        Parameters:
+            X (np.ndarray): set of inputs
+            func (function): submodular set function to maximize
+            n (int): number of inputs to select
+            **kwargs: additional arguments for func. Must be indexed
+                identically with X.
+
+        Returns:
+            selected (np.ndarray): selected inputs
+            H (float): function value of selected inputs
+            selected: positional indices of selected inputs relative
+                to original X
+        """
         UBs = [np.inf for _ in X]
         UBs = pd.DataFrame(UBs, columns=['UB'])
         selected = []
@@ -95,6 +200,14 @@ class GPEntropy(object):
         return X[selected], H, selected
 
     def observe(self, observations):
+        """ Update the observations.
+
+        Parameters:
+            observations (pd.DataFrame): new observations
+
+        Returns:
+            None
+        """
         self.observed = pd.concat([self.observed, observations])
         # reindex everything
         self.observed.index = [str(_) for _ in range(len(self.observed))]
@@ -103,7 +216,15 @@ class GPEntropy(object):
         self._Ky = K+self.var_n*np.identity(len(self.observed))
         self._L = np.linalg.cholesky(self._Ky)
 
-    def k_star(self, new_x):
+    def _k_star(self, new_x):
+        """ Calculate covariance of new inputs with observed inputs.
+
+        Parameters:
+            new_x (np.ndarray): new inputs
+
+        Returns:
+            k (np.ndarray)
+        """
         observed = self.observed
         if isinstance(new_x, pd.DataFrame):
             new_x = new_x.values

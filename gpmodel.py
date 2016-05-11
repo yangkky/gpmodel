@@ -186,6 +186,22 @@ class GPModel(object):
             self.ML = self._log_ML(self.hypers)
 
     def batch_UB_bandit(self, sequences, n=10, predictions=None):
+        """ Use the batch UB bandit algorithm to select sequences.
+
+        Select a sequence that maximizes the UB, add it to the observed
+        sequences, and repeat.
+
+        Parameters:
+            sequences (pd.DataFrame): sequences to select from
+
+        Optional keyword parameters:
+            n (int): number to select. Default is 10.
+            predictions (iterable): initial predictions. Default is None.
+
+        Returns:
+            selected_sequences (pd.DataFrame)
+            inds (list)
+        """
         observed_X = self.X_seqs
         observed_Y = self.normed_Y
         Ky = self._Ky

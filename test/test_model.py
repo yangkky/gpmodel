@@ -191,12 +191,10 @@ def test_regression ():
     ED = (kD*np.linalg.inv(model._Ky)*Y_mat.T) * s + m
     k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
                                       test_seqs.loc['A'],
-                                      normalize=True)*model.hypers.var_p\
-               + model.hypers.var_n
+                                      normalize=True)*model.hypers.var_p
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
-                                      normalize=True)*model.hypers.var_p\
-                   + model.hypers.var_n
+                                      normalize=True)*model.hypers.var_p
 
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
@@ -204,8 +202,8 @@ def test_regression ():
 
     assert close_enough(EA, predictions[0][0])
     assert close_enough(ED, predictions[1][0])
-    assert close_enough(var_A, predictions[0][1])
-    assert close_enough(var_D, predictions[1][1])
+    assert np.isclose(var_A, predictions[0][1])
+    assert np.isclose(var_D, predictions[1][1])
 
     [(E,v)] = model.predicts(test_seqs.loc[['D']])
     assert close_enough(E,ED)
@@ -227,15 +225,11 @@ def test_regression ():
     k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
                                       test_seqs.loc['A'],
                                       [model.hypers.sigma_f,
-                                                  model.hypers.ell])\
-                   + model.hypers.var_n
-
+                                                  model.hypers.ell])
     k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
                                       test_seqs.loc['D'],
                                       [model.hypers.sigma_f,
-                                                  model.hypers.ell])\
-                   + model.hypers.var_n
-
+                                                  model.hypers.ell])
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
@@ -374,8 +368,8 @@ def close_enough(f1,f2):
 
 
 if __name__=="__main__":
-#     test_creation()
-#     test_regression()
-#     test_classification()
-#     test_score
+    test_creation()
+    test_regression()
+    test_classification()
+    test_score
     test_UB()

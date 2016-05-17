@@ -329,7 +329,7 @@ class GPModel(object):
             var = k_star - v.T*v
             if unnorm:
                 E = self.unnormalize(E)
-                var *= 2 * self.std
+                var *= self.std**2
             return (E.item(),var.item())
         else:
             f_bar = k*self._grad.T
@@ -424,8 +424,6 @@ class GPModel(object):
                            for seq1 in self.X_seqs.index])
             k_star = self.kern.calc_kernel(ns, ns,
                                            hypers=h)
-            if self.regr:
-                k_star += self.hypers.var_n
             predictions.append(self._predict(k, k_star))
         if delete:
             inds = list(set(new_seqs.index) - set(self.X_seqs.index))
@@ -708,7 +706,6 @@ class GPModel(object):
                              Y=Y,
                              hypers=attributes['hypers'])
             return model
-
         except KeyError:
             model.fit(X_seqs, Y)
             return model

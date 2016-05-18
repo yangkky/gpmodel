@@ -34,6 +34,9 @@ def test_creation():
     model._set_params(objective='log_ML')
     assert model.objective == model._log_ML
 
+    model_2 = gpmodel.GPModel(struct, objective='log_ML')
+    assert model != model_2
+
     # create a model
     model = gpmodel.GPModel(struct, guesses=(2,2), objective='LOO_log_p')
     # pickle the model
@@ -46,10 +49,15 @@ def test_creation():
     assert model.objective == model._LOO_log_p
     assert model.guesses == (2,2)
 
+
     # fit the model
     model.fit(seqs, reg_Ys)
     ML = model.ML
     lp = model.log_p
+    K = model._K
+    Ky = model._Ky
+    alpha = model._alpha
+    L = model._L
     hypers = model.hypers
     # pickle the model
     model.dump('test_creation.pkl')
@@ -61,19 +69,10 @@ def test_creation():
     assert model.ML == ML
     assert model.log_p == lp
     assert model.hypers == hypers
-
-    model = gpmodel.GPModel(struct, guesses=(2,2), objective='LOO_log_p')
-    model._set_params(X=seqs, Y=reg_Ys)
-    # pickle the model
-    model.dump('test_creation.pkl')
-    # reload the model
-    model = gpmodel.GPModel.load('test_creation.pkl')
-    # delete the pickle
-    os.remove('test_creation.pkl')
-    # test the model
-    assert model.ML == ML
-    assert model.log_p == lp
-    assert model.hypers == hypers
+    assert np.isclose(model._K, K).all()
+    assert np.isclose(model._Ky, Ky).all()
+    assert np.isclose(model._alpha, alpha).all()
+    assert np.isclose(model._L, L).all()
 
 def test_score():
     print 'Testing score ...'

@@ -57,16 +57,11 @@ class GPModel(object):
                 Classification must be trained on 'log_ML.' Default
                 is 'log_ML'.
         """
-        self.guesses = kwargs.get('guesses', None)
-        objective = kwargs.get('objective', 'log_ML')
         self.kern = kern
-
-        if objective == 'log_ML' or objective == '_log_ML':
-            self.objective = self._log_ML
-        elif objective == 'LOO_log_p' or objective == '_LOO_log_p':
-            self.objective = self._LOO_log_p
-        else:
-            raise AttributeError (objective + ' is not a valid objective')
+        self.guesses = None
+        if 'objective' not in kwargs.keys():
+            kwargs['objective'] = 'log_ML'
+        self._set_params(**kwargs)
 
     def _set_params(self, **kwargs):
         ''' Sets parameters for the model.
@@ -77,32 +72,42 @@ class GPModel(object):
             hypers (iterable)
             X (pandas.DataFrame)
             Y (pandas.Series)
+            regr (Boolean)
+            _K (pdDataFrame)
+            _Ky (np.matrix)
+            _L (np.matrix)
+            _alpha (np.matrix)
+            ML (float)
+            log_p (float)
+            _ell (int)
+            _f_hat (Series)
+            _W (np.matrix)
+            _W_root (np.matrix)
+            _grad (np.matrix)
         '''
-        self.guesses = kwargs.get('guesses', self.guesses)
+        for key, value in kwargs.iteritems():
+            setattr(self, key, value)
         objective = kwargs.get('objective', None)
         hypers = kwargs.get('hypers', None)
-        X = kwargs.get('X', None)
-        Y = kwargs.get('Y', None)
-
-        if objective == 'log_ML':
-            self.objective = self._log_ML
-        elif objective == 'LOO_log_p':
-            self.objective = self._LOO_log_p
-
-        if X is not None:
-            self.X_seqs = X
-            self.kern.set_X(X)
-        if Y is not None:
-            self.Y = Y
-            self.mean, self.std, self.normed_Y = self._normalize(self.Y)
-            self.regr = not self.is_class()
-
-        self._ell = len(self.Y)
-        if len(self.X_seqs) != self._ell:
-            raise ValueError ('X_seqs and Y must have the same length.')
-
+        if objective is not None:
+            if objective == 'log_ML':
+                self.objective = self._log_ML
+            elif objective == 'LOO_log_p':
+                self.objective = self._LOO_log_p
+            else:
+                raise AttributeError (objective + ' is not a valid objective')
         if hypers is not None:
-            self._set_hypers(hypers)
+            if type(hypers) is not dict:
+                if self.regr:
+                    hypers_list = ['var_n'] + self.kern.hypers
+                    Hypers = namedtuple('Hypers', hypers_list)
+                else:
+                    Hypers = namedtuple('Hypers', self.kern.hypers)
+                self.hypers = Hypers._make(hypers)
+            else:
+                Hypers=namedtuple('Hypers', hypers.keys())
+                self.hypers = Hypers(**hypers)
+
 
     def fit(self, X_seqs, Y):
         ''' Fit the model to the given data.
@@ -158,7 +163,6 @@ class GPModel(object):
             else:
                 Hypers = namedtuple('Hypers', self.kern.hypers)
             self.hypers = Hypers._make(hypers)
-
         else:
             Hypers=namedtuple('Hypers', hypers.keys())
             self.hypers = Hypers(**hypers)
@@ -554,7 +558,6 @@ class GPModel(object):
             f_hat = f_new
         exit ('Maximum number of evaluations reached without convergence')
 
-
     def _logq(self, F, hypers):
         ''' Calculate negative log marginal likelihood.
 
@@ -687,47 +690,21 @@ class GPModel(object):
         '''
         with open(model,'r') as m_file:
             attributes = pickle.load(m_file)
-
-        model = GPModel(attributes['kern'],
-                        guesses=attributes['guesses'],
-                        objective=attributes['objective'])
-
-        # if given X and Y but not hypers, fit
-        # if given both, put them both in
-
-        try:
-            X_seqs = attributes['X_seqs']
-            Y = attributes['Y']
-        except KeyError:
-            return model
-
-        try:
-            model._set_params(X=X_seqs,
-                             Y=Y,
-                             hypers=attributes['hypers'])
-            return model
-        except KeyError:
-            model.fit(X_seqs, Y)
-            return model
+        model = GPModel(attributes['kern'])
+        del attributes['kern']
+        model._set_params(**attributes)
+        return model
 
     def dump(self, f):
         ''' Save the model.
 
         Use cPickle to save a dict containing the model's
-        X, Y, kern, and hypers.
+        attributes.
 
         Parameters:
             f (string): path to where model should be saved
         '''
-        save_me = {}
-        try:
-            save_me['X_seqs'] = self.X_seqs
-        except AttributeError:
-            pass
-        try:
-            save_me['Y'] = self.Y
-        except AttributeError:
-            pass
+        save_me = self.__dict__
         if self.objective == self._log_ML:
             save_me['objective'] = 'log_ML'
         else:
@@ -739,7 +716,7 @@ class GPModel(object):
             save_me['hypers'] = hypers
         except AttributeError:
             pass
-        save_me['kern'] = self.kern
         with open(f, 'wb') as f:
             pickle.dump(save_me, f)
+
 

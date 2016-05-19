@@ -1,0 +1,105 @@
+import sys
+sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
+from chimera_tools import *
+import pandas as pd
+import numpy as np
+import pickle
+
+contacts = [(0,1), (0,2), (1,2)]
+sample_space = [('A', 'B', 'C'), ('A', 'A', 'C'), ('B', 'A', 'D')]
+contact_terms = [((0, 'A'), (1, 'A')), ((0, 'A'), (1, 'C')),
+                 ((0, 'C'), (1, 'A')), ((0, 'C'), (1, 'C')),
+                 ((0, 'B'), (1, 'A')), ((0, 'B'), (1, 'C')),
+                 ((0, 'A'), (2, 'A')), ((0, 'A'), (2, 'B')),
+                 ((0, 'A'), (2, 'D')), ((0, 'C'), (2, 'A')),
+                 ((0, 'C'), (2, 'B')), ((0, 'C'), (2, 'D')),
+                 ((0, 'B'), (2, 'A')), ((0, 'B'), (2, 'B')),
+                 ((0, 'B'), (2, 'D')), ((1, 'A'), (2, 'A')),
+                 ((1, 'A'), (2, 'B')), ((1, 'A'), (2, 'D')),
+                 ((1, 'C'), (2, 'A')), ((1, 'C'), (2, 'B')),
+                 ((1, 'C'), (2, 'D'))]
+contact_X = np.array([[1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                       0, 0, 0, 1, 0, 0, 0, 0],
+                      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                       0, 1, 0, 0, 1, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1,
+                       0, 0, 0, 0, 0, 1, 0, 0]])
+
+sequence_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0, 0],
+                       [0, 1, 0, 1, 0, 0, 0, 0, 1],
+                       [0, 1, 0, 0, 0, 1, 0, 1, 0]])
+sequence_terms = [(0, 'A'), (0, 'B'), (0, 'C'), (1, 'A'), (1, 'A'),
+                  (1, 'C'), (2, 'B'), (2, 'A'), (2, 'D')]
+
+all_X = np.array([[1, 0, 0, 1, 0, 0],
+                  [0, 1, 0, 1, 0, 1],
+                  [0, 1, 0, 0, 1, 0]])
+all_terms =  [[(0, 'A'), (2, 'B'), ((0, 'A'), (1, 'A')), ((0, 'A'), (2, 'B')),
+               ((1, 'A'), (2, 'B'))], [(0, 'B')],
+              [(0, 'C'), (1, 'A'), ((0, 'A'), (1, 'C')), ((0, 'C'), (1, 'A')),
+               ((0, 'C'), (1, 'C')), ((0, 'A'), (2, 'A')), ((0, 'A'), (2, 'D')),
+               ((0, 'C'), (2, 'A')), ((0, 'C'), (2, 'B')), ((0, 'C'), (2, 'D')),
+               ((0, 'B'), (2, 'B')), ((1, 'A'), (2, 'A')), ((1, 'C'), (2, 'B')),
+               ((1, 'C'), (2, 'D'))], [(1, 'A')],
+              [(1, 'C'), (2, 'A'), ((0, 'B'), (1, 'C')), ((0, 'B'), (2, 'A')),
+               ((1, 'C'), (2, 'A'))],
+              [(2, 'D'), ((0, 'B'), (1, 'A')), ((0, 'B'), (2, 'D')), ((1, 'A'),
+                                                                      (2, 'D'))]]
+
+seqs = ['AAB', 'BAD', 'BCA']
+assignments = {0:0, 1:0, 2:1}
+
+def test_contacting_terms():
+    assert contact_terms == contacting_terms(sample_space, contacts)
+
+def test_sequence_terms():
+    assert sequence_terms == make_sequence_terms(sample_space)
+
+def test_contact_X():
+    X, terms = make_contact_X(seqs, sample_space, contacts)
+    assert np.array_equal(X, contact_X)
+    assert terms == contact_terms
+
+def test_sequence_X():
+    X, terms = make_sequence_X(seqs, sample_space)
+    assert np.array_equal(X, sequence_X)
+    assert terms == sequence_terms
+
+def test_X():
+    X, terms = make_X(seqs, sample_space, contacts)
+    assert np.array_equal(X, all_X)
+    assert terms == all_terms
+
+def test_contacts():
+    terms = get_contacts(seqs[0], contacts)
+    assert terms == [((0, 'A'), (1, 'A')), ((0, 'A'), (2, 'B')),
+                     ((1, 'A'), (2, 'B'))]
+
+def test_sequence():
+    seq = make_sequence('02', assignments, sample_space)
+    assert seq == ['A', 'A', 'D']
+    seq = substitute_blocks('AAD', [(2,0)], assignments, sample_space)
+    assert seq == 'CCD'
+
+def test_loads():
+    with open('data/assignment_dict.pkl', 'rb') as f:
+        real_dict = pickle.load(f)
+    assert load_assignments('data/nlibrary.output') == real_dict
+    assert make_name_dict('data/test_dict.xlsx') == \
+    {'first':'012', 'second':'210', 'third':'102'}
+
+def test_zeroing():
+    assert zero_index('21123') == '10012'
+
+
+
+if __name__=="__main__":
+    test_contacting_terms()
+    test_sequence_terms()
+    test_contact_X()
+    test_sequence_X()
+    test_X()
+    test_contacts()
+    test_sequence()
+    test_zeroing()
+    test_loads()

@@ -10,11 +10,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    dir = os.path.dirname(__file__)
     print 'Loading T50 data...'
-    a_and_c = os.path.join(dir, 'alignment_and_contacts.pkl')
-    seq_file = os.path.join(dir, 'X_seqs.pkl')
-    Y_file = os.path.join(dir, 'Ys.pkl')
+    a_and_c = os.path.join('data/alignment_and_contacts.pkl')
+    seq_file = os.path.join('data/X_seqs.pkl')
+    Y_file = os.path.join('data/Ys.pkl')
     with open (a_and_c) as f:
         cons, ss = pickle.load(f)
     with open (seq_file) as f:

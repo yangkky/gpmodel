@@ -39,17 +39,17 @@ assert np.isclose(ent._Ky, real_K).all()
 assert np.isclose(ent._L, np.linalg.cholesky(real_K)).all()
 # k_star
 real_k_star = K_no_noise[0]
-assert np.isclose(ent.k_star(seqs.loc['A']), real_k_star).all()
-assert np.isclose(ent.k_star(seqs.loc[['A', 'B']]), K_no_noise[0:2]).all()
-assert np.isclose(ent.k_star(seqs.loc[['A', 'B', 'D']]),
+assert np.isclose(ent._k_star(seqs.loc['A']), real_k_star).all()
+assert np.isclose(ent._k_star(seqs.loc[['A', 'B']]), K_no_noise[0:2]).all()
+assert np.isclose(ent._k_star(seqs.loc[['A', 'B', 'D']]),
                              K_no_noise[[0,1,3]]).all()
 # posterior covariance
 new_seqs = pd.DataFrame([['B','Y','M','A'],['N','T','H','A'], ['G','T','M','A']],
                     index=[1, 2, 3], columns=[0,1,2,3])
-k_off = np.matrix(ent.k_star(new_seqs))
+k_off = np.matrix(ent._k_star(new_seqs))
 cov = kernel.make_K(new_seqs, hypers=[vp])
 real_post = cov - k_off * np.linalg.inv(ent._Ky) * k_off.T
-assert np.isclose(ent.posterior_covariance(new_seqs), real_post).all()
+assert np.isclose(ent._posterior_covariance(new_seqs), real_post).all()
 # entropy
 H =  0.5 * (np.log(np.linalg.det(real_post))
             + len(new_seqs) * np.log(2*np.pi*np.exp(1)))
@@ -57,8 +57,10 @@ assert np.isclose(ent.entropy(new_seqs), H)
 # expected entropy
 probabilities = np.array([[0.1, 0.9, 0.4]]).T
 assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.11849477318)
-print '_____'
-print ent.maximize_expected_entropy(new_seqs, probabilities, 2)
+s, H, chosen = ent.maximize_expected_entropy(new_seqs, probabilities, 2)
+assert np.isclose(H, 1.0432025064204087)
+assert chosen == [1,2]
+assert np.array_equal(s, new_seqs.iloc[chosen].values)
 
 new_seqs = pd.DataFrame([['R','Y','H','A'],
                          ['N','T','H','A'],
@@ -67,6 +69,10 @@ new_seqs = pd.DataFrame([['R','Y','H','A'],
                         index=['1', '2', '3', '4'], columns=[0,1,2,3])
 probabilities = np.array([[0.1, 0.9, 0.4, 0.3]]).T
 
-print ent.maximize_entropy(new_seqs, 2)
+s, H, chosen = ent.maximize_entropy(new_seqs, 2)
+assert np.isclose(H, 1.5849798517056266)
+assert chosen == [1,2]
+assert np.array_equal(s, new_seqs.iloc[chosen].values)
+
 
 

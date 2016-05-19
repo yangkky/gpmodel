@@ -16,7 +16,8 @@ def contacting_terms (sample_space, contacts):
            are considered to be in contact
 
     Returns:
-        list: Each item in the list is a contact in the form ((pos1,aa1),(pos2,aa2))
+        contact_terms (list): Each item in the list is a contact in the form
+            ((pos1,aa1),(pos2,aa2))
     """
     contact_terms = []
     for contact in contacts:
@@ -29,7 +30,34 @@ def contacting_terms (sample_space, contacts):
                 contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
     return contact_terms
 
+def make_sequence_terms (sample_space):
+    """ List the possible (pos, aa) terms.
+
+    Parameters:
+        sample_space (iterable): Each element in sample_space contains the possible
+           amino acids at that position
+
+    Returns:
+         contact_terms (list): Each item in the list is a contact in the form
+            ((pos1,aa1),(pos2,aa2)).
+    """
+    return [(i,t) for i,sp in enumerate(sample_space) for t in sp]
+
 def make_contact_X (seqs, sample_space, contacts):
+    """ Make binary indicator vector for contacts.
+
+    Parameters:
+        seqs (list): each sequence should be a string.
+        sample_space (iterable): Each element in sample_space contains the possible
+           amino acids at that position.
+        contacts (iterable): Each element in contacts pairs two positions that
+           are considered to be in contact.
+
+    Returns:
+        X (list)
+        contact_terms (list): Each item in the list is a contact in the form
+            ((pos1,aa1),(pos2,aa2)).
+    """
     contact_X = []
     contact_terms = contacting_terms(sample_space, contacts)
     for seq in seqs:
@@ -37,23 +65,51 @@ def make_contact_X (seqs, sample_space, contacts):
         inds = [contact_terms.index(c) for c in cons]
         X_row = [1 if i in inds else 0 for i in range(len(contact_terms))]
         contact_X.append(X_row)
-    return contact_X, contact_terms
+    return np.array(contact_X), contact_terms
 
 def make_sequence_X(seqs, sample_space):
-    """ Make Xs for regression based on sequence elements."""
+    """ Make binary indicator vector for sequence terms.
+
+    Parameters:
+        seqs (list): each sequence should be a string.
+        sample_space (iterable): ith term should be a tuple listing the
+            parental residues at the ith position.
+
+    Returns:
+        X (list)
+        sequence_terms (list): Each item in the list is a term in the form
+            (pos,aa).
+    """
     sequence_X = []
-    sequence_terms = [(i,t) for i,sp in enumerate(sample_space) for t in sp]
+    sequence_terms = make_sequence_terms(sample_space)
     for seq in seqs:
         this_terms = [(i,t) for i,t in enumerate(list(seq))]
         inds = [sequence_terms.index(s) for s in this_terms]
         X_row = [1 if i in inds else 0 for i in range(len(sequence_terms))]
         sequence_X.append(X_row)
-    return sequence_X, sequence_terms
+    return np.array(sequence_X), sequence_terms
 
 def make_X(seqs, sample_space, contacts):
-    """ Make combined sequence/structure X. """
+    """ Make combined sequence/structure X.
+
+    Combines columns that completely covary.
+
+    Parameters:
+        seqs (list): each sequence should be a string.
+        sample_space (iterable): Each element in sample_space contains the possible
+           amino acids at that position.
+        contacts (iterable): Each element in contacts pairs two positions that
+           are considered to be in contact.
+
+    Returns:
+        X (np.ndarray)
+        terms (list): Each item in the list is a list of contact terms, sequence
+            terms, or both.
+    """
     seq_X, sequence_terms = make_sequence_X(seqs, sample_space)
     struct_X, contact_terms = make_contact_X(seqs, sample_space, contacts)
+    seq_X = seq_X.tolist()
+    struct_X = struct_X.tolist()
     X = [seq_X[i] + struct_X[i] for i in range(len(seqs))]
     terms = sequence_terms + contact_terms
     X = np.array(X)
@@ -73,27 +129,49 @@ def make_X(seqs, sample_space, contacts):
     return X, new_terms
 
 def get_contacts(seq, contacts):
+    """ Gets the contacting terms for a sequence.
+
+    Parameters:
+        seq (iterable): the sequence
+        contacts (iterable): each term should be a tuple listing two
+            positions that are in contact with each other.
+
+    Returns:
+        contacting_terms (list): each term is of the form
+            ((pos1, aa1), (pos2, aa2))
     """
-    Gets the contacts for seq.
-    """
-    cons = []
-    for con in contacts:
-        term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
-        cons.append(term)
-    return cons
+    return [((con[0],seq[con[0]]),(con[1],seq[con[1]]))
+              for con in contacts]
 
 def load_assignments (assignments_file):
-    """ Convert a SCHEMA assignment file to a dict mapping pos:block. """
+    """ Convert a SCHEMA assignment file to a dict mapping pos:block.
+
+    Parameters:
+        assignments_file (string)
+
+    Returns:
+        assignments (dict)
+    """
     assignments_line = [l for l in open(assignments_file).read().split('\n')
                         if len(l)>0 and l[0]!='#']
     assignment = [ord(l.split('\t')[2]) - ord('A') for l in assignments_line
                   if l.split('\t')[2] !='-']
     nodes_outputfile = [int(l.split('\t')[1])-1 for l in assignments_line
                         if l.split('\t')[2] !='-'] # -1 because counting 0,1,2...
-    return dict(zip(nodes_outputfile,assignment))
+    return dict(zip(nodes_outputfile, assignment))
 
 def make_sequence (code, assignments_dict, sample_space):
-    ''' Returns the chimera amino acid sequence as a list'''
+    ''' Returns the chimera sequence as a list.
+
+    Parameters:
+        sequence (iterable): original sequence
+        assignments_dict (dict): dict mapping sequence position to block
+        sample_space (iterable): ith term should be a tuple listing the
+            parental residues at the ith position.
+
+    Returns:
+        seq (list)
+    '''
     seq = []
     for pos,aa in enumerate(sample_space):
         # Figure out which parent to use at that position
@@ -137,10 +215,18 @@ def substitute_blocks(sequence, blocks, assignments_dict, sample_space):
             new_seq.append(s)
     return ''.join(new_seq)
 
-
 def make_name_dict(dict_file):
-    '''
-    Makes the name dict from a spreadsheet
+    ''' Makes the name dict from a spreadsheet
+
+    The spreadsheet should have a 'name' column and a 'code' column.
+    Names will be converted to all-lowercase. Assumes codes are 1-
+    indexed and zero-indexes them.
+
+    Parameters:
+        dict_file (string): path to Excel file
+
+    Returns:
+        res (dict): maps names to chimera codes
     '''
     name_df = pd.read_excel (dict_file)
     name_df['name'] = [s.lower() for s in name_df['name']]
@@ -153,4 +239,4 @@ def zero_index (code):
     '''
     Takes a 1-indexed chimera code and zero-indexes it
     '''
-    return ''.join ([str(int(x)-1) for x in str(code)])
+    return ''.join([str(int(x)-1) for x in str(code)])

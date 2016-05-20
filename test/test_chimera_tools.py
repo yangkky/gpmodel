@@ -69,11 +69,20 @@ def test_X():
     X, terms = make_X(seqs, sample_space, contacts)
     assert np.array_equal(X, all_X)
     assert terms == all_terms
+    new_seqs = ['CCD', 'CCA']
+    new_X = np.array([[0, 0, 1, 0, 1, 1],
+                      [0, 0, 1, 0, 1, 0]])
+    X, _ = make_X(new_seqs, sample_space, contacts, terms)
+    assert np.array_equal(X, new_X)
 
 def test_contacts():
     terms = get_contacts(seqs[0], contacts)
     assert terms == [((0, 'A'), (1, 'A')), ((0, 'A'), (2, 'B')),
                      ((1, 'A'), (2, 'B'))]
+
+def test_terms():
+    terms = get_terms(seqs[0])
+    assert terms == [(0,'A'), (1,'A'), (2,'B')]
 
 def test_sequence():
     seq = make_sequence('02', assignments, sample_space)
@@ -100,6 +109,7 @@ if __name__=="__main__":
     test_sequence_X()
     test_X()
     test_contacts()
+    test_terms()
     test_sequence()
     test_zeroing()
     test_loads()

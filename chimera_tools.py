@@ -43,6 +43,39 @@ def make_sequence_terms (sample_space):
     """
     return [(i,t) for i,sp in enumerate(sample_space) for t in sp]
 
+def X_from_terms(X_terms, all_terms):
+    """ Make binary indicator vectors.
+
+    Each row of X is a binary indicator vector indicating whether
+    that sequence contains each of the terms of interest. If all_terms
+    are single sequence or contact terms, each term should be a tuple.
+    Otherwise, if all_terms contains combined terms (as returned by
+    make_X), each element in all_terms should be a list of tuples.
+
+    Parameters:
+        X_terms (list): list of terms for input sequences.
+        all_terms (list): list of all terms being considered.
+
+    Returns:
+        X (np.ndarray)
+    """
+    X = []
+    for current_terms in X_terms:
+        # determine if all_terms are single terms or collapsed terms
+        if isinstance(all_terms[0], tuple):
+            inds = [all_terms.index(c) for c in current_terms]
+            X_row = [1 if i in inds else 0 for i in range(len(all_terms))]
+        elif isinstance(all_terms[0], list):
+            X_row = []
+            for terms in all_terms:
+                is_in = sum([1 if t in current_terms else 0 for t in terms])
+                if is_in > 0:
+                    X_row.append(1)
+                else:
+                    X_row.append(0)
+        X.append(X_row)
+    return np.array(X)
+
 def make_contact_X (seqs, sample_space, contacts):
     """ Make binary indicator vector for contacts.
 
@@ -54,18 +87,15 @@ def make_contact_X (seqs, sample_space, contacts):
            are considered to be in contact.
 
     Returns:
-        X (list)
+        X (np.ndarray)
         contact_terms (list): Each item in the list is a contact in the form
             ((pos1,aa1),(pos2,aa2)).
     """
     contact_X = []
     contact_terms = contacting_terms(sample_space, contacts)
-    for seq in seqs:
-        cons = get_contacts(seq, contacts)
-        inds = [contact_terms.index(c) for c in cons]
-        X_row = [1 if i in inds else 0 for i in range(len(contact_terms))]
-        contact_X.append(X_row)
-    return np.array(contact_X), contact_terms
+    X_terms = [get_contacts(seq, contacts) for seq in seqs]
+    contact_X = X_from_terms(X_terms, contact_terms)
+    return contact_X, contact_terms
 
 def make_sequence_X(seqs, sample_space):
     """ Make binary indicator vector for sequence terms.
@@ -76,36 +106,42 @@ def make_sequence_X(seqs, sample_space):
             parental residues at the ith position.
 
     Returns:
-        X (list)
+        X (np.ndarray)
         sequence_terms (list): Each item in the list is a term in the form
             (pos,aa).
     """
     sequence_X = []
     sequence_terms = make_sequence_terms(sample_space)
-    for seq in seqs:
-        this_terms = [(i,t) for i,t in enumerate(list(seq))]
-        inds = [sequence_terms.index(s) for s in this_terms]
-        X_row = [1 if i in inds else 0 for i in range(len(sequence_terms))]
-        sequence_X.append(X_row)
-    return np.array(sequence_X), sequence_terms
+    X_terms = [get_terms(seq) for seq in seqs]
+    sequence_X = X_from_terms(X_terms, sequence_terms)
+    return sequence_X, sequence_terms
 
-def make_X(seqs, sample_space, contacts):
+def make_X(seqs, sample_space, contacts, terms=None):
     """ Make combined sequence/structure X.
 
-    Combines columns that completely covary.
+    If terms are given, the binary indicator vectors indicate whether
+    each sequence contains each term. Otherwise, all possible sequence
+    and contact terms are computed, and then columns that completely
+    covary are combined.
 
     Parameters:
         seqs (list): each sequence should be a string.
-        sample_space (iterable): Each element in sample_space contains the possible
-           amino acids at that position.
-        contacts (iterable): Each element in contacts pairs two positions that
-           are considered to be in contact.
+        sample_space (iterable): Each element in sample_space contains
+            the possible amino acids at that position.
+        contacts (iterable): Each element in contacts pairs two positions
+            that are considered to be in contact.
+    Optional keyword parameters:
+        terms (list):
 
     Returns:
         X (np.ndarray)
-        terms (list): Each item in the list is a list of contact terms, sequence
-            terms, or both.
+        terms (list): Each item in the list is a list of contact terms,
+            sequence terms, or both.
     """
+    if terms is not None:
+        X_terms = [get_terms(seq) + get_contacts(seq, contacts)
+                   for seq in seqs]
+        return X_from_terms(X_terms, terms), terms
     seq_X, sequence_terms = make_sequence_X(seqs, sample_space)
     struct_X, contact_terms = make_contact_X(seqs, sample_space, contacts)
     seq_X = seq_X.tolist()
@@ -142,6 +178,18 @@ def get_contacts(seq, contacts):
     """
     return [((con[0],seq[con[0]]),(con[1],seq[con[1]]))
               for con in contacts]
+
+def get_terms(seq):
+    """ Get the sequence terms.
+
+    Parameters:
+        seq (iterable): the sequence
+
+    Returns:
+        terms (list): Each item is a (pos,aa) tuple
+    """
+    return [(i,t) for i,t in enumerate(list(seq))]
+
 
 def load_assignments (assignments_file):
     """ Convert a SCHEMA assignment file to a dict mapping pos:block.

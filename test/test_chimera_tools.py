@@ -34,6 +34,12 @@ sequence_terms = [(0, 'A'), (0, 'B'), (0, 'C'), (1, 'A'), (1, 'A'),
 all_X = np.array([[1, 0, 0, 1, 0, 0],
                   [0, 1, 0, 1, 0, 1],
                   [0, 1, 0, 0, 1, 0]])
+complete_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0,
+                        0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+                       [0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0],
+                       [0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1,
+                        0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0]])
 all_terms =  [[(0, 'A'), (2, 'B'), ((0, 'A'), (1, 'A')), ((0, 'A'), (2, 'B')),
                ((1, 'A'), (2, 'B'))], [(0, 'B')],
               [(0, 'C'), (1, 'A'), ((0, 'A'), (1, 'C')), ((0, 'C'), (1, 'A')),
@@ -69,11 +75,17 @@ def test_X():
     X, terms = make_X(seqs, sample_space, contacts)
     assert np.array_equal(X, all_X)
     assert terms == all_terms
+    X_2, terms_2 = make_X(seqs, sample_space, contacts, terms)
+    assert np.array_equal(X_2, X)
+    assert terms == terms_2
     new_seqs = ['CCD', 'CCA']
-    new_X = np.array([[0, 0, 1, 0, 1, 1],
-                      [0, 0, 1, 0, 1, 0]])
+    new_X = np.array([[0, 0, 0, 0, 0, 0],
+                      [0, 0, 0, 0, 0, 0]])
     X, _ = make_X(new_seqs, sample_space, contacts, terms)
     assert np.array_equal(X, new_X)
+    X, terms = make_X(seqs, sample_space, contacts, collapse=False)
+    assert np.array_equal(X, complete_X)
+    assert terms == sequence_terms + contact_terms
 
 def test_contacts():
     terms = get_contacts(seqs[0], contacts)

@@ -68,11 +68,11 @@ def X_from_terms(X_terms, all_terms):
         elif isinstance(all_terms[0], list):
             X_row = []
             for terms in all_terms:
-                is_in = sum([1 if t in current_terms else 0 for t in terms])
+                is_in = sum([0 if t in current_terms else 1 for t in terms])
                 if is_in > 0:
-                    X_row.append(1)
-                else:
                     X_row.append(0)
+                else:
+                    X_row.append(1)
         X.append(X_row)
     return np.array(X)
 
@@ -116,7 +116,7 @@ def make_sequence_X(seqs, sample_space):
     sequence_X = X_from_terms(X_terms, sequence_terms)
     return sequence_X, sequence_terms
 
-def make_X(seqs, sample_space, contacts, terms=None):
+def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
     """ Make combined sequence/structure X.
 
     If terms are given, the binary indicator vectors indicate whether
@@ -149,6 +149,8 @@ def make_X(seqs, sample_space, contacts, terms=None):
     X = [seq_X[i] + struct_X[i] for i in range(len(seqs))]
     terms = sequence_terms + contact_terms
     X = np.array(X)
+    if not collapse:
+        return X, terms
     columns = [i for i in range(len(terms))]
     new_terms = []
     kept_columns = []

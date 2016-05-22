@@ -30,11 +30,12 @@ def test_fit():
                                         alpha=alpha)
     this.fit(seqs, Y)
     X, terms = chimera_tools.make_X([''.join(row) for _, row in seqs.iterrows()],
-                                    space, contacts)
+                                    space, contacts, collapse=False)
     clf = linear_model.Lasso(alpha=alpha)
     clf.fit(X, Y)
     assert this._terms == terms
     assert np.array_equal(this._clf.coef_, clf.coef_)
+    assert np.array_equal(this.means, clf.predict(X))
 
 def test_X():
     this = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
@@ -42,14 +43,19 @@ def test_X():
     X, terms = this._make_X(seqs)
     actual_X, actual_terms = chimera_tools.make_X([''.join(row) for _, row
                                                    in seqs.iterrows()],
-                                                  space, contacts)
+                                                  space, contacts,
+                                                  collapse=False)
     assert np.array_equal(X, actual_X)
     assert terms == actual_terms
     this.fit(seqs, Y)
+    X, terms = this._make_X(seqs)
+    assert np.array_equal(X, actual_X)
     X, terms = this._make_X(new_seqs)
     assert terms == this._terms
-    actual_X = np.array([[1, 1, 1, 1, 0, 1, 0],
-                         [0, 1, 1, 0, 1, 1, 0]])
+    actual_X, actual_terms = chimera_tools.make_X([''.join(row) for _, row
+                                                   in new_seqs.iterrows()],
+                                                  space, contacts,
+                                                  collapse=False)
     assert np.array_equal(X, actual_X)
 
 def test_mean():
@@ -58,13 +64,15 @@ def test_mean():
     this = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
                                         alpha=alpha)
     this.fit(seqs, Y)
-    X, terms = chimera_tools.make_X([''.join(row) for _, row in seqs.iterrows()],
-                                    space, contacts)
+    X, terms = chimera_tools.make_X([''.join(row) for _, row
+                                     in seqs.iterrows()],
+                                    space, contacts, collapse=False)
     clf = linear_model.Lasso(alpha=alpha)
     clf.fit(X, Y)
     new_X, _ = chimera_tools.make_X([''.join(row) for
                                      _, row in new_seqs.iterrows()],
-                                    space, contacts, terms=terms)
+                                    space, contacts, terms=terms,
+                                    collapse=False)
     preds = clf.predict(new_X)
     assert np.array_equal(this.mean(new_seqs), preds)
 

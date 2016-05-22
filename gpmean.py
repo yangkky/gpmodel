@@ -16,13 +16,13 @@ class GPMean(object):
             self._clf = clf(**kwargs)
         else:
             self._clf = clf
+        self.means = None
 
     def fit(self, X, Y):
         """ Fit the mean function."""
         if self._clf is not None:
             self._clf.fit(X, Y)
-        else:
-            return
+        self.means = self.mean(X)
 
     def mean(self, X):
         """ Calculate the mean function. """
@@ -43,7 +43,8 @@ class StructureSequenceMean(GPMean):
         if isinstance(X_seqs, pd.DataFrame):
             X_seqs = [''.join(row) for _, row in X_seqs.iterrows()]
         X, self._terms = self._make_X(X_seqs)
-        super(StructureSequenceMean, self).fit(X, Y)
+        self._clf.fit(X,Y)
+        self.means = self.mean(X_seqs)
 
     def mean(self, X_seqs):
         X, _ = self._make_X(X_seqs)
@@ -53,9 +54,10 @@ class StructureSequenceMean(GPMean):
         if isinstance(X_seqs, pd.DataFrame):
             X_seqs = [''.join(row) for _, row in X_seqs.iterrows()]
         X, terms = chimera_tools.make_X(X_seqs,
-                                    self._sample_space,
-                                    self._contacts,
-                                    terms = self._terms)
+                                        self._sample_space,
+                                        self._contacts,
+                                        terms = self._terms,
+                                        collapse=False)
         return X, terms
 
 

@@ -11,6 +11,7 @@ try:
     import cPickle as pickle
 except:
     import pickle
+import gpmean
 
 
 
@@ -25,6 +26,7 @@ class GPModel(object):
         mean (float): mean of unnormed Ys
         std (float): standard deviation of unnormed Ys
         kern (GPKernel): a kernel for calculating covariances
+        mean_func (GPMean): mean function
         hypers (namedtuple): the hyperparameters
         regr (Boolean): classification or regression
         _K (pdDataFrame): Covariance matrix
@@ -51,7 +53,7 @@ class GPModel(object):
         Optional keyword parameters:
             guesses (iterable): initial guesses for the
                 hyperparameters.
-                Default is [1 for _ in range(len(hypers))].
+                Default is [0.9 for _ in range(len(hypers))].
             objective (String): objective function to use in training
                 model. Choices are 'log_ML' and 'LOO_log_p'.
                 Classification must be trained on 'log_ML.' Default
@@ -61,29 +63,40 @@ class GPModel(object):
         self.guesses = None
         if 'objective' not in kwargs.keys():
             kwargs['objective'] = 'log_ML'
+        if 'mean_func' not in kwargs.keys():
+            self.mean_func = gpmean.GPMean()
         self._set_params(**kwargs)
 
     def _set_params(self, **kwargs):
         ''' Sets parameters for the model.
 
+        This function can be used to set the value of any or all
+        attributes for the model. However, it does not necessary
+        update dependencies, so use with caution.
+
         Optional Keyword Parameters:
-            guesses (iterable)
-            objective (string)
-            hypers (iterable)
-            X (pandas.DataFrame)
-            Y (pandas.Series)
-            regr (Boolean)
-            _K (pdDataFrame)
-            _Ky (np.matrix)
-            _L (np.matrix)
-            _alpha (np.matrix)
-            ML (float)
-            log_p (float)
-            _ell (int)
-            _f_hat (Series)
-            _W (np.matrix)
-            _W_root (np.matrix)
-            _grad (np.matrix)
+            X_seqs (DataFrame): The sequences in the training set
+            Y (Series): The outputs for the training set
+            normed_Y (Series): normalized outputs for the training set
+            mean (float): mean of unnormed Ys
+            std (float): standard deviation of unnormed Ys
+            kern (GPKernel): a kernel for calculating covariances
+            mean_func (GPMean): mean function
+            hypers (namedtuple): the hyperparameters
+            regr (Boolean): classification or regression
+            _K (pdDataFrame): Covariance matrix
+            _Ky (np.matrix): noisy covariance matrix [K+var_n*I]
+            _L (np.matrix): lower triangular Cholesky decomposition of Ky for
+                regression models. Lower triangular Cholesky decomposition of
+                (I + W_root*Ky*W_root.T) for classification models.
+            _alpha (np.matrix): L.T\(L\Y)
+            ML (float): The negative log marginal likelihood
+            log_p (float): the negative LOO log likelihood
+            _ell (int): number of training samples
+            _f_hat (Series): MAP values of the latent function for training set
+            _W (np.matrix): negative _hessian of the log likelihood
+            _W_root (np.matrix): Square root of W
+            _grad (np.matrix): gradient of the log logistic likelihood
         '''
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
@@ -123,9 +136,11 @@ class GPModel(object):
         self.Y = Y
         self._ell = len(Y)
         self.kern.set_X(X_seqs)
-
         self.regr = not self.is_class()
+
         if self.regr:
+            self.mean_func.fit(X_seqs, Y)
+            self.Y = Y - self.mean_func.means
             self.mean, self.std, self.normed_Y = self._normalize (self.Y)
             n_guesses = 1 + len(self.kern.hypers)
         else:
@@ -297,7 +312,7 @@ class GPModel(object):
         return m, s, (data-m) / s
 
     def unnormalize(self, normed):
-        """ Inverse of _normalize, but works on single values or arrays..
+        """ Inverse of _normalize, but works on single values or arrays.
 
         Parameters:
             normed
@@ -345,6 +360,39 @@ class GPModel(object):
                                            f_bar+i*var,
                                            args=(f_bar.item(), var.item()))[0]
             return (pi_star, f_bar.item(), var.item())
+
+    def predicts (self, new_seqs, delete=True):
+        """Make predictions for each sequence in new_seqs.
+
+        Uses Equations 2.23 and 2.24 of RW
+        Parameters:
+            new_seqs (DataFrame): sequences to predict.
+                They must have unique indices.
+
+         Returns:
+            predictions (list): (E,v) as floats
+        """
+        predictions = []
+        self.kern.train(new_seqs)
+        if self.regr:
+            h = self.hypers[1::]
+        else:
+            h = self.hypers
+        for ns in new_seqs.index:
+            k = np.matrix([self.kern.calc_kernel(ns, seq1,
+                                                hypers=h) \
+                           for seq1 in self.X_seqs.index])
+            k_star = self.kern.calc_kernel(ns, ns,
+                                           hypers=h)
+            predictions.append(self._predict(k, k_star))
+        if delete:
+            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
+            self.kern.delete(new_seqs.loc[inds, :])
+        if self.regr:
+            means = self.mean_func.mean(new_seqs)
+            predictions = [(m+p, v)
+                           for p, (m, v) in zip(means, predictions)]
+        return predictions
 
     def _p_integral (self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
@@ -404,35 +452,6 @@ class GPModel(object):
             f_hat = self._find_F(hypers=hypers) # use Algorithm 3.1 to find mode
             ML = self._logq(f_hat, hypers=hypers)
             return ML.item()
-
-    def predicts (self, new_seqs, delete=True):
-        """Make predictions for each sequence in new_seqs.
-
-        Uses Equations 2.23 and 2.24 of RW
-        Parameters:
-            new_seqs (DataFrame): sequences to predict.
-                They must have unique indices.
-
-         Returns:
-            predictions (list): (E,v) as floats
-        """
-        predictions = []
-        self.kern.train(new_seqs)
-        if self.regr:
-            h = self.hypers[1::]
-        else:
-            h = self.hypers
-        for ns in new_seqs.index:
-            k = np.matrix([self.kern.calc_kernel(ns, seq1,
-                                                hypers=h) \
-                           for seq1 in self.X_seqs.index])
-            k_star = self.kern.calc_kernel(ns, ns,
-                                           hypers=h)
-            predictions.append(self._predict(k, k_star))
-        if delete:
-            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
-            self.kern.delete(new_seqs.loc[inds, :])
-        return predictions
 
     def is_class (self):
         '''True if Y only contains values 1 and -1, otherwise False'''
@@ -605,13 +624,18 @@ class GPModel(object):
         return_me = -sum (log_ps)
         return return_me
 
-    def LOO_res (self, hypers):
+    def LOO_res (self, hypers, add_mean=False, unnorm=False):
         """ Calculates LOO regression predictions.
 
         Calculates the LOO predictions according to Equation 5.12 from RW.
 
         Parameters:
             hypers (iterable)
+            add_mean (Boolean): whether or not to add in the mean function.
+                Default is False.
+            unnormalize (Boolean): whether or not to unnormalize.
+                Default is False unless the mean is added back, in which
+                case always True.
         Returns:
             res (pandas.DataFrame): columns are 'mu' and 'v'
         """
@@ -621,6 +645,12 @@ class GPModel(object):
         Y_mat = np.matrix (self.normed_Y)
         mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
         vs = np.diag(1/K_inv)
+        if add_mean or unnorm:
+            mus = self.unnormalize(mus)
+            vs = np.array(vs).copy()
+            vs *= self.std**2
+        if add_mean:
+            mus += self.mean_func.means
         return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
                            columns=['mu', 'v'])
 

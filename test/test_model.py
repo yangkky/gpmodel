@@ -1,6 +1,6 @@
 import sys
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel,gpmodel
+import gpkernel,gpmodel, gpmean, chimera_tools
 import pandas as pd
 import numpy as np
 import math
@@ -8,27 +8,32 @@ import pytest
 import scipy
 from scipy import stats
 import os
-from sklearn import metrics
+from sklearn import metrics, linear_model
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
 seqs = seqs.append(seqs.iloc[0])
 seqs.index = ['A','B','C','A']
 
-space = [('R'), ('Y', 'T'), ('M', 'H'), ('A')]
+space = [('R', 'T', 'C'), ('Y', 'T', 'B'), ('M', 'H', 'I'), ('A', 'A', 'B')]
 contacts = [(0,1),(2,3)]
 
 class_Ys = pd.Series([-1,1,1,-1],index=seqs.index)
 reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
 struct = gpkernel.StructureKernel (contacts)
 SE_kern = gpkernel.StructureSEKernel(contacts)
+alpha = 0.1
+func = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
+                                   alpha=alpha)
 
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
 def test_creation():
     print 'Testing constructors, fits, and pickling method...'
 
-    model = gpmodel.GPModel(struct, objective='LOO_log_p', guesses=(1.0,))
+    model = gpmodel.GPModel(struct, mean_func=func,
+                            objective='LOO_log_p', guesses=(1.0,))
+    assert model.mean_func == func
     assert model.objective == model._LOO_log_p
     pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
     model._set_params(objective='log_ML')
@@ -158,22 +163,16 @@ def test_regression ():
     assert close_enough(model._log_ML((vn,vp)), ML.item()), \
     'log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
-    # test LOO log predictive probability
     K_inv = np.linalg.inv(Ky)
     mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
     vs = np.diag(1/K_inv)
-
-    res1 = model.LOO_res((vn,vp))
     res2 = pd.DataFrame(zip(mus, vs), index=normed_Ys.index,
                                                   columns=['mu','v'])
-    assert res1.equals(res2), 'Regression model does not correctly predict LOO values'
-
     log_p_1 = model._LOO_log_p((vn,vp))
     log_p_2 = 0.5*np.sum(np.log(res2['v']) + np.power(normed_Ys-res2['mu'],2)/res2['v'] \
                           + np.log(2*np.pi))
     assert close_enough(log_p_1, log_p_2), \
     'Regression model does not correctly calculate LOO log predictive probability'
-
 
 
     print 'Testing regression ... '
@@ -250,6 +249,63 @@ def test_regression ():
     assert np.isclose(h, model.hypers).all()
     assert model.ML == ML
 
+    # test predictions with mean function
+    model = gpmodel.GPModel(struct, mean_func=func)
+    model.fit(seqs, reg_Ys)
+    X, terms = chimera_tools.make_X([''.join(row) for _, row
+                                     in seqs.iterrows()],
+                                    space, contacts, collapse=False)
+    clf = linear_model.Lasso(alpha=alpha)
+    clf.fit(X, reg_Ys)
+    preds = clf.predict(X)
+    assert np.array_equal(model.mean_func.means, preds)
+    assert np.array_equal(model.Y, reg_Ys - model.mean_func.means)
+    # test accuracy of predictions
+    Y_mat = np.matrix(model.normed_Y.values.T)
+    s = model.std
+    m = model.mean
+    kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
+                                           seq1, [model.hypers.var_p])
+                    for seq1 in [seqs.iloc[i]
+                                 for i in range(len(seqs.index))]])
+    kD = np.matrix([model.kern.calc_kernel(test_seqs.loc['D'],
+                                           seq1, [model.hypers.var_p])
+                    for seq1 in [seqs.iloc[i]
+                                 for i in range(len(seqs.index))]])
+    EA = (kA*np.linalg.inv(model._Ky)*Y_mat.T) * s + m + \
+        model.mean_func.mean(test_seqs.loc[['A']])
+    ED = (kD*np.linalg.inv(model._Ky)*Y_mat.T) * s + m + \
+        model.mean_func.mean(test_seqs.loc[['D']])
+    k_star_A = model.kern.calc_kernel(test_seqs.loc['A'],
+                                      test_seqs.loc['A'],
+                                      [model.hypers.var_p])
+    k_star_D = model.kern.calc_kernel(test_seqs.loc['D'],
+                                      test_seqs.loc['D'],
+                                      [model.hypers.var_p])
+    var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
+    var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
+    predictions = model.predicts(test_seqs,delete=False)
+    assert close_enough(EA, predictions[0][0])
+    assert close_enough(ED, predictions[1][0])
+    assert close_enough(var_A, predictions[0][1])
+    assert close_enough(var_D, predictions[1][1])
+
+    print 'Testing LOO predictions...'
+    K_inv = np.linalg.inv(Ky)
+    mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
+    vs = np.diag(1/K_inv)
+
+    res1 = model.LOO_res((vn,vp))
+    res2 = pd.DataFrame(zip(mus, vs), index=normed_Ys.index,
+                                                  columns=['mu','v'])
+    assert res1.equals(res2), 'Regression model does not correctly predict LOO values'
+    res2['mu'] = model.unnormalize(res2['mu'])
+    res2['v'] *= model.std**2
+    res = model.LOO_res((vn, vp), unnorm=True)
+    assert res.equals(res2), 'Regression model does not correctly predict LOO values'
+    res2['mu'] += model.mean_func.means
+    res = model.LOO_res((vn, vp), add_mean=True)
+    assert res.equals(res2), 'Regression model does not correctly predict LOO values'
     print 'Regression model passes all tests.\n'
 
 def test_classification ():

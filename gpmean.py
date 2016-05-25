@@ -8,6 +8,7 @@ class GPMean(object):
     """ A Gaussian process mean function.
 
     Attributes:
+        clf
     """
 
     def __init__(self, clf=None, **kwargs):
@@ -32,6 +33,20 @@ class GPMean(object):
             return np.zeros(len(X))
 
 class StructureSequenceMean(GPMean):
+
+    """ A Gaussian process mean function for proteins.
+
+    Calculates X for the protein as a binary indicator vector for single
+    sequence elements and binary elements that are in contact.
+
+    Attributes:
+        _sample_space (list)
+        _contacts (list)
+        _terms (list)
+        clf
+        means (np.ndarray)
+    """
+
     def __init__(self, sample_space, contacts, clf, **kwargs):
         self._sample_space = sample_space
         self._contacts = contacts
@@ -44,7 +59,7 @@ class StructureSequenceMean(GPMean):
             X_seqs = [''.join(row) for _, row in X_seqs.iterrows()]
         X, self._terms = self._make_X(X_seqs)
         self._clf.fit(X,Y)
-        self.means = self.mean(X_seqs)
+        self.means = self._clf.predict(X)
 
     def mean(self, X_seqs):
         X, _ = self._make_X(X_seqs)
@@ -53,12 +68,11 @@ class StructureSequenceMean(GPMean):
     def _make_X(self, X_seqs):
         if isinstance(X_seqs, pd.DataFrame):
             X_seqs = [''.join(row) for _, row in X_seqs.iterrows()]
-        X, terms = chimera_tools.make_X(X_seqs,
-                                        self._sample_space,
-                                        self._contacts,
-                                        terms = self._terms,
-                                        collapse=False)
-        return X, terms
+        return chimera_tools.make_X(X_seqs,
+                                    self._sample_space,
+                                    self._contacts,
+                                    terms=self._terms,
+                                    collapse=False)
 
 
 

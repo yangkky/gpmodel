@@ -137,7 +137,6 @@ class GPModel(object):
         self._ell = len(Y)
         self.kern.set_X(X_seqs)
         self.regr = not self.is_class()
-
         if self.regr:
             self.mean_func.fit(X_seqs, Y)
             self.Y = Y - self.mean_func.means
@@ -148,7 +147,6 @@ class GPModel(object):
             if self.objective == self._LOO_log_p:
                 raise AttributeError\
                 ('Classification models must be trained on marginal likelihood')
-
         if self.guesses == None:
             guesses = [0.9 for _ in range(n_guesses)]
         else:

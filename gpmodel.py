@@ -467,7 +467,7 @@ class GPModel(object):
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
                                     (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
-            second = sum([math.log(l) for l in np.diag(L)])
+            second = sum([math.log(ell) for ell in np.diag(L)])
             third = len(K_mat)/2.*math.log(2*math.pi)
             ML = (first+second+third).item()
             return ML

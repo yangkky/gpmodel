@@ -290,3 +290,37 @@ def zero_index (code):
     Takes a 1-indexed chimera code and zero-indexes it
     '''
     return ''.join([str(int(x)-1) for x in str(code)])
+
+def translate(na_sequence):
+    """ Translates a nucleic acid string."""
+    codon_dict = {'ATT':'I', 'ATC': 'I', 'ATA': 'I', 'CTG': 'L',
+                  'CTC': 'L', 'CTA': 'L', 'CTT': 'L', 'TTA': 'L', 'TTG': 'L',
+                  'GTG':'V', 'GTC':'V', 'GTA':'V', 'GTT':'V',
+                  'TTT':'F','TTC':'F',
+                  'ATG':'M',
+                  'TGC':'C','TGT':'C',
+                  'GCG':'A','GCT':'A', 'GCC':'A', 'GCA':'A',
+                  'GGC':'G', 'GGT':'G', 'GGA':'G', 'GGG':'G',
+                  'CCG':'P','CCT':'P', 'CCC':'P', 'CCA':'P',
+                  'ACC':'T', 'ACT':'T', 'ACA':'T', 'ACG':'T',
+                  'AGC':'S','TCT':'S', 'TCC':'S', 'TCA':'S', 'TCG':'S', 'AGT':'S',
+                  'TAT':'Y','TAC':'Y',
+                  'TGG':'W',
+                  'CAG':'Q','CAA':'Q',
+                  'AAC':'N','AAT':'N',
+                  'CAC':'H','CAT':'H',
+                  'GAA':'E','GAG':'E',
+                  'GAT':'D','GAC':'D',
+                  'AAA':'K','AAG':'K',
+                  'CGT':'R', 'CGC':'R', 'CGA':'R', 'CGG':'R', 'AGA':'R', 'AGG':'R',
+                  'TAA':'.', 'TAG':'.', 'TGA':'.'}
+    if len(na_sequence) % 3 != 0:
+        raise ValueError('na_sequence must have length divisible by 3.')
+    translated = ''
+    for i in range(len(na_sequence)/3):
+        codon = na_sequence[3*i:3*i+3].upper()
+        try:
+            translated += codon_dict[codon]
+        except KeyError:
+            translated += '-'
+    return translated

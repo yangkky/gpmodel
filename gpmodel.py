@@ -22,6 +22,7 @@ class GPModel(object):
     Attributes:
         X_seqs (DataFrame): The sequences in the training set
         Y (Series): The outputs for the training set
+        variances (Series): measurement variances for the training set
         normed_Y (Series): normalized outputs for the training set
         mean (float): mean of unnormed Ys
         std (float): standard deviation of unnormed Ys
@@ -65,6 +66,7 @@ class GPModel(object):
             kwargs['objective'] = 'log_ML'
         if 'mean_func' not in kwargs.keys():
             self.mean_func = gpmean.GPMean()
+        self.variances = None
         self._set_params(**kwargs)
 
     def _set_params(self, **kwargs):
@@ -122,15 +124,20 @@ class GPModel(object):
                 self.hypers = Hypers(**hypers)
 
 
-    def fit(self, X_seqs, Y):
+    def fit(self, X_seqs, Y, variances=None):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
         Update all dependent values.
 
+        For regression models, measurement variances can be given, or
+        a global measurement variance will be estimated.
+
         Parameters:
             X_seqs (pandas.DataFrame): Sequences in training set
             Y (pandas.Series): measurements in training set
+            variances (pandas.Series): measurement variances. Index must
+                match index for Y. Optional.
         '''
         self.X_seqs = X_seqs
         self.Y = Y
@@ -141,7 +148,14 @@ class GPModel(object):
             self.mean_func.fit(X_seqs, Y)
             self.Y = Y - self.mean_func.means
             self.mean, self.std, self.normed_Y = self._normalize (self.Y)
-            n_guesses = 1 + len(self.kern.hypers)
+            if variances is not None:
+                if not np.array_equal(variances.index, Y.index):
+                    raise AttributeError('Indices do not match.')
+                self.variances = variances / self.std**2
+                n_guesses = len(self.kern.hypers)
+            else:
+                self.variances = None
+                n_guesses = 1 + len(self.kern.hypers)
         else:
             n_guesses = len(self.kern.hypers)
             if self.objective == self._LOO_log_p:
@@ -160,7 +174,6 @@ class GPModel(object):
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
-
         self._set_hypers(minimize_res['x'])
 
     def _set_hypers(self, hypers):
@@ -170,7 +183,7 @@ class GPModel(object):
             hypers (iterable or dict)
         '''
         if type(hypers) is not dict:
-            if self.regr:
+            if self.regr and self.variances is None:
                 hypers_list = ['var_n'] + self.kern.hypers
                 Hypers = namedtuple('Hypers', hypers_list)
             else:
@@ -180,10 +193,8 @@ class GPModel(object):
             Hypers=namedtuple('Hypers', hypers.keys())
             self.hypers = Hypers(**hypers)
 
-
         if self.regr:
-            self._K = self.kern.make_K(hypers=self.hypers[1:])
-            self._Ky = self._K+self.hypers.var_n*np.identity(len(self.X_seqs))
+            self._K, self._Ky = self._make_Ks(hypers)
             self._L = np.linalg.cholesky(self._Ky)
             self._alpha = np.linalg.lstsq(self._L.T,
                                          np.linalg.lstsq(self._L,
@@ -201,6 +212,20 @@ class GPModel(object):
                                           (self.Y,
                                            self._f_hat)))
             self.ML = self._log_ML(self.hypers)
+
+    def _make_Ks(self, hypers):
+        """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
+        if len(hypers) == len(self.kern.hypers):
+            if self.variances is None:
+                raise AttributeError('No variances given.')
+            K = self.kern.make_K(hypers=hypers)
+            Ky = K + np.diag(self.variances)
+        elif len(hypers) == len(self.kern.hypers) + 1:
+            K = self.kern.make_K(hypers=hypers[1::])
+            Ky = K + np.identity(len(K)) * hypers[0]
+        else:
+            raise AttributeError('len(hypers) does not match')
+        return K, Ky
 
     def batch_UB_bandit(self, sequences, n=10, predictions=None):
         """ Use the batch UB bandit algorithm to select sequences.
@@ -431,18 +456,18 @@ class GPModel(object):
         """
         if self.regr:
             Y_mat = np.matrix(self.normed_Y)
-            K = self.kern.make_K(hypers=hypers[1::])
-            K_mat = np.matrix (K)
-            Ky = K_mat + np.identity(len(K_mat))*hypers[0]
+            K, Ky = self._make_Ks(hypers)
+            K_mat = np.matrix(K)
+            Ky = np.matrix(Ky)
             try:
                 L = np.linalg.cholesky (Ky)
             except:
                 print hypers
                 exit('Cannot find L in _log_ML')
-            alpha = np.linalg.lstsq(L.T,np.linalg.lstsq
+            alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
                                     (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
-            second = sum([math.log(l) for l in np.diag(L)])
+            second = sum([math.log(ell) for ell in np.diag(L)])
             third = len(K_mat)/2.*math.log(2*math.pi)
             ML = (first+second+third).item()
             return ML
@@ -637,8 +662,7 @@ class GPModel(object):
         Returns:
             res (pandas.DataFrame): columns are 'mu' and 'v'
         """
-        K = self.kern.make_K(hypers=hypers[1::])
-        Ky = K + hypers[0]*np.identity(len(self.X_seqs))
+        K, Ky = self._make_Ks(hypers)
         K_inv = np.linalg.inv(Ky)
         Y_mat = np.matrix (self.normed_Y)
         mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)

@@ -18,9 +18,10 @@ seqs.index = ['A','B','C','A']
 space = [('R', 'T', 'C'), ('Y', 'T', 'B'), ('M', 'H', 'I'), ('A', 'A', 'B')]
 contacts = [(0,1),(2,3)]
 
-class_Ys = pd.Series([-1,1,1,-1],index=seqs.index)
-reg_Ys = pd.Series([-1,1,0.5,-.4],index=seqs.index)
-struct = gpkernel.StructureKernel (contacts)
+class_Ys = pd.Series([-1,1,1,-1], index=seqs.index)
+reg_Ys = pd.Series([-1,1,0.5,-.4], index=seqs.index)
+variances = pd.Series([0.11, 0.18, 0.13, 0.14], index=seqs.index)
+struct = gpkernel.StructureKernel(contacts)
 SE_kern = gpkernel.StructureSEKernel(contacts)
 alpha = 0.1
 func = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
@@ -159,7 +160,6 @@ def test_regression ():
     third = len(reg_Ys)*math.log(2*math.pi)*.5
     ML = first + second + third
 
-    # because floating point precision
     assert close_enough(model._log_ML((vn,vp)), ML.item()), \
     'log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
@@ -306,6 +306,20 @@ def test_regression ():
     res2['mu'] += model.mean_func.means
     res = model.LOO_res((vn, vp), add_mean=True)
     assert res.equals(res2), 'Regression model does not correctly predict LOO values'
+
+    print 'Testing regression with known variances...'
+    model = gpmodel.GPModel(struct, guesses=(100.0,))
+    model.fit(seqs, reg_Ys, variances=variances)
+    assert np.array_equal(model._K + np.diag(variances) / model.std**2,
+                                             model._Ky)
+    assert np.isclose(model.hypers.var_p, 0.6657325327454634),\
+    'Regression model.hypers.var_p is incorrect'
+    assert np.isclose(model.ML, 4.69092081175),\
+    'Regression model.ML is incorrect'
+    assert close_enough(model.log_p, 3.96114185627),\
+    'Regression model.log_p is incorrect'
+    variances.index = ['C', 'D', 'E', 'F']
+    pytest.raises(AttributeError, "model.fit(seqs, reg_Ys, variances)")
     print 'Regression model passes all tests.\n'
 
 def test_classification ():

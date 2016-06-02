@@ -566,13 +566,10 @@ def test_linear_kernel():
                       [1.,1.,4.,3.],
                       [-3.,2.,3.,0.]],
                      index=seqs.index)
-    K = pd.DataFrame([[45.,19.,30.,1.],
-                      [19.,9.,12.,-3.],
-                      [30.,12.,27.,11.],
-                      [1.,-3.,11.,22.]],
-                     index=seqs.index,
-                    columns=seqs.index)
-
+    K = np.array([[45.,19.,30.,1.],
+                  [19.,9.,12.,-3.],
+                  [30.,12.,27.,11.],
+                  [1.,-3.,11.,22.]])
     assert kern.hypers == ['var_p']
 
 
@@ -581,7 +578,8 @@ def test_linear_kernel():
     saved_X = {i:np.array(X.loc[i]) for i in X.index}
 
     kern.set_X(X)
-    assert kern._base_K.equals(K)
+    print kern._base_K
+    assert np.array_equal(kern._base_K,K)
 
 
     assert kern.calc_kernel(X.iloc[0],X.iloc[1]) == 19,\
@@ -591,11 +589,11 @@ def test_linear_kernel():
     'Failed calc_kernel for var_p ~= 1.'
 
     # test make_K
-    assert kern.make_K(X).equals(K),\
+    assert np.array_equal(kern.make_K(X),K),\
     'Failed make_K for var_p = 1.'
-    assert kern.make_K(X, hypers=[2]).equals(K*2),\
+    assert np.array_equal(kern.make_K(X, hypers=[2]),K*2),\
     'Failed make_K for var_p ~= 1.'
-    assert kern.make_K(hypers=[2]).equals(K*2),\
+    assert np.array_equal(kern.make_K(hypers=[2]),K*2),\
     'Failed make_K using saved base_K'
 
 

@@ -1054,7 +1054,7 @@ class LinearKernel(GPKernel):
             return self._base_K * vp
         X_mat = np.matrix(X)
         K = X_mat * X_mat.T * vp
-        return pd.DataFrame(K, index=X.index, columns=X.index)
+        return np.array(K)
 
     def calc_kernel (self, x1, x2, hypers=[1.0]):
         """ Calculate the linear kernel between x1 and x2.

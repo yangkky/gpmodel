@@ -22,14 +22,28 @@ sns.set_style('whitegrid', rc=rc)
 # Here are some plotting tools that are generally useful
 ######################################################################
 
-def cv (Xs, Ys, model, n_train, replicates):
-    '''
-    Returns cross-validation predictions
+def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=None):
+    ''' Returns cross-validation predictions.
+
+    Parameters:
+        Xs (pd.DataFrame)
+        Ys (pd.DataFrame)
+        model (GPModel)
+        n_train (int)
+        replicates (int)
+        keep_inds (iterable)
+
+    Returns:
+        predicted (list)
+        actual (list)
     '''
     # check that n_train is less than the number of observations
-    if not n_train < len(Xs):
-        raise ValueError('n_train must be less than len(Xs)')
-    if n_train == len(Xs) - 1:
+    if n_train + len(keep_inds) >= len(Xs):
+        raise ValueError('n_train must be less than len(Xs) - len(keep_inds)')
+    if not np.array_equal(Xs.index, Ys.index):
+        raise ValueError('Xs and Ys must have same index.')
+    if n_train == len(Xs) - 1 - len(keep_inds):
+        model.fit(Xs, Ys)
         LOOs = model.LOO_res (model.hypers)
         predicted = model.unnormalize(LOOs['mu'])
         actual = model.Y
@@ -38,18 +52,17 @@ def cv (Xs, Ys, model, n_train, replicates):
     predicted = []
     for r in range(replicates):
         # pick indices for train and test sets
-        train_inds = np.random.choice(Xs.index, n_train, replace=False)
+        changed_index = list(set(Xs.index) - set(keep_inds))
+        train_inds = np.random.choice(changed_index, n_train, replace=False)
+        train_inds = list(train_inds) + keep_inds
         test_inds = list(set(Xs.index) - set(train_inds))
         # fit the model
         model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
         # make predictions
         preds = model.predicts(Xs.loc[test_inds])
-        pred_Ys = [p[0] for p in preds]
-        predicted += pred_Ys
+        predicted += [p[0] for p in preds]
         actual += list(Ys.loc[test_inds])
     return predicted, actual
-
-
 
 def plot_predictions (real_Ys, predicted_Ys,
                       stds=None, file_name=None, title='',label='', line=False):

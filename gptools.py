@@ -36,23 +36,36 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=None):
     Returns:
         predicted (list)
         actual (list)
+        R (float)
     '''
     # check that n_train is less than the number of observations
     if n_train + len(keep_inds) >= len(Xs):
         raise ValueError('n_train must be less than len(Xs) - len(keep_inds)')
     if not np.array_equal(Xs.index, Ys.index):
         raise ValueError('Xs and Ys must have same index.')
-    if n_train == len(Xs) - 1 - len(keep_inds):
-        model.fit(Xs, Ys)
-        LOOs = model.LOO_res (model.hypers)
-        predicted = model.unnormalize(LOOs['mu'])
-        actual = model.Y
-        return predicted, actual
+    changed_index = list(set(Xs.index) - set(keep_inds))
     actual = []
     predicted = []
+    if all (y in [-1,1] for y in Ys):
+        regr = False
+    else:
+        regr = True
+    if n_train == len(Xs) - 1 - len(keep_inds):
+        for test_inds in changed_index:
+            train_inds = list(set(Xs.index) - set(test_inds))
+            model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
+            preds = model.predicts(Xs.loc[[test_inds]])
+            predicted += [p[0] for p in preds]
+            actual += list(Ys.loc[[test_inds]])
+        if not regr:
+            fpr, tpr, _ = metrics.roc_curve(actual, predicted)
+            metric = metrics.auc(fpr,tpr)
+        else:
+            metric = np.corrcoef(predicted, actual)[0,1]
+        return predicted, actual, metric
+    Rs = []
     for r in range(replicates):
         # pick indices for train and test sets
-        changed_index = list(set(Xs.index) - set(keep_inds))
         train_inds = np.random.choice(changed_index, n_train, replace=False)
         train_inds = list(train_inds) + keep_inds
         test_inds = list(set(Xs.index) - set(train_inds))
@@ -60,9 +73,17 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=None):
         model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
         # make predictions
         preds = model.predicts(Xs.loc[test_inds])
-        predicted += [p[0] for p in preds]
-        actual += list(Ys.loc[test_inds])
-    return predicted, actual
+        predictions = [p[0] for p in preds]
+        truth = list(Ys.loc[test_inds])
+        predicted += predictions
+        actual += truth
+        if regr:
+            Rs.append(np.corrcoef(predictions, truth)[0,1])
+        else:
+            fpr, tpr, _ = metrics.roc_curve(truth, predictions)
+            Rs.append(metrics.auc(fpr, tpr))
+
+    return predicted, actual, np.mean(Rs)
 
 def plot_predictions (real_Ys, predicted_Ys,
                       stds=None, file_name=None, title='',label='', line=False):

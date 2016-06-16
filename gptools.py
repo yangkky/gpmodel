@@ -22,7 +22,7 @@ sns.set_style('whitegrid', rc=rc)
 # Here are some plotting tools that are generally useful
 ######################################################################
 
-def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=None):
+def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
     ''' Returns cross-validation predictions.
 
     Parameters:
@@ -69,6 +69,8 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=None):
         train_inds = np.random.choice(changed_index, n_train, replace=False)
         train_inds = list(train_inds) + keep_inds
         test_inds = list(set(Xs.index) - set(train_inds))
+        if all(Ys.loc[test_inds] == 1) or all(Ys.loc[test_inds] == -1):
+            continue
         # fit the model
         model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
         # make predictions

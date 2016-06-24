@@ -756,7 +756,7 @@ class GPModel(object):
         Parameters:
             f (string): path to where model should be saved
         '''
-        save_me = self.__dict__
+        save_me = {k:self.__dict__[k] for k in self.__dict__.keys()}
         if self.objective == self._log_ML:
             save_me['objective'] = 'log_ML'
         else:

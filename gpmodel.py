@@ -248,9 +248,9 @@ class GPModel(object):
         observed_Y = self.normed_Y
         Ky = self._Ky
         selected = []
-        print 'Training kernel on new sequences...'
+        print('Training kernel on new sequences...')
         self.kern.train(sequences)
-        print 'Making initial predictions...'
+        print('Making initial predictions...')
         if self.regr:
             h = self.hypers[1::]
         else:
@@ -274,12 +274,12 @@ class GPModel(object):
         df['UB'] = UBs
         df['k_star'] = k_stars
         df['k'] = ks
-        print 'Entering loop...'
+        print('Entering loop...')
         for i in range(n):
-            print '\t%d' %i
+            print('\t%d' %i)
             # first selection
             id_max = df[['UB']].idxmax()
-            print max(df['UB'])
+            print(max(df['UB']))
             selected.append(id_max.iloc[0])
             if i != n-1:
                 observed_X = observed_X.append(sequences.loc[id_max])
@@ -438,7 +438,6 @@ class GPModel(object):
             second = 1/np.sqrt(2*math.pi*variance)
         except:
             second = -1
-            #print variance
         third = np.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
@@ -462,7 +461,7 @@ class GPModel(object):
             try:
                 L = np.linalg.cholesky (Ky)
             except:
-                print hypers
+                print(hypers)
                 exit('Cannot find L in _log_ML')
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
                                     (L, np.matrix(Y_mat).T)[0])[0]
@@ -578,7 +577,7 @@ class GPModel(object):
             try:
                 W_root = scipy.linalg.sqrtm(W)
             except:
-                print i
+                print(i)
                 exit('Cannot find F')
             f_hat_mat = np.matrix (f_hat)
             L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)

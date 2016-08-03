@@ -138,11 +138,11 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
         train_Xs = Xs.loc[train_inds]
         train_Ys = Ys.loc[train_inds]
         verify = Xs.loc[[i]]
-        print 'Building model for ' + str(i)
+        print('Building model for ' + str(i))
         model = gpmodel.GPModel(train_Xs,train_Ys, kernel,
                                 guesses=[1, 10], remember=(count<1))
         count += 1
-        print 'Making prediction for ' + str(i)
+        print('Making prediction for ' + str(i))
         predicted = model.predicts(verify, delete=False)
         if model.is_class():
             E = predicted[0]
@@ -150,7 +150,7 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
             try:
                 [(E,v)] = predicted
             except ValueError:
-                print 'ValueError', i, predicted
+                print ('ValueError', i, predicted)
             std.append(math.pow(v,0.5))
         predicted_Ys.append (E)
 #     plot_predictions (Ys.tolist(),
@@ -213,7 +213,7 @@ def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
             for i in range(len(vps)):
                 log_ML[j,i] = -model.log_ML((nn[i,j],pp[i,j]))
         levels = np.linspace(log_ML.min(), log_ML.max(), n_levels)
-        print levels
+        print(levels)
         cs = plt.contour(nn, pp, log_ML, alpha=0.7,levels=levels)
 
         plt.clabel(cs)

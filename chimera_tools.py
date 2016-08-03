@@ -215,7 +215,7 @@ def make_sequence (code, assignments_dict, sample_space, default=0):
     ''' Returns the chimera sequence as a list.
 
     Parameters:
-        sequence (iterable): original sequence
+        code (string): zero-indexed chimera code
         assignments_dict (dict): dict mapping sequence position to block
         sample_space (iterable): ith term should be a tuple listing the
             parental residues at the ith position.

@@ -152,6 +152,10 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
     X = np.array(X)
     if not collapse:
         return X, terms
+    else:
+        return collapse(X, terms)
+
+def collapse(X, terms):
     columns = [i for i in range(len(terms))]
     new_terms = []
     kept_columns = []

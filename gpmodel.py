@@ -30,7 +30,7 @@ class GPModel(object):
         mean_func (GPMean): mean function
         hypers (namedtuple): the hyperparameters
         regr (Boolean): classification or regression
-        _K (pdDataFrame): Covariance matrix
+        _K (pd.DataFrame): Covariance matrix
         _Ky (np.matrix): noisy covariance matrix [K+var_n*I]
         _L (np.matrix): lower triangular Cholesky decomposition of Ky for
             regression models. Lower triangular Cholesky decomposition of

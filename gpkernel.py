@@ -64,6 +64,102 @@ class GPKernel (object):
         except (KeyError, AttributeError, TypeError):
             return x
 
+class PolynomialKernel(GPKernel):
+
+    """ A Polynomial kernel of the form (s0 + sp * x.T*x)^d
+
+    Attributes:
+    hypers (list): names of the hyperparameters required
+    _saved_X (dict): dict of saved index:X pairs
+    _base_K (np.ndarray): saved default x.T*x
+    _deg (integer): degree of polynomial
+    """
+
+    def __init__(self, d):
+        """ Initiate a polynomial kernel.
+
+        Parameters:
+            d (integer): degree of the polynomial
+        """
+        GPKernel.__init__(self)
+        if not isinstance(d, int) or d < 1:
+            raise TypeError('d must be a positive integer')
+        self.hypers = ['sigma_0', 'sigma_p']
+        self._deg = d
+        self._base_K = np.array([[]])
+
+    def calc_kernel(self, x1, x2, hypers):
+        """ Calculate the polynomial kernel between x1 and x2.
+
+        Parameters:
+            x1 (np.ndarray or string): either an array
+                representing the sequence or the key for that sequence
+                if it has been saved.
+            x2 (np.ndarray or string)
+            hypers (iterable):
+
+        Returns:
+            k (float)
+        """
+        sigma_0, sigma_p = hypers
+        return np.power(sigma_0 + sigma_p * np.dot(x1.T, x2), self._deg)
+
+    def make_K(self, Xs=None, hypers=None):
+        """ Calculate the Matern kernel matrix for the points in Xs.
+
+        Parameters:
+            Xs (np.ndarray or pd.DataFrame): If none given, uses
+                saved values.
+            hypers (iterable): the hyperparameters. Default is
+                sigma_0 = sigma_p = 1.0.
+
+        Returns:
+            K (np.ndarray)
+        """
+        if hypers is None:
+            sigma_0, sigma_p = (1.0, 1.0)
+        else:
+            sigma_0, sigma_p = hypers
+        if Xs is None:
+            dots = self._base_K
+        else:
+            dots = self._get_all_dots(Xs)
+        return np.power(sigma_0 + sigma_p * dots, self._deg)
+
+    def set_X(self, X):
+        """ Remember a default set of inputs X.
+
+        Extends the method from GPKernel by also remembering an array
+        of dot products between the inputs in X.
+
+        Parameters:
+            X (np.ndarray or pd.DataFrame)
+        """
+        self.train(X)
+        self._base_K = self._get_all_dots(X)
+
+    def _get_all_dots(self, X):
+        """ Calculates the dot products between x_i in xs.
+
+        Each row of xs represents one measurement. Each column represents
+        a dimension.
+
+        Parameters:
+            xs: np.ndarray or np.matrix or pd.Dataframe
+
+        Returns:
+            D (np.ndarray or float)
+        """
+        xs = np.array(xs)
+        dims = np.shape(xs)
+        n = dims[0]
+        d = np.empty((n,n))
+        for i in range (1,n):
+            for j in range(i+1):
+                d[i][j] = np.dot(xs[j], xs[i])
+                d[j][i] = d[i][j]
+        return d
+
 class MaternKernel (GPKernel):
 
     """ A Matern kernel with nu = 5/2 or 3/2.

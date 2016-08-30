@@ -71,7 +71,7 @@ class PolynomialKernel(GPKernel):
     Attributes:
     hypers (list): names of the hyperparameters required
     _saved_X (dict): dict of saved index:X pairs
-    _base_K (np.ndarray): saved default x.T*x
+    _dots (np.ndarray): saved default x.T*x
     _deg (integer): degree of polynomial
     """
 
@@ -82,11 +82,13 @@ class PolynomialKernel(GPKernel):
             d (integer): degree of the polynomial
         """
         GPKernel.__init__(self)
-        if not isinstance(d, int) or d < 1:
-            raise TypeError('d must be a positive integer')
+        if not isinstance(d, int):
+            raise TypeError('d must be an integer.')
+        if d < 1:
+            raise ValueError('d must be greater than or equal to 1.')
         self.hypers = ['sigma_0', 'sigma_p']
         self._deg = d
-        self._base_K = np.array([[]])
+        self._dot = np.array([[]])
 
     def calc_kernel(self, x1, x2, hypers):
         """ Calculate the polynomial kernel between x1 and x2.
@@ -101,8 +103,14 @@ class PolynomialKernel(GPKernel):
         Returns:
             k (float)
         """
+        x1 = self._get_X(x1)
+        x2 = self._get_X(x2)
         sigma_0, sigma_p = hypers
-        return np.power(sigma_0 + sigma_p * np.dot(x1.T, x2), self._deg)
+        try:
+            dot = np.dot(x1.T, x2)
+        except AttributeError:
+            dot = x1 * x2
+        return np.power(sigma_0 **2 + sigma_p ** 2 * dot, self._deg)
 
     def make_K(self, Xs=None, hypers=None):
         """ Calculate the Matern kernel matrix for the points in Xs.
@@ -121,10 +129,10 @@ class PolynomialKernel(GPKernel):
         else:
             sigma_0, sigma_p = hypers
         if Xs is None:
-            dots = self._base_K
+            dots = self._dots
         else:
             dots = self._get_all_dots(Xs)
-        return np.power(sigma_0 + sigma_p * dots, self._deg)
+        return np.power(sigma_0 ** 2 + sigma_p ** 2 * dots, self._deg)
 
     def set_X(self, X):
         """ Remember a default set of inputs X.
@@ -136,27 +144,27 @@ class PolynomialKernel(GPKernel):
             X (np.ndarray or pd.DataFrame)
         """
         self.train(X)
-        self._base_K = self._get_all_dots(X)
+        self._dots = self._get_all_dots(X)
 
     def _get_all_dots(self, X):
-        """ Calculates the dot products between x_i in xs.
+        """ Calculates the dot products between x_i in X.
 
-        Each row of xs represents one measurement. Each column represents
+        Each row of X represents one measurement. Each column represents
         a dimension.
 
         Parameters:
-            xs: np.ndarray or np.matrix or pd.Dataframe
+            X: np.ndarray or np.matrix or pd.Dataframe
 
         Returns:
             D (np.ndarray or float)
         """
-        xs = np.array(xs)
-        dims = np.shape(xs)
+        X = np.array(X)
+        dims = np.shape(X)
         n = dims[0]
         d = np.empty((n,n))
-        for i in range (1,n):
+        for i in range (n):
             for j in range(i+1):
-                d[i][j] = np.dot(xs[j], xs[i])
+                d[i][j] = np.dot(X[j], X[i])
                 d[j][i] = d[i][j]
         return d
 

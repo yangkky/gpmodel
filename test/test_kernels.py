@@ -3,6 +3,7 @@ sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools
 import gpkernel
 import pandas as pd
 import numpy as np
+import pytest
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
@@ -79,6 +80,47 @@ def test_se_kernel():
 
 
     print 'SEKernel passes all tests.'
+
+def test_polynomial_kernel():
+    """ Tests for the polynomial kernel. """
+    print 'Testing PolynomialKernel...'
+    kern1 = gpkernel.PolynomialKernel(1)
+    kern3 = gpkernel.PolynomialKernel(3)
+    assert kern1.hypers == ['sigma_0', 'sigma_p']
+    assert kern1._deg == 1
+    assert kern3._deg == 3
+    pytest.raises(ValueError, 'gpkernel.PolynomialKernel(0)')
+    pytest.raises(TypeError, 'gpkernel.PolynomialKernel(1.2)')
+
+    # test on single values
+    first = 4
+    second = 2
+    params = [0.9, 0.1]
+    assert np.isclose(kern1.calc_kernel(first, second, params), 0.89)
+    assert np.isclose(kern3.calc_kernel(first, second, params), 0.89 ** 3)
+    xa = np.array([2.0, 3.0, 4.0])
+    xb = np.array([1.0, 3.0, 5.0])
+    xc = np.array([-2.0, 0.0, 2.0])
+    Xs = pd.DataFrame ([xa, xb, xc])
+    Xs.index = ['A', 'B', 'C']
+    assert kern1.calc_kernel(xa, xb, params) == 1.12
+    assert kern3.calc_kernel(xa, xb, params) == 1.12 ** 3
+
+    dot = np.array([[29, 31, 4],
+                    [31, 35, 8],
+                    [4, 8, 8]])
+
+    assert np.isclose(kern1._get_all_dots(Xs), dot).all()
+    K3 = (params[0] ** 2 + params[1] ** 2 * dot) ** 3
+    assert np.isclose(kern3.make_K(Xs, params), K3).all()
+
+    kern1.set_X(Xs)
+    kern3.set_X(Xs)
+    assert sorted(kern1._saved_X.keys()) == ['A', 'B', 'C']
+    assert np.isclose(kern1._saved_X['A'], xa).all()
+    assert np.isclose(kern1._dots, dot).all()
+    assert np.isclose(kern3.make_K(hypers=params), K3).all()
+    print 'PolynomialKernel passes all tests.'
 
 def test_matern_kernel():
     """ Tests for the matern kernels. """
@@ -578,7 +620,6 @@ def test_linear_kernel():
     saved_X = {i:np.array(X.loc[i]) for i in X.index}
 
     kern.set_X(X)
-    print kern._base_K
     assert np.array_equal(kern._base_K,K)
 
 
@@ -638,6 +679,7 @@ if __name__=="__main__":
     test_gpkernel()
     test_matern_kernel()
     test_linear_kernel()
+    test_polynomial_kernel()
     test_hamming_kernel()
     test_structure_kernel()
     test_se_kernel()

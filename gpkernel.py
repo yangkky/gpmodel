@@ -292,17 +292,11 @@ class MaternKernel (GPKernel):
             D (np.ndarray or float)
         """
         xs = np.array(xs)
-        dims = np.shape(xs)
-        n = dims[0]
-        d = np.empty((n,n))
-        for i in range (1,n):
-            for j in range(i):
-                d[i][j] = self._distance(xs[j], xs[i])
-                d[j][i] = d[i][j]
-            # fill in diagonals
-        for i in range (n):
-            d[i][i] = 0
-        return d
+        A = np.sum(xs ** 2, axis=1).reshape((len(xs), 1))
+        B = np.sum(xs ** 2, axis=1).reshape((len(xs), 1)).T
+        C = 2 * np.dot(xs, xs.T)
+        dists = np.sqrt(A + B - C)
+        return dists
 
 class SEKernel (GPKernel):
 

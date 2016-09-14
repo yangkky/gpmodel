@@ -274,7 +274,6 @@ class GPModel(object):
         df['UB'] = UBs
         df['k_star'] = k_stars
         df['k'] = ks
-        print('Entering loop...')
         for i in range(n):
             print('\t%d' %i)
             # first selection

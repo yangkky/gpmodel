@@ -1,6 +1,5 @@
 ''' Classes for doing Gaussian process models of proteins.'''
 
-from sys import exit
 from collections import namedtuple
 try:
     import cPickle as pickle
@@ -32,18 +31,18 @@ class GPModel(object):
         hypers (namedtuple): the hyperparameters
         regr (Boolean): classification or regression
         _K (pd.DataFrame): Covariance matrix
-        _Ky (np.matrix): noisy covariance matrix [K+var_n*I]
-        _L (np.matrix): lower triangular Cholesky decomposition of Ky for
+        _Ky (np.ndarray): noisy covariance matrix [K+var_n*I]
+        _L (np.ndarray): lower triangular Cholesky decomposition of Ky for
             regression models. Lower triangular Cholesky decomposition of
             (I + W_root*Ky*W_root.T) for classification models.
-        _alpha (np.matrix): L.T\(L\Y)
+        _alpha (np.ndarray): L.T\(L\Y)
         ML (float): The negative log marginal likelihood
         log_p (float): the negative LOO log likelihood
         _ell (int): number of training samples
         _f_hat (Series): MAP values of the latent function for training set
-        _W (np.matrix): negative _hessian of the log likelihood
-        _W_root (np.matrix): Square root of W
-        _grad (np.matrix): gradient of the log logistic likelihood
+        _W (np.ndarray): negative _hessian of the log likelihood
+        _W_root (np.ndarray): Square root of W
+        _grad (np.ndarray): gradient of the log logistic likelihood
     """
 
     def __init__ (self, kern, **kwargs):
@@ -88,18 +87,18 @@ class GPModel(object):
             hypers (namedtuple): the hyperparameters
             regr (Boolean): classification or regression
             _K (pdDataFrame): Covariance matrix
-            _Ky (np.matrix): noisy covariance matrix [K+var_n*I]
-            _L (np.matrix): lower triangular Cholesky decomposition of Ky for
+            _Ky (np.ndarray): noisy covariance matrix [K+var_n*I]
+            _L (np.ndarray): lower triangular Cholesky decomposition of Ky for
                 regression models. Lower triangular Cholesky decomposition of
                 (I + W_root*Ky*W_root.T) for classification models.
-            _alpha (np.matrix): L.T\(L\Y)
+            _alpha (np.ndarray): L.T\(L\Y)
             ML (float): The negative log marginal likelihood
             log_p (float): the negative LOO log likelihood
             _ell (int): number of training samples
             _f_hat (Series): MAP values of the latent function for training set
-            _W (np.matrix): negative _hessian of the log likelihood
-            _W_root (np.matrix): Square root of W
-            _grad (np.matrix): gradient of the log logistic likelihood
+            _W (np.ndarray): negative _hessian of the log likelihood
+            _W_root (np.ndarray): Square root of W
+            _grad (np.ndarray): gradient of the log logistic likelihood
         '''
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
@@ -459,11 +458,7 @@ class GPModel(object):
             K, Ky = self._make_Ks(hypers)
             K_mat = np.matrix(K)
             Ky = np.matrix(Ky)
-            try:
-                L = np.linalg.cholesky (Ky)
-            except:
-                print(hypers)
-                exit('Cannot find L in _log_ML')
+            L = np.linalg.cholesky (Ky)
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
                                     (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
@@ -566,7 +561,7 @@ class GPModel(object):
         elif len(guess) == l:
             f_hat = guess
         else:
-            exit ('Initial guess must have same dimensions as Y')
+            raise ValueError('Initial guess must have same dimensions as Y')
 
 
         K = self.kern.make_K(hypers=hypers)
@@ -575,11 +570,7 @@ class GPModel(object):
         for i in range (evals):
             # find new f_hat
             W = self._hess (f_hat)
-            try:
-                W_root = linalg.sqrtm(W)
-            except:
-                print(i)
-                exit('Cannot find F')
+            W_root = linalg.sqrtm(W)
             f_hat_mat = np.matrix (f_hat)
             L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
             b = W*f_hat_mat.T + np.matrix(
@@ -598,7 +589,7 @@ class GPModel(object):
                 f_new.index = self.X_seqs.index
                 return f_new
             f_hat = f_new
-        exit ('Maximum number of evaluations reached without convergence')
+        raise RuntimeError('Maximum number of evaluations reached without convergence')
 
     def _logq(self, F, hypers):
         ''' Calculate negative log marginal likelihood.

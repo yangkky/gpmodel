@@ -1,16 +1,17 @@
-''' Classes for doing Gaussian process models of proteins'''
+''' Classes for doing Gaussian process models of proteins.'''
 
-import numpy as np
-from scipy.optimize import minimize
-import math
 from sys import exit
-import scipy
-import pandas as pd
 from collections import namedtuple
 try:
     import cPickle as pickle
 except:
     import pickle
+
+import numpy as np
+from scipy.optimize import minimize
+from scipy import stats, integrate, linalg
+import pandas as pd
+
 import gpmean
 
 
@@ -204,7 +205,7 @@ class GPModel(object):
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
             self._W = self._hess (self._f_hat)
-            self._W_root = scipy.linalg.sqrtm(self._W)
+            self._W_root = linalg.sqrtm(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
             self._L = np.linalg.cholesky (np.matrix(np.eye(self._ell))+self._W_root\
                                          *self._Ky*self._W_root)
@@ -378,10 +379,10 @@ class GPModel(object):
             v = np.linalg.lstsq(self._L, self._W_root*k.T)[0]
             var = k_star - v.T*v
             i = 10
-            pi_star = scipy.integrate.quad(self._p_integral,
-                                           -i*var+f_bar,
-                                           f_bar+i*var,
-                                           args=(f_bar.item(), var.item()))[0]
+            pi_star = integrate.quad(self._p_integral,
+                                     -i*var+f_bar,
+                                     f_bar+i*var,
+                                     args=(f_bar.item(), var.item()))[0]
             return (pi_star, f_bar.item(), var.item())
 
     def predicts (self, new_seqs, delete=True):
@@ -435,7 +436,7 @@ class GPModel(object):
         except OverflowError:
             first = 0.
         try:
-            second = 1/np.sqrt(2*math.pi*variance)
+            second = 1/np.sqrt(2*np.pi*variance)
         except:
             second = -1
         third = np.exp(-(z-mean)**2/(2*variance))
@@ -466,8 +467,8 @@ class GPModel(object):
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
                                     (L, np.matrix(Y_mat).T)[0])[0]
             first = 0.5*Y_mat*alpha
-            second = sum([math.log(ell) for ell in np.diag(L)])
-            third = len(K_mat)/2.*math.log(2*math.pi)
+            second = sum([np.log(ell) for ell in np.diag(L)])
+            third = len(K_mat)/2.*np.log(2*np.pi)
             ML = (first+second+third).item()
             return ML
         else:
@@ -494,7 +495,7 @@ class GPModel(object):
         '''
         if int(y) not in [-1,1]:
             raise RuntimeError ('y must be -1 or 1')
-        return 1./(1+math.exp(-y*f))
+        return 1./(1+np.exp(-y*f))
 
     def _log_logistic_likelihood (self,Y, F):
         """ Calculate the log logistic likelihood.
@@ -575,7 +576,7 @@ class GPModel(object):
             # find new f_hat
             W = self._hess (f_hat)
             try:
-                W_root = scipy.linalg.sqrtm(W)
+                W_root = linalg.sqrtm(W)
             except:
                 print(i)
                 exit('Cannot find F')
@@ -617,7 +618,7 @@ class GPModel(object):
         K = self.kern.make_K(hypers=hypers)
         K_mat = np.matrix(K)
         W = self._hess (F)
-        W_root = scipy.linalg.sqrtm(W)
+        W_root = linalg.sqrtm(W)
         F_mat = np.matrix (F)
         L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
         b = W*F_mat.T + np.matrix(np.diag(self._grad_log_logistic_likelihood
@@ -706,7 +707,6 @@ class GPModel(object):
 
             # if nothing specified, return Kendall's Tau
             if not args:
-                from scipy import stats
                 r1 = stats.rankdata(Y)
                 r2 = stats.rankdata(pred_Y)
                 return stats.kendalltau(r1, r2).correlation
@@ -714,7 +714,6 @@ class GPModel(object):
             scores = {}
             for t in args:
                 if t == 'kendalltau':
-                    from scipy import stats
                     r1 = stats.rankdata(Y)
                     r2 = stats.rankdata(pred_Y)
                     scores[t] = stats.kendalltau(r1, r2).correlation

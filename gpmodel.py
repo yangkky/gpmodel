@@ -365,17 +365,17 @@ class GPModel(object):
                 alpha = self._alpha
             if L is None:
                 L = self._L
-            E = k*alpha
+            E = np.dot(k,alpha)
             v = np.linalg.lstsq(L,k.T)[0]
-            var = k_star - v.T*v
+            var = k_star - np.dot(v.T, v)
             if unnorm:
                 E = self.unnormalize(E)
                 var *= self.std**2
             return (E.item(),var.item())
         else:
-            f_bar = k*self._grad.T
-            v = np.linalg.lstsq(self._L, self._W_root*k.T)[0]
-            var = k_star - v.T*v
+            f_bar = np.dot(k, self._grad.T)
+            v = np.linalg.lstsq(self._L, np.dot(self._W_root, k.T))[0]
+            var = k_star - np.dot(v.T, v)
             i = 10
             pi_star = integrate.quad(self._p_integral,
                                      -i*var+f_bar,
@@ -401,9 +401,10 @@ class GPModel(object):
         else:
             h = self.hypers
         for ns in new_seqs.index:
-            k = np.matrix([self.kern.calc_kernel(ns, seq1,
+            k = np.array([self.kern.calc_kernel(ns, seq1,
                                                 hypers=h) \
                            for seq1 in self.X_seqs.index])
+            k = k.reshape(1, len(k))
             k_star = self.kern.calc_kernel(ns, ns,
                                            hypers=h)
             predictions.append(self._predict(k, k_star))
@@ -453,16 +454,14 @@ class GPModel(object):
             log_ML (float)
         """
         if self.regr:
-            Y_mat = np.matrix(self.normed_Y)
+            Y = self.normed_Y.values.reshape(1, len(self.normed_Y))
             K, Ky = self._make_Ks(hypers)
-            K_mat = np.matrix(K)
-            Ky = np.matrix(Ky)
             L = np.linalg.cholesky (Ky)
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
-                                    (L, np.matrix(Y_mat).T)[0])[0]
-            first = 0.5*Y_mat*alpha
-            second = sum([np.log(ell) for ell in np.diag(L)])
-            third = len(K_mat)/2.*np.log(2*np.pi)
+                                    (L, Y.T)[0])[0]
+            first = 0.5 * np.dot(Y, alpha)
+            second = np.sum(np.log(np.diag(L)))
+            third = len(K)/2.*np.log(2*np.pi)
             ML = (first+second+third).item()
             return ML
         else:
@@ -474,22 +473,26 @@ class GPModel(object):
         '''True if Y only contains values 1 and -1, otherwise False'''
         return all (y in [-1,1] for y in self.Y)
 
-    def _logistic_likelihood (self, y, f):
+    def _logistic_likelihood (self, Y, F):
         ''' Calculate logistic likelihood.
 
         Calculates the logistic probability of the outcome y given
         the latent  variable f according to Equation 3.2 in RW.
 
         Parameters:
-            y (float): +/- 1
-            f (float): value of latent function
+            Y (float or np.ndarray): +/- 1
+            F (float or np.ndarray): value of latent function
 
         Returns:
             float
         '''
-        if int(y) not in [-1,1]:
-            raise RuntimeError ('y must be -1 or 1')
-        return 1./(1+np.exp(-y*f))
+        if isinstance(Y, np.ndarray):
+            if not ((Y==1).astype(int) + (Y==-1).astype(int)).all():
+                raise RuntimeError ('All values in Y must be -1 or 1')
+        else:
+            if int(Y) not in [1, -1]:
+                raise RuntimeError('Y must be -1 or 1')
+        return 1./(1+np.exp(-Y*F))
 
     def _log_logistic_likelihood (self,Y, F):
         """ Calculate the log logistic likelihood.
@@ -507,7 +510,7 @@ class GPModel(object):
         """
         if len(Y) != len(F):
             raise RuntimeError ('Y and F must be the same length')
-        lll = sum(np.log([self._logistic_likelihood(y,f) for y,f in zip(Y,F)]))
+        lll = np.sum(np.log(self._logistic_likelihood(Y.values,F.values)))
         return lll
 
     def _grad_log_logistic_likelihood (self,Y,F):
@@ -522,31 +525,31 @@ class GPModel(object):
             F (Series): values for the latent function
 
         Returns:
-            glll (np.matrix): diagonal log likelihood matrix
+            glll (np.ndarray): diagonal matrix containing the
+                gradient of the log likelihood
         """
-        glll = np.matrix(np.zeros([self._ell,self._ell]))
-        for i in range(self._ell):
-            glll[i,i] = (Y[i]+1.)/2. - self._logistic_likelihood(1.,F[i])
-        return glll
+        Y = Y.values
+        F = F.values
+        glll = (Y + 1) / 2.0 -  self._logistic_likelihood(1.0, F)
+        return np.diag(glll)
 
     def _hess (self,F):
-        """ Calculate the negative _hessian og the logistic likelihod.
+        """ Calculate the negative _hessian of the logistic likelihod.
 
-        Calculates the negative _hessian of the logistic likelihood
-        according to Equation 3.15 of RW
+        Calculates the negative hessian of the logistic likelihood
+        according to Equation 3.15 of RW.
 
         Parameters:
             F (Series): values for the latent function
 
         Returns:
-            W (np.matrix): diagonal negative _hessian of the log
+            W (np.matrix): diagonal negative hessian of the log
                 likelihood matrix
         """
-        W = np.matrix(np.zeros([self._ell,self._ell]))
-        for i in range(self._ell):
-            pi_i = self._logistic_likelihood(1., F[i])
-            W[i,i] = pi_i*(1-pi_i)
-        return W
+        F = F.values
+        pi = self._logistic_likelihood(1.0, F)
+        W =  pi * (1 - pi)
+        return np.diag(W)
 
     def _find_F (self, hypers, guess=None, threshold=.0001, evals=1000):
         """Calculates f_hat according to Algorithm 3.1 in RW.
@@ -554,33 +557,32 @@ class GPModel(object):
         Returns:
             f_hat (pd.Series)
         """
-        l = len(self.Y)
+        ell = len(self.Y)
         if guess == None:
-            f_hat = pd.Series(np.zeros(l))
+            f_hat = pd.Series(np.zeros(ell))
         elif len(guess) == l:
             f_hat = guess
         else:
             raise ValueError('Initial guess must have same dimensions as Y')
-
-
         K = self.kern.make_K(hypers=hypers)
         K_mat = np.matrix(K)
         n_below = 0
-        for i in range (evals):
+        for i in range(evals):
             # find new f_hat
-            W = self._hess (f_hat)
+            W = self._hess(f_hat)
             W_root = linalg.sqrtm(W)
-            f_hat_mat = np.matrix (f_hat)
-            L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
-            b = W*f_hat_mat.T + np.matrix(
-                np.diag(self._grad_log_logistic_likelihood(self.Y,f_hat))).T
-            a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(
-                    L,W_root*K_mat*b)[0])[0]
-            f_new = K_mat*a
-            f_new = pd.Series([f.item() for f in np.nditer(f_new)])
-            # find error between new and old f_hat
-            sq_error = sum([(fh-fn)**2 for fh,fn in zip (f_hat, f_new)])
-            if sq_error/sum([fn**2 for fn in f_new]) < threshold:
+            trip_dot = (W_root.dot(K)).dot(W_root)
+            L = np.linalg.cholesky(np.eye(ell) + trip_dot)
+            b =  W.dot(f_hat.T)
+            b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
+            b = b.reshape(len(b), 1)
+            trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
+            a = b - W_root.dot(np.linalg.lstsq(L.T, trip_dot_lstsq)[0])
+            f_new = K.dot(a)
+            f_new = f_new.reshape((len(f_new), ))
+            sq_error = np.sum((f_hat.values - f_new) ** 2)
+            f_new = pd.Series(f_new)
+            if sq_error / np.sum(f_new) < threshold:
                 n_below += 1
             else:
                 n_below = 0
@@ -588,7 +590,7 @@ class GPModel(object):
                 f_new.index = self.X_seqs.index
                 return f_new
             f_hat = f_new
-        raise RuntimeError('Maximum number of evaluations reached without convergence')
+        raise RuntimeError('Maximum evaluations reached without convergence.')
 
     def _logq(self, F, hypers):
         ''' Calculate negative log marginal likelihood.
@@ -604,20 +606,21 @@ class GPModel(object):
         Returns:
             _logq (float)
         '''
-        l = self._ell
+        ell = self._ell
         K = self.kern.make_K(hypers=hypers)
-        K_mat = np.matrix(K)
         W = self._hess (F)
         W_root = linalg.sqrtm(W)
-        F_mat = np.matrix (F)
-        L = np.linalg.cholesky (np.matrix(np.eye(l))+W_root*K_mat*W_root)
-        b = W*F_mat.T + np.matrix(np.diag(self._grad_log_logistic_likelihood
-                                          (self.Y,F))).T
-        a = b - W_root*np.linalg.lstsq(L.T,
-                                       np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
-        _logq = 0.5*a.T*F_mat.T - self._log_logistic_likelihood(self.Y, F) \
-        + sum(np.log(np.diag(L)))
+        F_mat = F.values.reshape(len(F), 1)
+        trip_dot = (W_root.dot(K)).dot(W_root)
+        L = np.linalg.cholesky(np.eye(ell) + trip_dot)
+        b = W.dot(F_mat) + np.diag(self._grad_log_logistic_likelihood(self.Y, F)).reshape(len(F), 1)
+        b = b.reshape(len(b), 1)
+        trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
+        a = b - W_root.dot(np.linalg.lstsq(L.T, trip_dot_lstsq)[0])
+        _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(self.Y, F) \
+        + np.sum(np.log(np.diag(L)))
         return _logq
+
 
     def _LOO_log_p (self, hypers):
         """ Calculates the negative LOO log probability.
@@ -654,9 +657,9 @@ class GPModel(object):
         """
         K, Ky = self._make_Ks(hypers)
         K_inv = np.linalg.inv(Ky)
-        Y_mat = np.matrix (self.normed_Y)
-        mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
-        vs = np.diag(1/K_inv)
+        Y = self.normed_Y.values.reshape(len(self.normed_Y), 1)
+        mus = np.diag(Y - np.dot(K_inv, Y) / K_inv)
+        vs = np.diag(1 / K_inv)
         if add_mean or unnorm:
             mus = self.unnormalize(mus)
             vs = np.array(vs).copy()

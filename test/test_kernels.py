@@ -1,4 +1,5 @@
 import sys
+sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
 import gpkernel
 import pandas as pd

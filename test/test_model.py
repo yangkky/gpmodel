@@ -1,6 +1,7 @@
 import sys
+sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel,gpmodel, gpmean, chimera_tools
+import gpkernel, gpmodel, gpmean, chimera_tools
 import pandas as pd
 import numpy as np
 import math
@@ -329,7 +330,7 @@ def test_classification ():
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5,.5,.6,.1])
-    assert close_enough(model.hypers.var_p, 43.7865018929),\
+    assert close_enough(model.hypers.var_p, 43.763806573),\
     'Classification model.hypers.var_p is incorrect'
     assert close_enough(model.ML, 2.45520196), \
     'Classification model.ML is incorrect'

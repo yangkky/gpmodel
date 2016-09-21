@@ -565,7 +565,6 @@ class GPModel(object):
         else:
             raise ValueError('Initial guess must have same dimensions as Y')
         K = self.kern.make_K(hypers=hypers)
-        K_mat = np.matrix(K)
         n_below = 0
         for i in range(evals):
             # find new f_hat

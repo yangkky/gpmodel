@@ -870,7 +870,7 @@ class HammingMaternKernel(MaternKernel, HammingKernel):
             for j in range(i):
                 D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
-        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+        return D
 
 class StructureSEKernel (SEKernel, StructureKernel):
 
@@ -933,7 +933,7 @@ class StructureSEKernel (SEKernel, StructureKernel):
             for j in range(i):
                 D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
-        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+        return D
 
 class HammingSEKernel (SEKernel, HammingKernel):
 
@@ -991,7 +991,7 @@ class HammingSEKernel (SEKernel, HammingKernel):
             for j in range(i):
                 D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
                 D[j,i] = D[i,j]
-        return pd.DataFrame(D, index=X_seqs.index, columns=X_seqs.index)
+        return D
 
 class SumKernel(GPKernel):
 

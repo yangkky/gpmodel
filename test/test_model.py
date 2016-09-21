@@ -329,7 +329,7 @@ def test_classification ():
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5,.5,.6,.1])
-    assert close_enough(model.hypers.var_p, 43.814739881967405),\
+    assert close_enough(model.hypers.var_p, 43.7865018929),\
     'Classification model.hypers.var_p is incorrect'
     assert close_enough(model.ML, 2.45520196), \
     'Classification model.ML is incorrect'

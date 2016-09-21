@@ -156,6 +156,8 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
         return collapse(X, terms)
 
 def collapse(X, terms):
+    if isinstance(X, pd.DataFrame):
+        X = X.values
     columns = [i for i in range(len(terms))]
     new_terms = []
     kept_columns = []

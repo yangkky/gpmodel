@@ -227,16 +227,17 @@ def test_hamming_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern._saved_X == {'A':'RYMA',
-                            'B':'RTHA',
-                            'C':'RTMA',
-                            'D':'RYMA'},\
+    assert kern._saved_X == {'A': ['R', 'Y', 'M', 'A'],
+                             'C': ['R', 'T', 'M', 'A'],
+                             'B': ['R', 'T', 'H', 'A'],
+                             'D': ['R', 'Y', 'M', 'A']},\
     'Failed to train HammingKernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern._saved_X == {'A':'RYMA',
-                            'B':'RTHA',
-                            'C':'RTMA'}
+    assert kern._saved_X == {'A': ['R', 'Y', 'M', 'A'],
+                             'C': ['R', 'T', 'M', 'A'],
+                             'B': ['R', 'T', 'H', 'A']}
+
     assert kern.calc_kernel('A','B', normalize=False) == 2,\
     'Failed calc_kernel with two trained sequences.'
     assert kern.calc_kernel('C','B',hypers=[vp], normalize=False) == 3*vp,\
@@ -269,16 +270,16 @@ def test_structure_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern._saved_X == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
-                      'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
-                      'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))],
-                      'D': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))]},\
+    assert kern._saved_X == {'A': ['0R1Y', '2M3A'],
+                             'C': ['0R1T', '2M3A'],
+                             'B': ['0R1T', '2H3A'],
+                             'D': ['0R1Y', '2M3A']},\
     'Failed to train structure kernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern._saved_X == {'A': [((0, 'R'), (1, 'Y')), ((2, 'M'), (3, 'A'))],
-                            'C': [((0, 'R'), (1, 'T')), ((2, 'M'), (3, 'A'))],
-                            'B': [((0, 'R'), (1, 'T')), ((2, 'H'), (3, 'A'))]}
+    assert kern._saved_X == {'A': ['0R1Y', '2M3A'],
+                             'C': ['0R1T', '2M3A'],
+                             'B': ['0R1T', '2H3A']}
 
     kern.set_X(seqs)
     assert np.isclose(kern._base_K, K/norm).all()

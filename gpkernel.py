@@ -5,7 +5,7 @@ import pandas as pd
 from sys import exit
 
 
-class GPKernel (object):
+class GPKernel(object):
 
     """ A Gaussian Process kernel.
 
@@ -168,7 +168,7 @@ class PolynomialKernel(GPKernel):
                 d[j][i] = d[i][j]
         return d
 
-class MaternKernel (GPKernel):
+class MaternKernel(GPKernel):
 
     """ A Matern kernel with nu = 5/2 or 3/2.
 
@@ -279,7 +279,7 @@ class MaternKernel (GPKernel):
         x2 = self._get_X(x2)
         return np.linalg.norm(x1 - x2)
 
-    def _get_d (self, xs):
+    def _get_d(self, xs):
         """ Calculates the geometric distances between x_i in xs.
 
         Each row of xs represents one measurement. Each column represents
@@ -298,7 +298,7 @@ class MaternKernel (GPKernel):
         dists = np.sqrt(A + B - C)
         return dists
 
-class SEKernel (GPKernel):
+class SEKernel(GPKernel):
 
     """ A squared exponential kernel.
 
@@ -314,7 +314,7 @@ class SEKernel (GPKernel):
         self.hypers = ['sigma_f', 'ell']
         self._d_squared = np.array([[]])
 
-    def calc_kernel (self, x1, x2, hypers=[1.0, 1.0]):
+    def calc_kernel(self, x1, x2, hypers=[1.0, 1.0]):
         """ Calculate the squared exponential kernel between x1 and x2.
 
         Parameters:
@@ -360,7 +360,7 @@ class SEKernel (GPKernel):
             K = self._squared_exponential(d, hypers)
             return K
 
-    def _squared_exponential (self, d_squared, params):
+    def _squared_exponential(self, d_squared, params):
         """
         Converts a square matrix of squared distances into a SE covariance
         matrix.
@@ -395,7 +395,7 @@ class SEKernel (GPKernel):
         x2 = self._get_X(x2)
         return np.linalg.norm(x1 - x2)**2
 
-    def _get_d_squared (self, xs):
+    def _get_d_squared(self, xs):
         """
         Calculates the square of the geometric distances between x_i in xs.
         Each row of xs represents one measurement. Each column represents
@@ -415,7 +415,7 @@ class SEKernel (GPKernel):
         dists = A + B - C
         return dists
 
-class HammingKernel (GPKernel):
+class HammingKernel(GPKernel):
 
     """A linear Hamming kernel.
 
@@ -425,12 +425,12 @@ class HammingKernel (GPKernel):
         _base_K (DataFrame)
     """
 
-    def __init__ (self):
+    def __init__(self):
         """ Initiate a Hamming kernel."""
         super(HammingKernel,self).__init__()
         self.hypers = ['var_p']
 
-    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
+    def calc_kernel(self, seq1, seq2, hypers=[1.0], normalize=True):
         """ Calculates the Hamming kernel between two sequences.
 
         The Hamming kernel is the number (if not normalized) or the
@@ -452,12 +452,12 @@ class HammingKernel (GPKernel):
         var_p = hypers[0]
         s1 = self._get_X(seq1)
         s2 = self._get_X(seq2)
-        k = sum([1 if str(a) == str(b) else 0 for a,b in zip(s1, s2)])
+        k = len(set(s1) & set(s2))
         if normalize:
             k = float(k) / len(s1)
-        return k*var_p
+        return k * var_p
 
-    def make_K (self, seqs=None, hypers=[1.0], normalize=True):
+    def make_K(self, seqs=None, hypers=[1.0], normalize=True):
         """ Calculate the Hamming kernel matrix.
 
         Parameters:
@@ -473,7 +473,7 @@ class HammingKernel (GPKernel):
         if seqs is None:
             var_p = hypers[0]
             return self._base_K*var_p
-        n_seqs = len (seqs)
+        n_seqs = len(seqs)
         K = np.zeros((n_seqs, n_seqs))
         for n1,i in zip(range(n_seqs), seqs.index):
             for n2,j in zip(range (n_seqs), seqs.index):
@@ -484,7 +484,7 @@ class HammingKernel (GPKernel):
                                              normalize=normalize)
         return np.array(K)
 
-    def set_X (self, X_seqs):
+    def set_X(self, X_seqs):
         """ Set a default set of inputs X_seqs.
 
         Extends the method from GPKernel by also remembering the
@@ -507,8 +507,7 @@ class HammingKernel (GPKernel):
             if X_seqs.index[i] in self._saved_X.keys():
                 pass
             else:
-                self._saved_X[X_seqs.index[i]] = ''.join(s for
-                                                         s in X_seqs.iloc[i])
+                self._saved_X[X_seqs.index[i]] = self._get_X(X_seqs.iloc[i])
 
     def delete(self,X_seqs=None):
         """ Forget the inputs in X_seqs.
@@ -535,9 +534,9 @@ class HammingKernel (GPKernel):
         try:
             return self._saved_X[seq]
         except TypeError:
-            return ''.join([s for s in seq])
+            return [s for s in seq]
 
-class WeightedHammingKernel (HammingKernel):
+class WeightedHammingKernel(HammingKernel):
 
     '''
     A Hamming kernel where the covariance between two sequences
@@ -596,7 +595,7 @@ class WeightedHammingKernel (HammingKernel):
             k = float(k) / len(s1)
         return k*var_p
 
-class StructureKernel (GPKernel):
+class StructureKernel(HammingKernel):
 
     """A Structure kernel
 
@@ -606,7 +605,7 @@ class StructureKernel (GPKernel):
         contacts (list): list of which residues are in contact
     """
 
-    def __init__ (self, contacts):
+    def __init__(self, contacts):
         """ Initiate a StructureKernel.
 
         Parameters:
@@ -616,105 +615,6 @@ class StructureKernel (GPKernel):
         GPKernel.__init__(self)
         self.contacts = contacts
         self.hypers = ['var_p']
-
-    def make_K (self, seqs=None, hypers=[1.0], normalize=True):
-        """ Calculate the structure kernel matrix.
-
-        Parameters:
-            seqs (np.ndarray or pd.DataFrame): If none given, uses
-                saved values.
-            hypers (iterable): the hyperparameters. Default is
-                sigma_p=1.0.
-            normalize (boolean): Default is true
-
-        Returns:
-            K (np.ndarray)
-        """
-        if seqs is None:
-            var_p = hypers[0]
-            return self._base_K*var_p
-        n_seqs = len (seqs)
-        K = np.zeros((n_seqs, n_seqs))
-        for n1 in range(n_seqs):
-            for n2 in range(n1+1):
-                if isinstance(seqs, pd.DataFrame):
-                    seq1 = seqs.iloc[n1]
-                    seq2 = seqs.iloc[n2]
-                else:
-                    seq1 = seqs[n1]
-                    seq2 = seqs[n2]
-                K[n1,n2] = self.calc_kernel(seq1, seq2,
-                                            hypers=hypers, normalize=normalize)
-                if n1 != n2:
-                    K[n2, n1] = K[n1, n2]
-        return K
-
-    def calc_kernel (self, seq1, seq2, hypers=[1.0], normalize=True):
-        """ Calculate the structure kernel between two sequences.
-
-        The structure kernel is the number (if not normalized) or the
-        the fraction (if normalized) of shared contacts between two
-        sequences, multiplied by a scale factor (var_p).
-
-        Parameters:
-            seq1 (pd.DataFrame or string): either a DataFrame
-                representing the sequence or the key for that sequence
-                if it has been saved.
-            seq2 (pd.DataFrame or string)
-            hypers (interable): var_p. Default is 1.0.
-            normalize (Boolean): whether to divide by the length of
-                sequences. Default is true.
-
-        Returns:
-            k (float): number of shared contacts * var_p
-        """
-        var_p = hypers[0]
-        contacts1 = self._get_X(seq1)
-        contacts2 = self._get_X(seq2)
-        k = len(set(contacts1) & set(contacts2))*var_p
-        if normalize:
-            k = float(k) / len(contacts1)
-        return k
-
-    def set_X (self, X_seqs):
-        """ Set a default set of inputs X_seqs.
-
-        Extends the method from GPKernel by also remembering the
-        contacts matrix when var_p = 1.
-
-        Parameters:
-            X_seqs (iterable)
-        """
-        self.train (X_seqs)
-        self._base_K = self.make_K(X_seqs)
-
-
-    def train(self, X_seqs):
-        """ Remember the inputs in X_seqs.
-
-        Parameters:
-            X_seqs (pd.DataFrame): Saves the inputs in X_seqs to a dictionary
-                using the index as the keys.
-        """
-        for i in range(len(X_seqs.index)):
-            if X_seqs.index[i] in self._saved_X.keys():
-                continue
-            else:
-                self._saved_X[X_seqs.index[i]] = \
-                    self._get_X(X_seqs.iloc[i])
-
-    def delete(self, X_seqs=None):
-        """ Forget the inputs in X_seqs.
-
-        Optional parameters:
-            X_seqs (pd.DataFrame): sequences to forget. If none
-                provided, forget all.
-        """
-        if X_seqs is None:
-            self._saved_X = {}
-        for i in range (len(X_seqs.index)):
-            if X_seqs.index[i] in self._saved_X.keys():
-                del self._saved_X[X_seqs.index[i]]
 
     def _get_X(self, seq):
         """ Retrieve an input sequence.
@@ -732,13 +632,10 @@ class StructureKernel (GPKernel):
                 raise ValueError ('Key %s not recognized' %seq)
         try:
             return self._saved_X[seq.name]
-
-        except (KeyError, AttributeError):
+        except(KeyError, AttributeError):
             seq = ''.join([s for s in seq])
-            contacts = []
-            for i, con in enumerate(self.contacts):
-                term = ((con[0],seq[con[0]]),(con[1],seq[con[1]]))
-                contacts.append(term)
+            contacts = [str(con[0]) + seq[con[0]] + str(con[1]) + seq[con[1]]
+                        for i, con in enumerate(self.contacts)]
             return contacts
 
 class StructureMaternKernel(MaternKernel, StructureKernel):
@@ -872,7 +769,7 @@ class HammingMaternKernel(MaternKernel, HammingKernel):
                 D[j,i] = D[i,j]
         return D
 
-class StructureSEKernel (SEKernel, StructureKernel):
+class StructureSEKernel(SEKernel, StructureKernel):
 
     """ A squared exponential structure kernel.
 
@@ -935,7 +832,7 @@ class StructureSEKernel (SEKernel, StructureKernel):
                 D[j,i] = D[i,j]
         return D
 
-class HammingSEKernel (SEKernel, HammingKernel):
+class HammingSEKernel(SEKernel, HammingKernel):
 
     """ A squared exponential Hamming kernel.
 

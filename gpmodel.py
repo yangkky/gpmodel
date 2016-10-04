@@ -8,7 +8,7 @@ except:
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy import stats, integrate, linalg
+from scipy import stats, integrate
 import pandas as pd
 
 import gpmean
@@ -204,7 +204,7 @@ class GPModel(object):
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
             self._W = self._hess (self._f_hat)
-            self._W_root = linalg.sqrtm(self._W)
+            self._W_root = np.linalg.cholesky(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
             self._L = np.linalg.cholesky (np.matrix(np.eye(self._ell))+self._W_root\
                                          *self._Ky*self._W_root)
@@ -441,6 +441,7 @@ class GPModel(object):
         third = np.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
+
     def _log_ML (self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
@@ -457,15 +458,14 @@ class GPModel(object):
             Y = self.normed_Y.values.reshape(1, len(self.normed_Y))
             K, Ky = self._make_Ks(hypers)
             L = np.linalg.cholesky (Ky)
-            alpha = np.linalg.lstsq(L.T, np.linalg.lstsq
-                                    (L, Y.T)[0])[0]
+            alpha = np.linalg.lstsq(L.T, np.linalg.lstsq(L, Y.T)[0])[0]
             first = 0.5 * np.dot(Y, alpha)
             second = np.sum(np.log(np.diag(L)))
             third = len(K)/2.*np.log(2*np.pi)
             ML = (first+second+third).item()
             return ML
         else:
-            f_hat = self._find_F(hypers=hypers) # use Algorithm 3.1 to find mode
+            f_hat = self._find_F(hypers=hypers)
             ML = self._logq(f_hat, hypers=hypers)
             return ML.item()
 
@@ -551,6 +551,7 @@ class GPModel(object):
         W =  pi * (1 - pi)
         return np.diag(W)
 
+
     def _find_F (self, hypers, guess=None, threshold=.0001, evals=1000):
         """Calculates f_hat according to Algorithm 3.1 in RW.
 
@@ -569,7 +570,7 @@ class GPModel(object):
         for i in range(evals):
             # find new f_hat
             W = self._hess(f_hat)
-            W_root = linalg.sqrtm(W)
+            W_root = np.linalg.cholesky(W)
             trip_dot = (W_root.dot(K)).dot(W_root)
             L = np.linalg.cholesky(np.eye(ell) + trip_dot)
             b =  W.dot(f_hat.T)
@@ -608,7 +609,7 @@ class GPModel(object):
         ell = self._ell
         K = self.kern.make_K(hypers=hypers)
         W = self._hess (F)
-        W_root = linalg.sqrtm(W)
+        W_root = np.linalg.cholesky(W)
         F_mat = F.values.reshape(len(F), 1)
         trip_dot = (W_root.dot(K)).dot(W_root)
         L = np.linalg.cholesky(np.eye(ell) + trip_dot)

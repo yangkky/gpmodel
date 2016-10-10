@@ -479,9 +479,9 @@ class HammingKernel(GPKernel):
             for n2,j in zip(range (n_seqs), seqs.index):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
-                K[n1,n2] = self.calc_kernel (seq1, seq2,
-                                             hypers=hypers,
-                                             normalize=normalize)
+                K[n1,n2] = self.calc_kernel(seq1, seq2,
+                                            hypers=hypers,
+                                            normalize=normalize)
         return np.array(K)
 
     def set_X(self, X_seqs):
@@ -534,7 +534,7 @@ class HammingKernel(GPKernel):
         try:
             return self._saved_X[seq]
         except TypeError:
-            return [s for s in seq]
+            return [str(i) + s for i,s in enumerate(seq)]
 
 class WeightedHammingKernel(HammingKernel):
 

@@ -227,16 +227,16 @@ def test_hamming_kernel():
 
     # now let's make sure we can train it and use keys to access functions
     kern.train(seqs)
-    assert kern._saved_X == {'A': ['R', 'Y', 'M', 'A'],
-                             'C': ['R', 'T', 'M', 'A'],
-                             'B': ['R', 'T', 'H', 'A'],
-                             'D': ['R', 'Y', 'M', 'A']},\
+    assert kern._saved_X == {'A': ['0R', '1Y', '2M', '3A'],
+                             'C': ['0R', '1T', '2M', '3A'],
+                             'B': ['0R', '1T', '2H', '3A'],
+                             'D': ['0R', '1Y', '2M', '3A']},\
     'Failed to train HammingKernel.'
 
     kern.delete(seqs.loc[['D']])
-    assert kern._saved_X == {'A': ['R', 'Y', 'M', 'A'],
-                             'C': ['R', 'T', 'M', 'A'],
-                             'B': ['R', 'T', 'H', 'A']}
+    assert kern._saved_X == {'A': ['0R', '1Y', '2M', '3A'],
+                             'C': ['0R', '1T', '2M', '3A'],
+                             'B': ['0R', '1T', '2H', '3A']}
 
     assert kern.calc_kernel('A','B', normalize=False) == 2,\
     'Failed calc_kernel with two trained sequences.'

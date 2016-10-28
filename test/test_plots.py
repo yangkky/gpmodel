@@ -2,11 +2,14 @@ import sys
 import string
 sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel, gpmodel
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+import seaborn as sns
+
+import gpkernel, gpmodel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-k', '--kernel',required=True)
@@ -70,8 +73,8 @@ model = gpmodel.GPModel(kern)
 
 if args.hypers is None:
     model.fit(X, Y)
-    print model.hypers
-    print 'log(ML) = ', -model.ML
+    print(model.hypers)
+    print('log(ML) = ', -model.ML)
 
 else:
     model.set_params(X=X, Y=Y, hypers=args.hypers)
@@ -101,12 +104,10 @@ elif args.type == 'b1':
     preds = model.predicts(pd.DataFrame(X_new.T))
     pis = [p[0] for p in preds]
     f_bars = np.array([p[1] for p in preds])
-    print f_bars
+    print(f_bars)
     var = np.array([p[2] for p in preds])
     plt.plot(X_new, pis, 'g.', alpha=0.7)
     plt.plot (X, (Y+1.0)/2.0, 'ko', alpha=0.7)
-
-
 
 else:
     X_new = np.arange(-10, 10, 0.1)

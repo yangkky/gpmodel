@@ -24,8 +24,8 @@ def contacting_terms (sample_space, contacts):
     for contact in contacts:
         first_pos = contact[0]
         second_pos = contact[1]
-        first_possibilities = set(sample_space[first_pos])
-        second_possibilities = set(sample_space[second_pos])
+        first_possibilities = sorted(set(sample_space[first_pos]))
+        second_possibilities = sorted(set(sample_space[second_pos]))
         for aa1 in first_possibilities:
             for aa2 in second_possibilities:
                 contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
@@ -153,9 +153,10 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
     if not collapse:
         return X, terms
     else:
-        return collapse(X, terms)
+        return _collapse(X, terms)
 
-def collapse(X, terms):
+
+def _collapse(X, terms):
     if isinstance(X, pd.DataFrame):
         X = X.values
     columns = [i for i in range(len(terms))]
@@ -215,7 +216,7 @@ def load_assignments (assignments_file):
                   if l.split('\t')[2] !='-']
     nodes_outputfile = [int(l.split('\t')[1])-1 for l in assignments_line
                         if l.split('\t')[2] !='-'] # -1 because counting 0,1,2...
-    return dict(zip(nodes_outputfile, assignment))
+    return dict(list(zip(nodes_outputfile, assignment)))
 
 def make_sequence (code, assignments_dict, sample_space, default=0):
     ''' Returns the chimera sequence as a list.

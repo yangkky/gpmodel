@@ -26,7 +26,8 @@ K = pd.DataFrame([[2.0,0.0,1.0,2.0],
                  index=seqs.index,
                  columns=seqs.index)
 
-ent = gpentropy.GPEntropy(kernel=kernel, hypers=[vp], var_n=vn, observations=seqs)
+ent = gpentropy.GPEntropy(kernel=kernel, hypers=[vp],
+                          var_n=vn, observations=seqs)
 
 assert np.isclose(ent._Ky, K.values / 2*vp + np.eye(4) * vn).all()
 
@@ -44,8 +45,10 @@ assert np.isclose(ent._k_star(seqs.loc[['A', 'B']]), K_no_noise[0:2]).all()
 assert np.isclose(ent._k_star(seqs.loc[['A', 'B', 'D']]),
                              K_no_noise[[0,1,3]]).all()
 # posterior covariance
-new_seqs = pd.DataFrame([['B','Y','M','A'],['N','T','H','A'], ['G','T','M','A']],
-                    index=[1, 2, 3], columns=[0,1,2,3])
+new_seqs = pd.DataFrame([['B','Y','M','A'],
+                        ['N','T','H','A'],
+                        ['G','T','M','A']],
+                        index=[1, 2, 3], columns=[0,1,2,3])
 k_off = np.matrix(ent._k_star(new_seqs))
 cov = kernel.make_K(new_seqs, hypers=[vp])
 real_post = cov - k_off * np.linalg.inv(ent._Ky) * k_off.T
@@ -56,7 +59,7 @@ H =  0.5 * (np.log(np.linalg.det(real_post))
 assert np.isclose(ent.entropy(new_seqs), H)
 # expected entropy
 probabilities = np.array([[0.1, 0.9, 0.4]]).T
-assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.11849477318)
+assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.10000636981)
 s, H, chosen = ent.maximize_expected_entropy(new_seqs, probabilities, 2)
 assert np.isclose(H, 1.0432025064204087)
 assert chosen == [1,2]
@@ -73,6 +76,3 @@ s, H, chosen = ent.maximize_entropy(new_seqs, 2)
 assert np.isclose(H, 1.5849798517056266)
 assert chosen == [1,2]
 assert np.array_equal(s, new_seqs.iloc[chosen].values)
-
-
-

@@ -60,6 +60,8 @@ class GPEntropy(object):
         Returns:
             H (float)
         """
+        if isinstance(X, np.ndarray):
+            X = pd.DataFrame(X, index=[str(i) for i in range(len(X))])
         K = self._posterior_covariance(X)
         L = np.linalg.cholesky(K)
         D = len(X)
@@ -87,13 +89,13 @@ class GPEntropy(object):
         total = 0
         data = np.concatenate((X, probabilities), axis=1)
         for r in range(1,len(X)+1):
-            for subset_inds in itertools.combinations(xrange(len(data)), r):
+            for subset_inds in itertools.combinations(range(len(data)), r):
                 subset = data[subset_inds,:]
                 sub_X = subset[:,0:-1]
                 sub_probs = subset[:,-1]
                 H = self.entropy(sub_X)
                 prob_for = np.prod(sub_probs)
-                comp = list(set(xrange(len(data))) - set(subset_inds))
+                comp = list(set(range(len(data))) - set(subset_inds))
                 prob_against = np.prod([1-p for p in data[comp,-1]])
                 total += H * prob_for * prob_against
         return total
@@ -107,10 +109,12 @@ class GPEntropy(object):
         Returns:
             K (np.matrix)
         """
+        if isinstance(X, np.ndarray):
+            X = pd.DataFrame(X, index=[str(i) for i in range(len(X))])
         cov = self.kernel.make_K(X, hypers=self.hypers)
         k_off = np.matrix(self._k_star(X))
         v = np.linalg.lstsq(self._L,k_off.T)[0]
-        return cov - v.T*v
+        return cov - v.T * v
 
     def maximize_entropy(self, X, n):
         """ Choose the subset of X that maximizes the entropy.
@@ -183,7 +187,7 @@ class GPEntropy(object):
                 new_args = {k:kwargs[k][try_inds] for k in kwargs.keys()}
                 del_H = func(X[try_inds],**new_args) - H
                 UBs.iloc[0,0] = del_H
-                found = (del_H > UBs.iloc[1,0])
+                found = (del_H >= UBs.iloc[1,0])
                 if found:
                     break
                 less_than = (del_H < UBs.iloc[1::]).values.T[0]

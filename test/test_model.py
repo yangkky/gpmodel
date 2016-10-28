@@ -128,13 +128,13 @@ def test_score():
 def test_regression ():
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
-    assert close_enough(model.hypers.var_p, 0.63016924576335664),\
+    assert np.isclose(model.hypers.var_p, 0.63016924576335664),\
     'Regression model.hypers.var_p is incorrect'
-    assert close_enough(model.hypers.var_n, 0.18044635639161319),\
+    assert np.isclose(model.hypers.var_n, 0.18044635639161319),\
     'Regression model.hypers.var_n is incorrect'
-    assert close_enough(model.ML, 4.59859002013),\
+    assert np.isclose(model.ML, 4.59859002013),\
     'Regression model.ML is incorrect'
-    assert close_enough(model.log_p, 3.79099390643),\
+    assert np.isclose(model.log_p, 3.79099390643),\
     'Regression model.log_p is incorrect'
     assert np.isclose(model._K,
                       struct.make_K(seqs,
@@ -165,7 +165,7 @@ def test_regression ():
     third = len(reg_Ys)*math.log(2*math.pi)*.5
     ML = first + second + third
 
-    assert close_enough(model._log_ML((vn,vp)), ML.item()), \
+    assert np.isclose(model._log_ML((vn,vp)), ML.item()), \
     'log_ML fails: ' + ' '.join([str(first),str(second),str(third)])
 
     K_inv = np.linalg.inv(Ky)
@@ -176,7 +176,7 @@ def test_regression ():
     log_p_1 = model._LOO_log_p((vn,vp))
     log_p_2 = 0.5*np.sum(np.log(res2['v']) + np.power(normed_Ys-res2['mu'],2)/res2['v'] \
                           + np.log(2*np.pi))
-    assert close_enough(log_p_1, log_p_2), \
+    assert np.isclose(log_p_1, log_p_2), \
     'Regression model does not correctly calculate LOO log predictive probability'
 
 
@@ -203,14 +203,14 @@ def test_regression ():
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
 
-    assert close_enough(EA, predictions[0][0])
-    assert close_enough(ED, predictions[1][0])
+    assert np.isclose(EA, predictions[0][0])
+    assert np.isclose(ED, predictions[1][0])
     assert np.isclose(var_A, predictions[0][1])
     assert np.isclose(var_D, predictions[1][1])
 
     [(E,v)] = model.predicts(test_seqs.loc[['D']])
-    assert close_enough(E,ED)
-    assert close_enough(v,var_D)
+    assert np.isclose(E,ED)
+    assert np.isclose(v,var_D)
 
     # test regression with StructureSEKernel
     model = gpmodel.GPModel(SE_kern)
@@ -236,14 +236,14 @@ def test_regression ():
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
-    assert close_enough(EA, predictions[0][0])
-    assert close_enough(ED, predictions[1][0])
-    assert close_enough(var_A, predictions[0][1])
-    assert close_enough(var_D, predictions[1][1])
+    assert np.isclose(EA, predictions[0][0])
+    assert np.isclose(ED, predictions[1][0])
+    assert np.isclose(var_A, predictions[0][1])
+    assert np.isclose(var_D, predictions[1][1])
 
     [(E,v)] = model.predicts(test_seqs.loc[['D']])
-    assert close_enough(E,ED)
-    assert close_enough(v,var_D)
+    assert np.isclose(E,ED)
+    assert np.isclose(v,var_D)
 
     h = model.hypers
     ML = model.ML
@@ -290,10 +290,10 @@ def test_regression ():
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
     predictions = model.predicts(test_seqs,delete=False)
-    assert close_enough(EA, predictions[0][0])
-    assert close_enough(ED, predictions[1][0])
-    assert close_enough(var_A, predictions[0][1])
-    assert close_enough(var_D, predictions[1][1])
+    assert np.isclose(EA, predictions[0][0])
+    assert np.isclose(ED, predictions[1][0])
+    assert np.isclose(var_A, predictions[0][1])
+    assert np.isclose(var_D, predictions[1][1])
 
     print('Testing LOO predictions...')
     K_inv = np.linalg.inv(Ky)
@@ -321,7 +321,7 @@ def test_regression ():
     'Regression model.hypers.var_p is incorrect'
     assert np.isclose(model.ML, 4.69092081175),\
     'Regression model.ML is incorrect'
-    assert close_enough(model.log_p, 3.96114185627),\
+    assert np.isclose(model.log_p, 3.96114185627),\
     'Regression model.log_p is incorrect'
     variances.index = ['C', 'D', 'E', 'F']
     pytest.raises(AttributeError, "model.fit(seqs, reg_Ys, variances)")
@@ -337,7 +337,7 @@ def test_classification ():
     true_vps = np.array([43.7865018929, 43.763806573])
     assert np.isclose(model.hypers.var_p, true_vps).any(),\
     'Classification model.hypers.var_p is incorrect'
-    assert close_enough(model.ML, 2.45520196), \
+    assert np.isclose(model.ML, 2.45520196), \
     'Classification model.ML is incorrect'
 
 
@@ -364,7 +364,7 @@ def test_classification ():
             if i != j:
                 assert glll[i,j] == 0, 'Non-zero non-diagonal element of glll'
             else:
-                assert close_enough(glll[i,j], (class_Ys.iloc[i]+1)/2. -
+                assert np.isclose(glll[i,j], (class_Ys.iloc[i]+1)/2. -
                                     model._logistic_likelihood(1,test_F.iloc[i]))
 
     hess = model._hess (test_F)
@@ -374,7 +374,7 @@ def test_classification ():
                 assert hess[i,j] == 0, 'Non-zero non-diagonal element of W'
             else:
                 pi_i = model._logistic_likelihood(1,test_F.iloc[i])
-                assert close_enough (hess[i,j], pi_i*(1-pi_i))
+                assert np.isclose (hess[i,j], pi_i*(1-pi_i))
 
     # test find_F (Algorithm 3.1) by seeing if the result satisfies Eq 3.17 from RW
     f_hat = model._find_F(hypers=(1,))
@@ -384,7 +384,7 @@ def test_classification ():
                              (class_Ys,f_hat))).T
     f_check = K_mat*glll
     for fh, fc in zip(f_hat, f_check):
-        assert close_enough(fh,fc), 'find_F fails for var_p = 1.'
+        assert np.isclose(fh,fc), 'find_F fails for var_p = 1.'
 
     vp = 0.1
     f_hat = model._find_F(hypers=(vp,))
@@ -393,7 +393,7 @@ def test_classification ():
                              (class_Ys,f_hat))).T
     f_check = K_mat*glll
     for fh, fc in zip(f_hat, f_check):
-        assert close_enough(fh,fc), 'find_F fails for var_p ~= 1.'
+        assert np.isclose(fh,fc), 'find_F fails for var_p ~= 1.'
 
     # Test the functions that calculate marginal likelihood
     logq = model._logq(f_hat, hypers=(vp,))
@@ -406,40 +406,24 @@ def test_classification ():
     a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
     check_q = 0.5*a.T*F_mat.T - model._log_logistic_likelihood(class_Ys, f_hat) \
     + sum(np.log(np.diag(L)))
-    assert close_enough(check_q, logq)
-    assert close_enough(model._log_ML([vp]), check_q)
+    assert np.isclose(check_q, logq)
+    assert np.isclose(model._log_ML([vp]), check_q)
 
     # Test the function that is integrated
     v = 0.4
     m = 0.5
     for z in [0.5, 0, 10000, -10000]:
         val = 1./(1+np.exp(-z))/math.sqrt(2*math.pi*v)*math.exp(-(z-m)**2/2/v)
-        assert close_enough(val, model._p_integral(z,m,v))
+        assert np.isclose(val, model._p_integral(z,m,v))
     for z in [np.inf, -np.inf]:
-        assert close_enough(0., model._p_integral(z,m,v))
+        assert np.isclose(0., model._p_integral(z,m,v))
 
     # test predictions
     preds = model.predicts(test_seqs)
-    for p1, p2 in zip(preds, [0.19135281113445562, 0.7792366872177071]):
-        assert close_enough(p1[0], p2), 'Predictions failed.'
-
-
-
+    for p1, p2 in zip(preds, [0.19135300948986966, 0.7792652942911565]):
+        assert np.isclose(p1[0], p2), 'Predictions failed.'
 
     print('Classification models pass all tests.')
-
-def test_UB():
-    model = gpmodel.GPModel(struct)
-    model.fit(seqs, reg_Ys)
-    new_seqs = pd.DataFrame([['R','Y','H','A'],
-                             ['N','T','H','A'],
-                             ['G','T','M','A'],
-                             ['N', 'T', 'M', 'A']],
-                            index=['1', '2', '3', '4'], columns=[0,1,2,3])
-    print(model.batch_UB_bandit(new_seqs, n=3))
-
-def close_enough(f1,f2):
-    return (f1-f2)**2 < 1e-7
 
 
 if __name__=="__main__":
@@ -447,4 +431,3 @@ if __name__=="__main__":
     test_regression()
     test_classification()
     test_score
-    test_UB()

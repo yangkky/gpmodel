@@ -1,15 +1,18 @@
 import sys
 sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
 sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel, gpmodel, gpmean, chimera_tools
+import pytest
+import os
+
 import pandas as pd
 import numpy as np
 import math
-import pytest
 import scipy
 from scipy import stats
-import os
 from sklearn import metrics, linear_model
+
+import gpkernel, gpmodel, gpmean, chimera_tools
+
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
@@ -31,7 +34,7 @@ func = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
 test_seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A']],index=['A','D'])
 
 def test_creation():
-    print 'Testing constructors, fits, and pickling method...'
+    print('Testing constructors, fits, and pickling method...')
 
     model = gpmodel.GPModel(struct, mean_func=func,
                             objective='LOO_log_p', guesses=(1.0,))
@@ -56,7 +59,6 @@ def test_creation():
     assert model.objective == model._LOO_log_p
     assert model.guesses == (2,2)
 
-
     # fit the model
     model.fit(seqs, reg_Ys)
     ML = model.ML
@@ -75,14 +77,16 @@ def test_creation():
     # test the model
     assert model.ML == ML
     assert model.log_p == lp
-    assert model.hypers == hypers
+    assert np.isclose(model.hypers.var_n, hypers.var_n)
+    assert np.isclose(model.hypers.var_p, hypers.var_p)
     assert np.isclose(model._K, K).all()
     assert np.isclose(model._Ky, Ky).all()
     assert np.isclose(model._alpha, alpha).all()
     assert np.isclose(model._L, L).all()
 
+
 def test_score():
-    print 'Testing score ...'
+    print('Testing score ...')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
     preds = model.predicts(seqs)
@@ -119,7 +123,7 @@ def test_score():
     AUC = metrics.auc(fpr, tpr)
     assert AUC == score
 
-    print 'score passes all tests. '
+    print('score passes all tests. ')
 
 def test_regression ():
     model = gpmodel.GPModel(struct)
@@ -150,7 +154,7 @@ def test_regression ():
 
     Y_mat = np.matrix(normed_Ys)
 
-    print 'Testing objective functions for regression models...'
+    print('Testing objective functions for regression models...')
     # test marginal likelihood
     vp = 1.0
     vn = model.hypers.var_n
@@ -167,7 +171,7 @@ def test_regression ():
     K_inv = np.linalg.inv(Ky)
     mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
     vs = np.diag(1/K_inv)
-    res2 = pd.DataFrame(zip(mus, vs), index=normed_Ys.index,
+    res2 = pd.DataFrame(list(zip(mus, vs)), index=normed_Ys.index,
                                                   columns=['mu','v'])
     log_p_1 = model._LOO_log_p((vn,vp))
     log_p_2 = 0.5*np.sum(np.log(res2['v']) + np.power(normed_Ys-res2['mu'],2)/res2['v'] \
@@ -176,7 +180,7 @@ def test_regression ():
     'Regression model does not correctly calculate LOO log predictive probability'
 
 
-    print 'Testing regression ... '
+    print('Testing regression ... ')
     # test predictions
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
                                            seq1, [model.hypers.var_p],
@@ -291,13 +295,13 @@ def test_regression ():
     assert close_enough(var_A, predictions[0][1])
     assert close_enough(var_D, predictions[1][1])
 
-    print 'Testing LOO predictions...'
+    print('Testing LOO predictions...')
     K_inv = np.linalg.inv(Ky)
     mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
     vs = np.diag(1/K_inv)
 
     res1 = model.LOO_res((vn,vp))
-    res2 = pd.DataFrame(zip(mus, vs), index=normed_Ys.index,
+    res2 = pd.DataFrame(list(zip(mus, vs)), index=normed_Ys.index,
                                                   columns=['mu','v'])
     assert res1.equals(res2), 'Regression model does not correctly predict LOO values'
     res2['mu'] = model.unnormalize(res2['mu'])
@@ -308,7 +312,7 @@ def test_regression ():
     res = model.LOO_res((vn, vp), add_mean=True)
     assert res.equals(res2), 'Regression model does not correctly predict LOO values'
 
-    print 'Testing regression with known variances...'
+    print('Testing regression with known variances...')
     model = gpmodel.GPModel(struct, guesses=(100.0,))
     model.fit(seqs, reg_Ys, variances=variances)
     assert np.array_equal(model._K + np.diag(variances) / model.std**2,
@@ -321,10 +325,10 @@ def test_regression ():
     'Regression model.log_p is incorrect'
     variances.index = ['C', 'D', 'E', 'F']
     pytest.raises(AttributeError, "model.fit(seqs, reg_Ys, variances)")
-    print 'Regression model passes all tests.\n'
+    print('Regression model passes all tests.\n')
 
 def test_classification ():
-    print 'Testing constructors for classification models...'
+    print('Testing constructors for classification models...')
     model = gpmodel.GPModel(struct, objective='LOO_log_p')
     pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
     model = gpmodel.GPModel(struct)
@@ -342,7 +346,7 @@ def test_classification ():
 
 
 
-    print 'Testing marginal likelihood for classification model...'
+    print('Testing marginal likelihood for classification model...')
     assert model._logistic_likelihood(1,0) == 0.5
     assert model._logistic_likelihood(-1,0) == 0.5
     pytest.raises(RuntimeError, "model._logistic_likelihood(-2,1)")
@@ -422,7 +426,7 @@ def test_classification ():
 
 
 
-    print 'Classification models pass all tests.'
+    print('Classification models pass all tests.')
 
 def test_UB():
     model = gpmodel.GPModel(struct)
@@ -432,7 +436,7 @@ def test_UB():
                              ['G','T','M','A'],
                              ['N', 'T', 'M', 'A']],
                             index=['1', '2', '3', '4'], columns=[0,1,2,3])
-    print model.batch_UB_bandit(new_seqs, n=3)
+    print(model.batch_UB_bandit(new_seqs, n=3))
 
 def close_enough(f1,f2):
     return (f1-f2)**2 < 1e-7

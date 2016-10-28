@@ -1,10 +1,7 @@
 ''' Classes for doing Gaussian process models of proteins.'''
 
 from collections import namedtuple
-try:
-    import cPickle as pickle
-except:
-    import pickle
+import pickle
 
 import numpy as np
 from scipy.optimize import minimize
@@ -12,7 +9,6 @@ from scipy import stats, integrate
 import pandas as pd
 
 import gpmean
-
 
 
 class GPModel(object):
@@ -62,12 +58,13 @@ class GPModel(object):
         """
         self.kern = kern
         self.guesses = None
-        if 'objective' not in kwargs.keys():
+        if 'objective' not in list(kwargs.keys()):
             kwargs['objective'] = 'log_ML'
-        if 'mean_func' not in kwargs.keys():
+        if 'mean_func' not in list(kwargs.keys()):
             self.mean_func = gpmean.GPMean()
         self.variances = None
         self._set_params(**kwargs)
+
 
     def _set_params(self, **kwargs):
         ''' Sets parameters for the model.
@@ -100,7 +97,7 @@ class GPModel(object):
             _W_root (np.ndarray): Square root of W
             _grad (np.ndarray): gradient of the log logistic likelihood
         '''
-        for key, value in kwargs.iteritems():
+        for key, value in kwargs.items():
             setattr(self, key, value)
         objective = kwargs.get('objective', None)
         hypers = kwargs.get('hypers', None)
@@ -120,7 +117,7 @@ class GPModel(object):
                     Hypers = namedtuple('Hypers', self.kern.hypers)
                 self.hypers = Hypers._make(hypers)
             else:
-                Hypers=namedtuple('Hypers', hypers.keys())
+                Hypers=namedtuple('Hypers', list(hypers.keys()))
                 self.hypers = Hypers(**hypers)
 
 
@@ -176,6 +173,7 @@ class GPModel(object):
                                 method='L-BFGS-B')
         self._set_hypers(minimize_res['x'])
 
+
     def _set_hypers(self, hypers):
         ''' Set model.hypers and quantities used for making predictions.
 
@@ -190,7 +188,7 @@ class GPModel(object):
                 Hypers = namedtuple('Hypers', self.kern.hypers)
             self.hypers = Hypers._make(hypers)
         else:
-            Hypers=namedtuple('Hypers', hypers.keys())
+            Hypers=namedtuple('Hypers', list(hypers.keys()))
             self.hypers = Hypers(**hypers)
 
         if self.regr:
@@ -213,6 +211,7 @@ class GPModel(object):
                                            self._f_hat)))
             self.ML = self._log_ML(self.hypers)
 
+
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
         if len(hypers) == len(self.kern.hypers):
@@ -226,6 +225,7 @@ class GPModel(object):
         else:
             raise AttributeError('len(hypers) does not match')
         return K, Ky
+
 
     def batch_UB_bandit(self, sequences, n=10, predictions=None):
         """ Use the batch UB bandit algorithm to select sequences.
@@ -275,10 +275,10 @@ class GPModel(object):
         df['k_star'] = k_stars
         df['k'] = ks
         for i in range(n):
-            print('\t%d' %i)
+            print(('\t%d' %i))
             # first selection
             id_max = df[['UB']].idxmax()
-            print(max(df['UB']))
+            print((max(df['UB'])))
             selected.append(id_max.iloc[0])
             if i != n-1:
                 observed_X = observed_X.append(sequences.loc[id_max])
@@ -383,6 +383,7 @@ class GPModel(object):
                                      args=(f_bar.item(), var.item()))[0]
             return (pi_star, f_bar.item(), var.item())
 
+
     def predicts (self, new_seqs, delete=True):
         """Make predictions for each sequence in new_seqs.
 
@@ -416,6 +417,7 @@ class GPModel(object):
             predictions = [(m+p, v)
                            for p, (m, v) in zip(means, predictions)]
         return predictions
+
 
     def _p_integral (self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
@@ -469,9 +471,11 @@ class GPModel(object):
             ML = self._logq(f_hat, hypers=hypers)
             return ML.item()
 
+
     def is_class (self):
         '''True if Y only contains values 1 and -1, otherwise False'''
         return all (y in [-1,1] for y in self.Y)
+
 
     def _logistic_likelihood (self, Y, F):
         ''' Calculate logistic likelihood.
@@ -494,6 +498,7 @@ class GPModel(object):
                 raise RuntimeError('Y must be -1 or 1')
         return 1./(1+np.exp(-Y*F))
 
+
     def _log_logistic_likelihood (self,Y, F):
         """ Calculate the log logistic likelihood.
 
@@ -512,6 +517,7 @@ class GPModel(object):
             raise RuntimeError ('Y and F must be the same length')
         lll = np.sum(np.log(self._logistic_likelihood(Y.values,F.values)))
         return lll
+
 
     def _grad_log_logistic_likelihood (self,Y,F):
         """ Calculate the gradient of the log logistic likelihood.
@@ -532,6 +538,7 @@ class GPModel(object):
         F = F.values
         glll = (Y + 1) / 2.0 -  self._logistic_likelihood(1.0, F)
         return np.diag(glll)
+
 
     def _hess (self,F):
         """ Calculate the negative _hessian of the logistic likelihod.
@@ -592,6 +599,7 @@ class GPModel(object):
             f_hat = f_new
         raise RuntimeError('Maximum evaluations reached without convergence.')
 
+
     def _logq(self, F, hypers):
         ''' Calculate negative log marginal likelihood.
 
@@ -640,6 +648,7 @@ class GPModel(object):
         return_me = -sum (log_ps)
         return return_me
 
+
     def LOO_res (self, hypers, add_mean=False, unnorm=False):
         """ Calculates LOO regression predictions.
 
@@ -666,8 +675,9 @@ class GPModel(object):
             vs *= self.std**2
         if add_mean:
             mus += self.mean_func.means
-        return pd.DataFrame(zip(mus, vs), index=self.normed_Y.index,
+        return pd.DataFrame(list(zip(mus, vs)), index=self.normed_Y.index,
                            columns=['mu', 'v'])
+
 
     def score (self, X, Y, *args):
         ''' Score the model on the given points.
@@ -717,8 +727,8 @@ class GPModel(object):
                     scores[t] = np.corrcoef(Y, pred_Y)[0,1]
                 else:
                     raise ValueError ('Invalid metric.')
-            if len (scores.keys()) == 1:
-                return scores[scores.keys()[0]]
+            if len (list(scores.keys())) == 1:
+                return scores[list(scores.keys())[0]]
             else:
                 return scores
 
@@ -726,17 +736,18 @@ class GPModel(object):
     def load(cls, model):
         ''' Load a saved model.
 
-        Use cPickle to load the saved model.
+        Use pickle to load the saved model.
 
         Parameters:
             model (string): path to saved model
         '''
-        with open(model,'r') as m_file:
+        with open(model,'rb') as m_file:
             attributes = pickle.load(m_file)
         model = GPModel(attributes['kern'])
         del attributes['kern']
         model._set_params(**attributes)
         return model
+
 
     def dump(self, f):
         ''' Save the model.
@@ -747,7 +758,7 @@ class GPModel(object):
         Parameters:
             f (string): path to where model should be saved
         '''
-        save_me = {k:self.__dict__[k] for k in self.__dict__.keys()}
+        save_me = {k:self.__dict__[k] for k in list(self.__dict__.keys())}
         if self.objective == self._log_ML:
             save_me['objective'] = 'log_ML'
         else:

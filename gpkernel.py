@@ -461,7 +461,7 @@ class HammingKernel(GPKernel):
         """ Calculate the Hamming kernel matrix.
 
         Parameters:
-            seqs (np.ndarray or pd.DataFrame): If none given, uses
+            seqs (pd.DataFrame): If none given, uses
                 saved values.
             hypers (iterable): the hyperparameters. Default is
                 sigma_p=1.0.
@@ -1074,5 +1074,3 @@ class LinearKernel(GPKernel):
         """
         self.train(X)
         self._base_K = self.make_K(X)
-
-

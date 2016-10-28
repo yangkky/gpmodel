@@ -625,7 +625,7 @@ class StructureKernel(HammingKernel):
         Returns:
             seq
         """
-        if isinstance (seq, basestring):
+        if isinstance(seq, str):
             try:
                 return self._saved_X[seq]
             except:

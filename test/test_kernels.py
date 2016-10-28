@@ -19,9 +19,9 @@ X_df = pd.DataFrame(X, index=['A','B','C'])
 
 def test_gpkernel():
     """ Test the base class GPKernel. """
-    print 'Testing GPKernel...'
+    print('Testing GPKernel...')
     kernel = gpkernel.GPKernel()
-    assert kernel._saved_X.keys() == []
+    assert not kernel._saved_X
     assert kernel.hypers == []
     kernel.set_X(X_df)
     assert np.isclose(kernel._saved_X['A'], X[0]).all()
@@ -29,11 +29,11 @@ def test_gpkernel():
     assert sorted(kernel._saved_X.keys()) == ['B', 'C']
     assert np.isclose(kernel._get_X('B'), X[1]).all()
     assert np.isclose(kernel._get_X(X[2]), X[2]).all()
-    print 'GPKernel passes all tests.'
+    print('GPKernel passes all tests.')
 
 def test_se_kernel():
     """ Tests for the squared exponential kernels. """
-    print 'Testing SEKernel...'
+    print('Testing SEKernel...')
     # Test __init__
     kern = gpkernel.SEKernel()
     assert kern.hypers == ['sigma_f', 'ell']
@@ -80,11 +80,11 @@ def test_se_kernel():
     assert kern.calc_kernel('A', xb, params) == actual[0,1]
 
 
-    print 'SEKernel passes all tests.'
+    print('SEKernel passes all tests.')
 
 def test_polynomial_kernel():
     """ Tests for the polynomial kernel. """
-    print 'Testing PolynomialKernel...'
+    print('Testing PolynomialKernel...')
     kern1 = gpkernel.PolynomialKernel(1)
     kern3 = gpkernel.PolynomialKernel(3)
     assert kern1.hypers == ['sigma_0', 'sigma_p']
@@ -121,11 +121,11 @@ def test_polynomial_kernel():
     assert np.isclose(kern1._saved_X['A'], xa).all()
     assert np.isclose(kern1._dots, dot).all()
     assert np.isclose(kern3.make_K(hypers=params), K3).all()
-    print 'PolynomialKernel passes all tests.'
+    print('PolynomialKernel passes all tests.')
 
 def test_matern_kernel():
     """ Tests for the matern kernels. """
-    print 'Testing MaternKernel...'
+    print('Testing MaternKernel...')
 
     # Test __init__
     kern1 = gpkernel.MaternKernel(nu='3/2')
@@ -187,7 +187,7 @@ def test_matern_kernel():
     assert kern2.calc_kernel('A', xb, params) == actual2[0,1]
 
 
-    print 'MaternKernel passes all tests.'
+    print('MaternKernel passes all tests.')
 
 def test_hamming_kernel():
     """
@@ -201,7 +201,7 @@ def test_hamming_kernel():
                     index=seqs.index,
                     columns=seqs.index)
     norm = 4.0
-    print 'Testing HammingKernel...'
+    print('Testing HammingKernel...')
     kern = gpkernel.HammingKernel()
     assert kern.hypers == ['var_p']
 
@@ -251,7 +251,7 @@ def test_hamming_kernel():
     assert np.isclose(kern._base_K, K/norm).all()
     assert np.isclose(kern.make_K(hypers=[vp]),K/norm*vp).all(),\
     'Failed make_K using saved base_K'
-    print 'HammingKernel passes all tests.'
+    print('HammingKernel passes all tests.')
 
 def test_structure_kernel():
     # test with repeats
@@ -263,7 +263,7 @@ def test_structure_kernel():
                      index=seqs.index,
                      columns=seqs.index)
     norm = 2.0
-    print 'Testing StructureKernel...'
+    print('Testing StructureKernel...')
     kern = gpkernel.StructureKernel(contacts)
     assert kern.hypers == ['var_p']
 
@@ -315,11 +315,11 @@ def test_structure_kernel():
     assert kern.calc_kernel('C','C',hypers=[vp], normalize=True) == 2*vp/norm,\
     'Failed calc_kernel with normalization.'
 
-    print 'StructureKernel passes all tests.'
+    print('StructureKernel passes all tests.')
 
 def test_se(kern):
     # test squared exponential function
-    print 'Testing squared exponential functions...'
+    print('Testing squared exponential functions...')
     # test dimension check
 
     # test on single values
@@ -434,11 +434,11 @@ def test_se(kern):
     assert from_kernel.equals(actual), \
         'kern.dist_to_se failed with a DataFrame.'
 
-    print 'Squared exponential functions pass all tests.'
+    print('Squared exponential functions pass all tests.')
 
 def test_protein_matern_kernels():
     """ Test StructureMaternKernel and HammingMaternKernel. """
-    print 'Testing StructureMaternKernel...'
+    print('Testing StructureMaternKernel...')
 
     ssek1 = gpkernel.StructureMaternKernel(contacts, '3/2')
     ssek2 = gpkernel.StructureMaternKernel(contacts, '5/2')
@@ -480,9 +480,9 @@ def test_protein_matern_kernels():
     assert np.isclose(ssek1.make_K(hypers=params), actual1).all(),\
         'StructureMaternKernel fails make_K.'
 
-    print 'StructureMaternKernel passes all tests.'
+    print('StructureMaternKernel passes all tests.')
 
-    print 'Testing HammingMaternKernel...'
+    print('Testing HammingMaternKernel...')
 
     ssek1 = gpkernel.HammingMaternKernel('3/2')
     ssek2 = gpkernel.HammingMaternKernel('5/2')
@@ -524,12 +524,12 @@ def test_protein_matern_kernels():
     assert np.isclose(ssek1.make_K(hypers=params), actual1).all(),\
         'HammingMaternKernel fails make_K.'
 
-    print 'HammingMaternKernel passes all tests.'
+    print('HammingMaternKernel passes all tests.')
 
 def test_protein_se_kernels():
     """ Test StructureSEKernel and HammingSEKernel. """
 
-    print 'Testing StructureSEKernel...'
+    print('Testing StructureSEKernel...')
 
     ssek = gpkernel.StructureSEKernel(contacts)
     assert ssek.hypers == ['sigma_f', 'ell']
@@ -563,10 +563,10 @@ def test_protein_se_kernels():
     assert np.isclose(ssek.make_K(hypers=params), actual).all(),\
         'StructureSEKernel fails make_K.'
 
-    print 'StructureSEKernel passes all tests.'
+    print('StructureSEKernel passes all tests.')
 
 
-    print 'Testing HammingSEKernel...'
+    print('Testing HammingSEKernel...')
 
     ssek = gpkernel.HammingSEKernel()
 
@@ -600,10 +600,10 @@ def test_protein_se_kernels():
     assert np.isclose(ssek.make_K(hypers=params), actual).all(),\
         'HammingSEKernel fails make_K.'
 
-    print 'HammingSEKernel passes all tests.'
+    print('HammingSEKernel passes all tests.')
 
 def test_linear_kernel():
-    print 'Testing LinearKernel...'
+    print('Testing LinearKernel...')
     kern = gpkernel.LinearKernel()
     X = pd.DataFrame([[4.,2.,3.,4.],
                       [2.,0.,1.,2.],
@@ -648,12 +648,12 @@ def test_linear_kernel():
     'Failed calc_kernel with untrained, trained sequences.'
 
 
-    print 'LinearKernel passes all tests.'
+    print('LinearKernel passes all tests.')
 
 
 def test_sum_kernel():
     """ Test SumKernel. """
-    print 'Testing SumKernel...'
+    print('Testing SumKernel...')
     kern52 = gpkernel.MaternKernel('5/2')
     kernSE = gpkernel.SEKernel()
     kern32 = gpkernel.MaternKernel('3/2')
@@ -675,7 +675,7 @@ def test_sum_kernel():
     kernel.delete(X_df.loc[['A']])
     for k in kernel._kernels:
         assert sorted(k._saved_X.keys()) == ['B', 'C']
-    print "SumKernel passes all tests."
+    print("SumKernel passes all tests.")
 
 if __name__=="__main__":
     test_gpkernel()

@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy import stats, integrate
 import pandas as pd
+from sklearn import linear_model
 
 import gpmean
 
@@ -70,7 +71,7 @@ class GPModel(object):
         ''' Sets parameters for the model.
 
         This function can be used to set the value of any or all
-        attributes for the model. However, it does not necessary
+        attributes for the model. However, it does not necessarily
         update dependencies, so use with caution.
 
         Optional Keyword Parameters:
@@ -101,6 +102,12 @@ class GPModel(object):
             setattr(self, key, value)
         objective = kwargs.get('objective', None)
         hypers = kwargs.get('hypers', None)
+        self._set_objective(objective)
+        self._make_hypers(hypers)
+
+
+    def _set_objective(self, objective):
+        """ Set objective function for model. """
         if objective is not None:
             if objective == 'log_ML':
                 self.objective = self._log_ML
@@ -108,9 +115,15 @@ class GPModel(object):
                 self.objective = self._LOO_log_p
             else:
                 raise AttributeError (objective + ' is not a valid objective')
+        else:
+            self.objective = self._log_ML
+
+
+    def _make_hypers(self, hypers):
+        """ Set hyperparameters for model. """
         if hypers is not None:
             if type(hypers) is not dict:
-                if self.regr:
+                if self.regr and self.variances is None:
                     hypers_list = ['var_n'] + self.kern.hypers
                     Hypers = namedtuple('Hypers', hypers_list)
                 else:
@@ -180,16 +193,7 @@ class GPModel(object):
         Parameters:
             hypers (iterable or dict)
         '''
-        if type(hypers) is not dict:
-            if self.regr and self.variances is None:
-                hypers_list = ['var_n'] + self.kern.hypers
-                Hypers = namedtuple('Hypers', hypers_list)
-            else:
-                Hypers = namedtuple('Hypers', self.kern.hypers)
-            self.hypers = Hypers._make(hypers)
-        else:
-            Hypers=namedtuple('Hypers', list(hypers.keys()))
-            self.hypers = Hypers(**hypers)
+        self._make_hypers(hypers)
 
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
@@ -297,7 +301,7 @@ class GPModel(object):
 
 
     def predicts (self, new_seqs, delete=True):
-        """Make predictions for each sequence in new_seqs.
+        """ Make predictions for each sequence in new_seqs.
 
         Uses Equations 2.23 and 2.24 of RW
         Parameters:
@@ -686,3 +690,63 @@ class GPModel(object):
             pickle.dump(save_me, f)
 
 
+class LassoGPModel(GPModel):
+
+    """ Extends GPModel with L1 regression for feature selection.
+
+    """
+
+    def __init__(self, kernel, **kwargs):
+        self._gamma_0 = kwargs.get('gamma', 0.015)
+        GPModel.__init__(self, kernel, **kwargs)
+
+
+    def predicts(self, X):
+        X, _ = self._regularize(X, mask=self._mask)
+        return GPModel.predicts(self, X)
+
+
+    def fit(self, X, y, variances=None):
+        minimize_res = minimize(self._log_ML_from_lambda,
+                                self._gamma_0,
+                                args=(X, y, variances),
+                                bounds=((0, 2),),
+                                method='L-BFGS-B')
+        self.gamma = minimize_res['x']
+
+
+    def _log_ML_from_lambda(self, gamma, X, y, variances=None):
+        X, self._mask = self._regularize(X, gamma=gamma, y=y)
+        GPModel.fit(self, X, y, variances=variances)
+        return self.ML
+
+
+    def _regularize(self, X, **kwargs):
+        """ Perform feature selection on X.
+
+        Features can be selected by providing y and gamma, in which
+        case L1 linear regression is used to determine which columns
+        of X are kept. Or, if a Boolean mask of length equal to the
+        number of columns in X is provided, features will be selected
+        using the mask.
+
+        Parameters:
+            X (pd.DataFrame)
+
+        Optional keyward parameters:
+            gamma (float): amount of regularization
+            y (np.ndarray or pd.Series)
+            mask (iterable)
+        """
+        gamma = kwargs.get('gamma', None)
+        y = kwargs.get('y', None)
+        mask = kwargs.get('mask', None)
+        if gamma is not None:
+            clf = linear_model.Lasso(alpha=gamma)
+            clf.fit(X, y)
+            weights = pd.DataFrame()
+            weights['weight'] = clf.coef_
+            mask = ~np.isclose(weights['weight'], 0.0)
+        X = X.transpose()[mask].transpose()
+        X.columns = list(range(np.shape(X)[1]))
+        return X, mask

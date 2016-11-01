@@ -300,7 +300,7 @@ class GPModel(object):
             return (pi_star, f_bar.item(), var.item())
 
 
-    def predicts (self, new_seqs, delete=True):
+    def predict(self, new_seqs, delete=True):
         """ Make predictions for each sequence in new_seqs.
 
         Uses Equations 2.23 and 2.24 of RW
@@ -614,7 +614,7 @@ class GPModel(object):
             raise ValueError\
             ('X and Y must be the same length and have the same indices.')
         # Make predictions
-        predicted = self.predicts(X)
+        predicted = self.predict(X)
 
         # for classification, return the ROC AUC
         if not self.regr:
@@ -701,7 +701,7 @@ class LassoGPModel(GPModel):
         GPModel.__init__(self, kernel, **kwargs)
 
 
-    def predicts(self, X):
+    def predict(self, X):
         X, _ = self._regularize(X, mask=self._mask)
         return GPModel.predicts(self, X)
 

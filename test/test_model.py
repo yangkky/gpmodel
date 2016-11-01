@@ -89,7 +89,7 @@ def test_score():
     print('Testing score ...')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
-    preds = model.predicts(seqs)
+    preds = model.predict(seqs)
     pred_Y = [p[0] for p in preds]
     r1 = stats.rankdata(reg_Ys)
     r2 = stats.rankdata(pred_Y)
@@ -117,7 +117,7 @@ def test_score():
     pytest.raises(ValueError, 'model.score(seqs, reg_Ys, "R3")')
 
     model.fit(seqs, class_Ys)
-    preds = [p[0] for p in model.predicts(seqs)]
+    preds = [p[0] for p in model.predict(seqs)]
     score = model.score(seqs, class_Ys)
     fpr, tpr, _ = metrics.roc_curve(class_Ys, preds)
     AUC = metrics.auc(fpr, tpr)
@@ -201,14 +201,14 @@ def test_regression ():
 
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
-    predictions = model.predicts(test_seqs,delete=False)
+    predictions = model.predict(test_seqs,delete=False)
 
     assert np.isclose(EA, predictions[0][0])
     assert np.isclose(ED, predictions[1][0])
     assert np.isclose(var_A, predictions[0][1])
     assert np.isclose(var_D, predictions[1][1])
 
-    [(E,v)] = model.predicts(test_seqs.loc[['D']])
+    [(E,v)] = model.predict(test_seqs.loc[['D']])
     assert np.isclose(E,ED)
     assert np.isclose(v,var_D)
 
@@ -235,13 +235,13 @@ def test_regression ():
                                                   model.hypers.ell])
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
-    predictions = model.predicts(test_seqs,delete=False)
+    predictions = model.predict(test_seqs,delete=False)
     assert np.isclose(EA, predictions[0][0])
     assert np.isclose(ED, predictions[1][0])
     assert np.isclose(var_A, predictions[0][1])
     assert np.isclose(var_D, predictions[1][1])
 
-    [(E,v)] = model.predicts(test_seqs.loc[['D']])
+    [(E,v)] = model.predict(test_seqs.loc[['D']])
     assert np.isclose(E,ED)
     assert np.isclose(v,var_D)
 
@@ -289,7 +289,7 @@ def test_regression ():
                                       [model.hypers.var_p])
     var_A = (k_star_A - kA*np.linalg.inv(model._Ky)*kA.T) * s**2
     var_D = (k_star_D - kD*np.linalg.inv(model._Ky)*kD.T) * s**2
-    predictions = model.predicts(test_seqs,delete=False)
+    predictions = model.predict(test_seqs,delete=False)
     assert np.isclose(EA, predictions[0][0])
     assert np.isclose(ED, predictions[1][0])
     assert np.isclose(var_A, predictions[0][1])
@@ -419,7 +419,7 @@ def test_classification ():
         assert np.isclose(0., model._p_integral(z,m,v))
 
     # test predictions
-    preds = model.predicts(test_seqs)
+    preds = model.predict(test_seqs)
     for p1, p2 in zip(preds, [0.19135300948986966, 0.7792652942911565]):
         assert np.isclose(p1[0], p2), 'Predictions failed.'
 

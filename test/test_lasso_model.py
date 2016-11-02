@@ -17,13 +17,16 @@ SE_kern = gpkernel.SEKernel()
 # func = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
 #
 np.random.seed(0)
-X = np.random.random(size=30000)
-X = X.reshape((30,1000))
+n = 30
+n_dims = 1000
+
+X = np.random.random(size=n*n_dims)
+X = X.reshape((n,n_dims))
 w1 = np.random.random(size=(1, 450)) * 10.0
-w2 = np.random.random(size=(1, 550)) * 0.01
+w2 = np.random.random(size=(1, n_dims-450)) * 0.01
 w = np.concatenate((w1, w2), axis=1)
 Y = np.dot(w, X.T)[0]
-X_df = pd.DataFrame(X)
+X_df = pd.DataFrame(X, index=[str(i) for i in range(len(X))])
 Y += np.random.normal(size=len(X), scale=1.0)
 Y = pd.Series(Y, index=X_df.index)
 #variances = pd.Series([0.11, 0.18, 0.13, 0.,14], index=X_df.index)
@@ -63,16 +66,31 @@ def test_log_ML_from_lambda():
 
 def test_fit():
     model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=0.1)
+    numpy.random.seed(1)
     model.fit(X_df, Y)
+    print(len(model.X_seqs.columns), model.ML)
     assert len(model.X_seqs.columns) == 29
     assert np.isclose(model.ML, 30.585317139044697)
+    # need a test for kernel remembering correct X
+
+
+def test_predict():
+    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
+    model.fit(X_df, Y)
+    np.random.seed(1)
+    X_test = np.random.random(size=(1, n_dims))
+    X_test = pd.DataFrame(X_test, index=['A'])
+    X_masked = X_test.transpose()[model._mask].transpose()
+    Y_test = model.predict(X_test)
+    check_model = gpmodel.GPModel(gpkernel.LinearKernel())
+    check_model.fit(model.X_seqs, Y)
+    Y_check = check_model.predict(X_masked)
+    assert np.isclose(Y_test, Y_check).all()
 
 
 if __name__=="__main__":
-    #test_creation()
     test_init()
     test_regularize()
     test_log_ML_from_lambda()
     test_fit()
-    #test_classification()
-    #test_score
+    test_predict()

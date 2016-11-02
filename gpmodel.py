@@ -152,6 +152,7 @@ class GPModel(object):
         self.X_seqs = X_seqs
         self.Y = Y
         self._ell = len(Y)
+        self.kern.delete(X_seqs)
         self.kern.set_X(X_seqs)
         self.regr = not self.is_class()
         if self.regr:

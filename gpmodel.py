@@ -697,28 +697,28 @@ class LassoGPModel(GPModel):
     """
 
     def __init__(self, kernel, **kwargs):
-        self._gamma_0 = kwargs.get('gamma', 0.015)
+        self._gamma_0 = kwargs.get('gamma', 0)
         GPModel.__init__(self, kernel, **kwargs)
 
 
     def predict(self, X):
         X, _ = self._regularize(X, mask=self._mask)
-        return GPModel.predicts(self, X)
+        return GPModel.predict(self, X)
 
 
     def fit(self, X, y, variances=None):
-        minimize_res = minimize(self._log_ML_from_lambda,
+        minimize_res = minimize(self._log_ML_from_gamma,
                                 self._gamma_0,
                                 args=(X, y, variances),
-                                bounds=((0, 2),),
-                                method='L-BFGS-B')
+                                method='Powell',
+                                options={'xtol':1e-8, 'ftol':1e-8})
         self.gamma = minimize_res['x']
 
 
-    def _log_ML_from_lambda(self, gamma, X, y, variances=None):
+    def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
-        return self.ML
+        return -self.ML
 
 
     def _regularize(self, X, **kwargs):
@@ -734,7 +734,7 @@ class LassoGPModel(GPModel):
             X (pd.DataFrame)
 
         Optional keyward parameters:
-            gamma (float): amount of regularization
+            gamma (float): log amount of regularization
             y (np.ndarray or pd.Series)
             mask (iterable)
         """
@@ -742,7 +742,9 @@ class LassoGPModel(GPModel):
         y = kwargs.get('y', None)
         mask = kwargs.get('mask', None)
         if gamma is not None:
-            clf = linear_model.Lasso(alpha=gamma)
+            if y is None:
+                raise ValueError("Missing argument 'y'.")
+            clf = linear_model.Lasso(alpha=np.exp(gamma), max_iter=10000)
             clf.fit(X, y)
             weights = pd.DataFrame()
             weights['weight'] = clf.coef_

@@ -122,8 +122,9 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
 
     If terms are given, the binary indicator vectors indicate whether
     each sequence contains each term. Otherwise, all possible sequence
-    and contact terms are computed, and then columns that completely
-    covary are combined.
+    and contact terms are computed from sample_space and contacts.
+    Columns that completely covary can be combined by setting collapse
+    to True.
 
     Parameters:
         seqs (list): each sequence should be a string.
@@ -133,6 +134,7 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
             that are considered to be in contact.
     Optional keyword parameters:
         terms (list):
+        collapse (Boolean)
 
     Returns:
         X (np.ndarray)

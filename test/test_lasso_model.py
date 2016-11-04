@@ -66,9 +66,8 @@ def test_log_ML_from_lambda():
 
 def test_fit():
     model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=0.1)
-    numpy.random.seed(1)
+    np.random.seed(1)
     model.fit(X_df, Y)
-    print(len(model.X_seqs.columns), model.ML)
     assert len(model.X_seqs.columns) == 29
     assert np.isclose(model.ML, 30.585317139044697)
     # need a test for kernel remembering correct X

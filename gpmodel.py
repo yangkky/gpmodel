@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn import linear_model
 
 import gpmean
+import chimera_tools
 
 
 class GPModel(object):
@@ -738,6 +739,10 @@ class LassoGPModel(GPModel):
             gamma (float): log amount of regularization
             y (np.ndarray or pd.Series)
             mask (iterable)
+
+        Returns:
+            X (pd.DataFrame)
+            mask (np.ndarray)
         """
         gamma = kwargs.get('gamma', None)
         y = kwargs.get('y', None)
@@ -753,3 +758,51 @@ class LassoGPModel(GPModel):
         X = X.transpose()[mask].transpose()
         X.columns = list(range(np.shape(X)[1]))
         return X, mask
+
+
+class TermedLassoGPModel(LassoGPModel):
+
+    """ A LassoGPModel that converts sequences to indicator vectors. """
+
+
+    def _make_X(self, X_seqs, terms, collapse=False):
+        """ Convert sequences to binary indicator vectors.
+
+        Parameters:
+            X_seqs (pd.DataFrame)
+            terms (iterable)
+            collapse (Boolean) default is False
+
+        Returns:
+            X (pd.DataFrame)
+        """
+        seqs = [''.join(s) for _, s in X_seqs.iterrows()]
+        X, _ = chimera_tools.make_X(seqs, terms=terms)
+        return pd.DataFrame(np.array(X), index=X_seqs.index)
+
+
+    def predict(self, X_seqs):
+        X = self._make_X(X_seqs, self._terms)
+        return GPModel.predict(self, X)
+
+
+    def fit(self, X_seqs, y, terms, variances=None):
+        minimize_res = minimize(self._log_ML_from_gamma,
+                                self._gamma_0,
+                                args=(X_seqs, y, terms, variances),
+                                method='Powell',
+                                options={'xtol':1e-8, 'ftol':1e-8})
+        self.gamma = minimize_res['x']
+
+
+    def _log_ML_from_gamma(self, gamma, X_seqs, y, terms, variances=None):
+        X, self._mask, self._terms = self._regularize(X_seqs, terms, gamma=gamma, y=y)
+        GPModel.fit(self, X, y, variances=variances)
+        return -self.ML
+
+
+    def _regularize(self, X_seqs, terms, **kwargs):
+        X = self._make_X(X_seqs, terms)
+        X, mask = LassoGPModel._regularize(self, X, **kwargs)
+        terms = [t for t, keep in zip(terms, mask) if keep]
+        return X, mask, terms

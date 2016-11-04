@@ -720,7 +720,7 @@ class LassoGPModel(GPModel):
     def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
-        return -self.ML
+        return self.ML
 
 
     def _regularize(self, X, **kwargs):
@@ -798,7 +798,7 @@ class TermedLassoGPModel(LassoGPModel):
     def _log_ML_from_gamma(self, gamma, X_seqs, y, terms, variances=None):
         X, self._mask, self._terms = self._regularize(X_seqs, terms, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
-        return -self.ML
+        return self.ML
 
 
     def _regularize(self, X_seqs, terms, **kwargs):

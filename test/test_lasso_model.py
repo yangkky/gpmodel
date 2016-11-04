@@ -61,17 +61,16 @@ def test_log_ML_from_lambda():
     X, mask = model._regularize(X_df, gamma=g, y=Y)
     model2.fit(X, Y)
     neg_ML = model._log_ML_from_gamma(g, X, Y)
-    assert np.isclose(neg_ML, -model2.ML)
+    assert np.isclose(neg_ML, model2.ML)
 
 
 def test_fit():
     model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=0.1)
     np.random.seed(1)
     model.fit(X_df, Y)
-    assert len(model.X_seqs.columns) == 29
-    assert np.isclose(model.ML, 30.585317139044697)
+    assert len(model.X_seqs.columns) == 19
+    assert np.isclose(model.ML, 26.189324722766216)
     # need a test for kernel remembering correct X
-
 
 def test_predict():
     model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)

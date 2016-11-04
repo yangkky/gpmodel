@@ -42,7 +42,7 @@ def make_sequence_terms (sample_space):
          contact_terms (list): Each item in the list is a contact in the form
             ((pos1,aa1),(pos2,aa2)).
     """
-    return [(i,t) for i,sp in enumerate(sample_space) for t in sp]
+    return sorted(list(set([(i,t) for i,sp in enumerate(sample_space) for t in sp])))
 
 def X_from_terms(X_terms, all_terms):
     """ Make binary indicator vectors.
@@ -117,7 +117,7 @@ def make_sequence_X(seqs, sample_space):
     sequence_X = X_from_terms(X_terms, sequence_terms)
     return sequence_X, sequence_terms
 
-def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
+def make_X(seqs, sample_space=None, contacts=None, terms=None, collapse=True):
     """ Make combined sequence/structure X.
 
     If terms are given, the binary indicator vectors indicate whether
@@ -128,11 +128,12 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
 
     Parameters:
         seqs (list): each sequence should be a string.
-        sample_space (iterable): Each element in sample_space contains
-            the possible amino acids at that position.
-        contacts (iterable): Each element in contacts pairs two positions
-            that are considered to be in contact.
+
     Optional keyword parameters:
+        sample_space (iterable): Each element in sample_space contains
+        the possible amino acids at that position.
+        contacts (iterable): Each element in contacts pairs two positions
+        that are considered to be in contact.
         terms (list):
         collapse (Boolean)
 
@@ -142,9 +143,16 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
             sequence terms, or both.
     """
     if terms is not None:
-        X_terms = [get_terms(seq) + get_contacts(seq, contacts)
-                   for seq in seqs]
-        return X_from_terms(X_terms, terms), terms
+        # collapsed terms
+        if isinstance(terms[0], list):
+            X_terms = [get_terms(seq) + get_contacts(seq, contacts)
+                       for seq in seqs]
+            return X_from_terms(X_terms, terms), terms
+        # single terms
+        else:
+            X = [[in_sequence(seq, term)
+                  for term in terms] for seq in seqs]
+            return X, terms
     seq_X, sequence_terms = make_sequence_X(seqs, sample_space)
     struct_X, contact_terms = make_contact_X(seqs, sample_space, contacts)
     seq_X = seq_X.tolist()
@@ -156,6 +164,19 @@ def make_X(seqs, sample_space, contacts, terms=None, collapse=True):
         return X, terms
     else:
         return _collapse(X, terms)
+
+
+def in_sequence(seq, term):
+    """ seq should be a string. """
+    if isinstance(term[0], tuple):
+        return present(seq, term[0]) and present(seq, term[1])
+    else:
+        return present(seq, term)
+
+
+def present(seq, term):
+    """ Determine if a sequence element is in a sequence. """
+    return int(seq[term[0]] == term[1])
 
 
 def _collapse(X, terms):

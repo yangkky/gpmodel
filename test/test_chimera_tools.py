@@ -35,37 +35,36 @@ contact_X = np.array([[1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
                       [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0,
                        0, 0, 0, 0, 0, 0, 0, 1, 0, 0]])
 
-sequence_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0, 0],
-                       [0, 1, 0, 1, 0, 0, 0, 0, 1],
-                       [0, 1, 0, 0, 0, 1, 0, 1, 0]])
-sequence_terms = [(0, 'A'), (0, 'B'), (0, 'C'), (1, 'A'), (1, 'A'),
-                  (1, 'C'), (2, 'B'), (2, 'A'), (2, 'D')]
+sequence_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0],
+                       [0, 1, 0, 1, 0, 0, 0, 1],
+                       [0, 1, 0, 0, 1, 1, 0, 0]])
+sequence_terms = [(0, 'A'), (0, 'B'), (0, 'C'), (1, 'A'),
+                  (1, 'C'), (2, 'A'), (2, 'B'), (2, 'D')]
 
 all_X = np.array([[1, 0, 0, 1, 0, 0],
                   [0, 1, 0, 1, 0, 1],
                   [0, 1, 0, 0, 1, 0]])
-complete_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0,
+complete_X = np.array([[1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0,
                         0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-                       [0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
+                       [0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,
                         0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-                       [0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0,
+                       [0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0,
                         0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0]])
-all_terms = [[(0, 'A'), (2, 'B'),
-               ((0, 'A'), (1, 'A')),
-               ((0, 'A'), (2, 'B')),
-               ((1, 'A'), (2, 'B'))],
-              [(0, 'B')],
-              [(0, 'C'), (1, 'A'), ((0, 'A'), (1, 'C')),
-               ((0, 'C'), (1, 'A')), ((0, 'C'), (1, 'C')),
-               ((0, 'A'), (2, 'A')), ((0, 'A'), (2, 'D')),
-               ((0, 'B'), (2, 'B')), ((0, 'C'), (2, 'A')),
-               ((0, 'C'), (2, 'B')), ((0, 'C'), (2, 'D')),
-               ((1, 'A'), (2, 'A')), ((1, 'C'), (2, 'B')),
-               ((1, 'C'), (2, 'D'))], [(1, 'A')],
-              [(1, 'C'), (2, 'A'), ((0, 'B'), (1, 'C')),
-               ((0, 'B'), (2, 'A')), ((1, 'C'), (2, 'A'))],
-              [(2, 'D'), ((0, 'B'), (1, 'A')),
-               ((0, 'B'), (2, 'D')), ((1, 'A'), (2, 'D'))]]
+all_terms = [[(0, 'A'), (2, 'B'), ((0, 'A'), (1, 'A')),
+              ((0, 'A'), (2, 'B')), ((1, 'A'), (2, 'B'))],
+             [(0, 'B')],
+             [(0, 'C'), ((0, 'A'), (1, 'C')),
+              ((0, 'C'), (1, 'A')),
+              ((0, 'C'), (1, 'C')), ((0, 'A'), (2, 'A')),
+              ((0, 'A'), (2, 'D')), ((0, 'B'), (2, 'B')),
+              ((0, 'C'), (2, 'A')), ((0, 'C'), (2, 'B')),
+              ((0, 'C'), (2, 'D')), ((1, 'A'), (2, 'A')),
+              ((1, 'C'), (2, 'B')), ((1, 'C'), (2, 'D'))],
+             [(1, 'A')],
+             [(1, 'C'), (2, 'A'), ((0, 'B'), (1, 'C')),
+              ((0, 'B'), (2, 'A')), ((1, 'C'), (2, 'A'))],
+             [(2, 'D'), ((0, 'B'), (1, 'A')),
+              ((0, 'B'), (2, 'D')), ((1, 'A'), (2, 'D'))]]
 seqs = ['AAB', 'BAD', 'BCA']
 assignments = {0:0, 1:0, 2:1}
 
@@ -87,6 +86,16 @@ def test_sequence_X():
     assert np.array_equal(X, sequence_X)
     assert terms == sequence_terms
 
+def test_in_sequence():
+    assert in_sequence(seqs[0], contact_terms[0])
+    assert ~in_sequence(seqs[0], contact_terms[1])
+    assert in_sequence(seqs[0], sequence_terms[0])
+    assert ~in_sequence(seqs[0], sequence_terms[1])
+
+def test_present():
+    assert present('AAB', (1, 'A'))
+    assert ~present('AAB', (1, 'B'))
+
 def test_X():
     X, terms = make_X(seqs, sample_space, contacts)
     assert np.array_equal(X, all_X)
@@ -102,6 +111,8 @@ def test_X():
     X, terms = make_X(seqs, sample_space, contacts, collapse=False)
     assert np.array_equal(X, complete_X)
     assert terms == sequence_terms + contact_terms
+    X, terms = make_X(seqs, terms=terms)
+    assert np.array_equal(X, complete_X)
 
 def test_contacts():
     terms = get_contacts(seqs[0], contacts)
@@ -135,6 +146,8 @@ if __name__=="__main__":
     test_sequence_terms()
     test_contact_X()
     test_sequence_X()
+    test_present()
+    test_in_sequence()
     test_X()
     test_contacts()
     test_terms()

@@ -40,15 +40,18 @@ class GPKernel(object):
             else:
                 self._saved_X[X.index[i]] = X.iloc[i]
 
-    def delete(self, X):
+    def delete(self, X=None):
         """ Forget the inputs in X.
 
         Parameters:
             X (pd.DataFrame): Deletes the inputs in X
         """
-        for i in range(len(X.index)):
-            if X.index[i] in self._saved_X.keys():
-                del self._saved_X[X.index[i]]
+        if X is None:
+            self._saved_X = {}
+        else:
+            for i in range(len(X.index)):
+                if X.index[i] in self._saved_X.keys():
+                    del self._saved_X[X.index[i]]
 
     def _get_X(self, x):
         """ Retrieve an input x.

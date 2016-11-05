@@ -153,7 +153,7 @@ class GPModel(object):
         self.X_seqs = X_seqs
         self.Y = Y
         self._ell = len(Y)
-        self.kern.delete(X_seqs)
+        self.kern.delete()
         self.kern.set_X(X_seqs)
         self.regr = not self.is_class()
         if self.regr:
@@ -621,7 +621,7 @@ class GPModel(object):
         # for classification, return the ROC AUC
         if not self.regr:
             from sklearn.metrics import roc_auc_score
-            return roc_auc_score(Y, predicted)
+            return roc_auc_score(Y, [p[0] for p in predicted])
 
         else:
             pred_Y = [y for (y,v) in predicted]
@@ -660,8 +660,8 @@ class GPModel(object):
             model (string): path to saved model
         '''
         with open(model,'rb') as m_file:
-            attributes = pickle.load(m_file)
-        model = GPModel(attributes['kern'])
+            attributes = pickle.load(m_file, encoding='latin1')
+        model = cls(attributes['kern'])
         del attributes['kern']
         model._set_params(**attributes)
         return model

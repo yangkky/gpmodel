@@ -3,6 +3,7 @@ import pandas as pd
 from sys import exit
 import itertools
 
+
 class GPEntropy(object):
 
     """ An object for calculating the entropy of Gaussian Processes.
@@ -88,15 +89,15 @@ class GPEntropy(object):
             probabilities = probabilities.values
         total = 0
         data = np.concatenate((X, probabilities), axis=1)
-        for r in range(1,len(X)+1):
+        for r in range(1, len(X)+1):
             for subset_inds in itertools.combinations(range(len(data)), r):
-                subset = data[subset_inds,:]
-                sub_X = subset[:,0:-1]
-                sub_probs = subset[:,-1]
+                subset = data[subset_inds, :]
+                sub_X = subset[:, 0:-1]
+                sub_probs = subset[:, -1]
                 H = self.entropy(sub_X)
                 prob_for = np.prod(sub_probs)
                 comp = list(set(range(len(data))) - set(subset_inds))
-                prob_against = np.prod([1-p for p in data[comp,-1]])
+                prob_against = np.prod([1-p for p in data[comp, -1]])
                 total += H * prob_for * prob_against
         return total
 
@@ -113,7 +114,7 @@ class GPEntropy(object):
             X = pd.DataFrame(X, index=[str(i) for i in range(len(X))])
         cov = self.kernel.make_K(X, hypers=self.hypers)
         k_off = np.matrix(self._k_star(X))
-        v = np.linalg.lstsq(self._L,k_off.T)[0]
+        v = np.linalg.lstsq(self._L, k_off.T)[0]
         return cov - v.T * v
 
     def maximize_entropy(self, X, n):
@@ -158,7 +159,7 @@ class GPEntropy(object):
         if isinstance(X, pd.DataFrame):
             X = X.values
         return self._lazy_greedy(X, self.expected_entropy, n,
-                                probabilities=probabilities)
+                                 probabilities=probabilities)
 
     def _lazy_greedy(self, X, func, n, **kwargs):
         """ Implementation of lazy-greedy for optimizing set functions.
@@ -184,10 +185,10 @@ class GPEntropy(object):
             found = False
             while not found:
                 try_inds = selected + [UBs.index[0]]
-                new_args = {k:kwargs[k][try_inds] for k in kwargs.keys()}
-                del_H = func(X[try_inds],**new_args) - H
-                UBs.iloc[0,0] = del_H
-                found = (del_H >= UBs.iloc[1,0])
+                new_args = {k: kwargs[k][try_inds] for k in kwargs.keys()}
+                del_H = func(X[try_inds], **new_args) - H
+                UBs.iloc[0, 0] = del_H
+                found = (del_H >= UBs.iloc[1, 0])
                 if found:
                     break
                 less_than = (del_H < UBs.iloc[1::]).values.T[0]
@@ -195,11 +196,11 @@ class GPEntropy(object):
                     new_inds = list(UBs.index[1::]) + [UBs.index[0]]
                 else:
                     first = np.nonzero(~less_than)[0][0]+1
-                    new_inds = list(UBs.index[1:first]) + \
-                    [UBs.index[0]] + list(UBs.index[first::])
+                    new_inds = list(UBs.index[1:first]) + [UBs.index[0]]
+                    new_inds += list(UBs.index[first::])
                 UBs = UBs.reindex(new_inds)
             selected.append(UBs.index[0])
-            H += UBs.iloc[0,0]
+            H += UBs.iloc[0, 0]
             UBs = UBs.drop(UBs.index[[0]])
         return X[selected], H, selected
 

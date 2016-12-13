@@ -167,13 +167,15 @@ class GPModel(object):
         else:
             n_guesses = len(self.kern.hypers)
             if self.objective == self._LOO_log_p:
-                raise AttributeError('Classification models must be trained on marginal likelihood')
+                raise AttributeError(('Classification models must be trained '
+                                      'on marginal likelihood'))
         if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
         else:
             guesses = self.guesses
             if len(guesses) != n_guesses:
-                raise AttributeError('Length of guesses does not match number of hyperparameters')
+                raise AttributeError(('Length of guesses does not match '
+                                      'number of hyperparameters'))
 
         bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
@@ -251,7 +253,7 @@ class GPModel(object):
         """
         return normed*self.std + self.mean
 
-    def _predict (self, k, k_star, alpha=None, L=None, unnorm=True):
+    def _predict(self, k, k_star, alpha=None, L=None, unnorm=True):
         """ Make prediction for one sequence.
 
         Predicts the mean and variance for one new sequence given its
@@ -324,7 +326,7 @@ class GPModel(object):
                            for p, (m, v) in zip(means, predictions)]
         return predictions
 
-    def _p_integral (self, z, mean, variance):
+    def _p_integral(self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
 
         Equation to integrate when calculating pi_star for classification.
@@ -348,7 +350,7 @@ class GPModel(object):
         third = np.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
-    def _log_ML (self, hypers):
+    def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Uses RW Equation 5.8 for regression models and Equation 3.32 for
@@ -540,7 +542,8 @@ class GPModel(object):
         LOO = self.LOO_res(hypers)
         vs = LOO['v']
         mus = LOO['mu']
-        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs - 0.5*np.log(2*np.pi)
+        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs
+        log_ps -= 0.5*np.log(2*np.pi)
         return_me = -sum(log_ps)
         return return_me
 

@@ -3,6 +3,7 @@ import pandas as pd
 from sys import exit
 import chimera_tools
 
+
 class GPMean(object):
 
     """ A Gaussian process mean function.
@@ -32,6 +33,7 @@ class GPMean(object):
         else:
             return np.zeros(len(X))
 
+
 class StructureSequenceMean(GPMean):
 
     """ A Gaussian process mean function for proteins.
@@ -58,7 +60,7 @@ class StructureSequenceMean(GPMean):
         if isinstance(X_seqs, pd.DataFrame):
             X_seqs = [''.join(row) for _, row in X_seqs.iterrows()]
         X, self._terms = self._make_X(X_seqs)
-        self._clf.fit(X,Y)
+        self._clf.fit(X, Y)
         self.means = self._clf.predict(X)
 
     def mean(self, X_seqs):
@@ -73,9 +75,3 @@ class StructureSequenceMean(GPMean):
                                     self._contacts,
                                     terms=self._terms,
                                     collapse=False)
-
-
-
-
-
-

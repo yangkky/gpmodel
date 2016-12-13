@@ -14,7 +14,6 @@ rc = {'lines.linewidth': 3,
       'axes.labelsize': 30,
       'axes.titlesize': 40,
       'axes.edgecolor': 'black'}
-      #'axes.facecolor': 'DFDFE5'}
 sns.set_context('talk', rc=rc)
 sns.set_style('whitegrid', rc=rc)
 
@@ -22,7 +21,8 @@ sns.set_style('whitegrid', rc=rc)
 # Here are some plotting tools that are generally useful
 ######################################################################
 
-def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
+
+def cv(Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
     ''' Returns cross-validation predictions.
 
     Parameters:
@@ -46,7 +46,7 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
     changed_index = list(set(Xs.index) - set(keep_inds))
     actual = []
     predicted = []
-    if all (y in [-1,1] for y in Ys):
+    if all(y in [-1, 1] for y in Ys):
         regr = False
     else:
         regr = True
@@ -59,9 +59,9 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
             actual += list(Ys.loc[[test_inds]])
         if not regr:
             fpr, tpr, _ = metrics.roc_curve(actual, predicted)
-            metric = metrics.auc(fpr,tpr)
+            metric = metrics.auc(fpr, tpr)
         else:
-            metric = np.corrcoef(predicted, actual)[0,1]
+            metric = np.corrcoef(predicted, actual)[0, 1]
         return predicted, actual, metric
     Rs = []
     for r in range(replicates):
@@ -80,29 +80,30 @@ def cv (Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
         predicted += predictions
         actual += truth
         if regr:
-            Rs.append(np.corrcoef(predictions, truth)[0,1])
+            Rs.append(np.corrcoef(predictions, truth)[0, 1])
         else:
             fpr, tpr, _ = metrics.roc_curve(truth, predictions)
             Rs.append(metrics.auc(fpr, tpr))
 
     return predicted, actual, np.mean(Rs)
 
-def plot_predictions (real_Ys, predicted_Ys,
-                      stds=None, file_name=None, title='',label='', line=False):
+
+def plot_predictions(real_Ys, predicted_Ys, stds=None,
+                     file_name=None, title='', label='', line=False):
     if stds is None:
-        plt.plot (real_Ys, predicted_Ys, '.', color='black')
+        plt.plot(real_Ys, predicted_Ys, '.', color='black')
     else:
-        plt.errorbar (real_Ys, predicted_Ys, yerr = [stds, stds], fmt = 'k.')
+        plt.errorbar(real_Ys, predicted_Ys, yerr=[stds, stds], fmt='k.')
     small = min(set(real_Ys) | set(predicted_Ys))*1.1
     if small == 0:
         small = real_Ys.mean()/10.0
     large = max(set(real_Ys) | set(predicted_Ys))*1.1
     if line:
-        plt.plot ([small, large], [small, large], 'k--', alpha=0.3)
-    plt.xlabel ('Actual ' + label)
-    plt.ylabel ('Predicted ' + label)
-    plt.title (title)
-    plt.xlim (small, large)
+        plt.plot([small, large], [small, large], 'k--', alpha=0.3)
+    plt.xlabel('Actual ' + label)
+    plt.ylabel('Predicted ' + label)
+    plt.title(title)
+    plt.xlim(small, large)
 
     if small <= 0:
         left = small*0.8
@@ -112,22 +113,22 @@ def plot_predictions (real_Ys, predicted_Ys,
         right = large*1.3
     else:
         right = large*0.7
-    #plt.text(left, right, 'R = %.3f' %np.corrcoef(real_Ys, predicted_Ys)[0,1])
-    if not file_name is None:
-        plt.savefig (file_name)
+    if file_name is not None:
+        plt.savefig(file_name)
 
-def plot_ROC (real_Ys, pis, file_name=None, title=''):
+
+def plot_ROC(real_Ys, pis, file_name=None, title=''):
     fpr, tpr, _ = metrics.roc_curve(real_Ys, pis)
-    plt.plot (fpr,tpr,'k.-')
-    plt.xlim([-.1,1.1])
-    plt.ylim([-.1,1.1])
+    plt.plot(fpr, tpr, 'k.-')
+    plt.xlim([-.1, 1.1])
+    plt.ylim([-.1, 1.1])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    auc = metrics.auc(fpr,tpr)
-    #plt.title(title+' auc = %.4f' %auc)
-    if not file_name is None:
-        plt.savefig (file_name)
+    auc = metrics.auc(fpr, tpr)
+    if file_name is not None:
+        plt.savefig(file_name)
     return auc
+
 
 def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
     std = []
@@ -139,8 +140,8 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
         train_Ys = Ys.loc[train_inds]
         verify = Xs.loc[[i]]
         print('Building model for ' + str(i))
-        model = gpmodel.GPModel(train_Xs,train_Ys, kernel,
-                                guesses=[1, 10], remember=(count<1))
+        model = gpmodel.GPModel(train_Xs, train_Ys, kernel,
+                                guesses=[1, 10], remember=(count < 1))
         count += 1
         print('Making prediction for ' + str(i))
         predicted = model.predicts(verify, delete=False)
@@ -148,20 +149,15 @@ def plot_LOO(Xs, Ys, kernel, save_as=None, lab=''):
             E = predicted[0]
         else:
             try:
-                [(E,v)] = predicted
+                [(E, v)] = predicted
             except ValueError:
-                print ('ValueError', i, predicted)
-            std.append(math.pow(v,0.5))
-        predicted_Ys.append (E)
-#     plot_predictions (Ys.tolist(),
-#                       predicted_Ys,
-#                       stds=None,
-#                       label=lab,
-#                       line=model.regr,
-#                       file_name=save_as)
+                print('ValueError', i, predicted)
+            std.append(math.pow(v, 0.5))
+        predicted_Ys.append(E)
     return predicted_Ys
 
-def log_marginal_likelihood (variances, model):
+
+def log_marginal_likelihood(variances, model):
     """ Returns the negative log marginal likelihood.
 
         Parameters:
@@ -172,11 +168,12 @@ def log_marginal_likelihood (variances, model):
     """
     if model.regr:
         Y_mat = np.matrix(model.normed_Y)
-        var_n,var_p = variances
-        K_mat = np.matrix (model.K)
+        var_n, var_p = variances
+        K_mat = np.matrix(model.K)
         Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-        L = np.linalg.cholesky (Ky)
-        alpha = np.linalg.lstsq(L.T,np.linalg.lstsq (L, np.matrix(Y_mat).T)[0])[0]
+        L = np.linalg.cholesky(Ky)
+        alpha = np.linalg.lstsq(L.T,
+                                np.linalg.lstsq(L, np.matrix(Y_mat).T)[0])[0]
         first = -0.5*Y_mat*alpha
         second = -sum([math.log(l) for l in np.diag(L)])
         third = -len(K_mat)/2.*math.log(2*math.pi)
@@ -186,36 +183,37 @@ def log_marginal_likelihood (variances, model):
         Y_mat = np.matrix(model.Y)
         vp = variances
         f_hat = model.find_F(var_p=vp)
-        K_mat = vp*np.matrix (model.K)
-        W = model.hess (f_hat)
+        K_mat = vp*np.matrix(model.K)
+        W = model.hess(f_hat)
         W_root = scipy.linalg.sqrtm(W)
-        F_mat = np.matrix (f_hat)
+        F_mat = np.matrix(f_hat)
         ell = len(model.Y)
-        L = np.linalg.cholesky (np.matrix(np.eye(ell))+W_root*K_mat*W_root)
-        b = W*F_mat.T + \
-        np.matrix(np.diag(model.grad_log_logistic_likelihood (model.Y,f_hat))).T
-        a = b - W_root*np.linalg.lstsq(L.T,np.linalg.lstsq(L,W_root*K_mat*b)[0])[0]
+        L = np.linalg.cholesky(np.matrix(np.eye(ell))+W_root*K_mat*W_root)
+        b = W*F_mat.T + np.matrix(np.diag(model.grad_log_logistic_likelihood
+                                          (model.Y, f_hat))).T
+        a = b - W_root*np.linalg.lstsq(L.T,
+                                       np.linalg.lstsq(L,
+                                                       W_root*K_mat*b)[0])[0]
         fit = -0.5*a.T*F_mat.T + model.log_logistic_likelihood(model.Y, f_hat)
         complexity = -sum(np.log(np.diag(L)))
         return (fit, complexity, fit+complexity)
 
 
-def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
+def plot_ML_contour(model, ranges, save_as=None, lab='', n=100, n_levels=10):
     """
     Make a plot of how ML varies with the hyperparameters for a given model
     """
     if model.regr:
         vns = np.linspace(ranges[0][0], ranges[0][1], n)
         vps = np.linspace(ranges[1][0], ranges[1][1], n)
-        nn,pp = np.meshgrid(vns, vps)
+        nn, pp = np.meshgrid(vns, vps)
         log_ML = np.empty_like(nn)
         for j in range(len(vns)):
             for i in range(len(vps)):
-                log_ML[j,i] = -model.log_ML((nn[i,j],pp[i,j]))
+                log_ML[j, i] = -model.log_ML((nn[i, j], pp[i, j]))
         levels = np.linspace(log_ML.min(), log_ML.max(), n_levels)
         print(levels)
-        cs = plt.contour(nn, pp, log_ML, alpha=0.7,levels=levels)
-
+        cs = plt.contour(nn, pp, log_ML, alpha=0.7, levels=levels)
         plt.clabel(cs)
         plt.xlabel(r'$\sigma_n^2$')
         plt.ylabel(r'$\sigma_p^2$')
@@ -225,16 +223,18 @@ def plot_ML_contour (model, ranges, save_as=None, lab='', n=100, n_levels=10):
     else:
         vps = np.linspace(ranges[0], ranges[1], n)
         log_ML = np.empty_like(vps)
-        for i,p in enumerate(vps):
+        for i, p in enumerate(vps):
             log_ML[i] = -model.logistic_log_ML([p])
 
-        plt.plot(vps, log_ML,'.-')
+        plt.plot(vps, log_ML, '.-')
         plt.xlabel(r'$\sigma_p^2$')
         plt.ylabel('log marginal likelihood')
         plt.title(lab)
         return log_ML
 
-def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexity']):
+
+def plot_ML_parts(model, ranges, lab='', n=100,
+                  plots=['log_ML', 'fit', 'complexity']):
     if model.regr:
         if len(ranges[0]) == 1:
             indpt = 'var_p**2'
@@ -253,12 +253,13 @@ def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexi
         fit = np.empty_like(varied)
         complexity = np.empty_like(varied)
         norm = np.empty_like(varied)
-        for i,v in enumerate(varied):
+        for i, v in enumerate(varied):
             if indpt == 'var_p**2':
-                fit[i],complexity[i],norm[i],ML[i] = log_marginal_likelihood((cons,v), model)
+                fit[i], complexity[i], norm[i], ML[i] = \
+                    log_marginal_likelihood((cons, v), model)
             else:
-                fit[i],complexity[i],norm[i],ML[i] = log_marginal_likelihood((v,cons), model)
-        #log_ML -= log_ML.max()
+                fit[i], complexity[i], norm[i], ML[i] = \
+                   log_marginal_likelihood((v, cons), model)
     else:
         indpt = 'var_p**2'
         varied = np.linspace(ranges[0], ranges[1], n)
@@ -266,11 +267,11 @@ def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexi
         fit = np.empty_like(varied)
         norm = np.empty_like(varied)
         complexity = np.empty_like(varied)
-        for i,v in enumerate(varied):
+        for i, v in enumerate(varied):
             fit[i], complexity[i], ML[i] = log_marginal_likelihood(v, model)
 
-
-    plot_dict = {'log_ML':ML, 'fit':fit, 'complexity':complexity, 'norm':norm}
+    plot_dict = {'log_ML': ML, 'fit': fit,
+                 'complexity': complexity, 'norm': norm}
     for pl in plots:
         plt.plot(varied, plot_dict[pl])
     plt.legend(plots)
@@ -283,6 +284,3 @@ def plot_ML_parts (model, ranges, lab='', n=100, plots=['log_ML','fit','complexi
 
 if __name__ == "__main__":
     pass
-
-
-

@@ -68,6 +68,7 @@ class GPKernel(object):
         except (KeyError, AttributeError, TypeError):
             return x
 
+
 class PolynomialKernel(GPKernel):
 
     """ A Polynomial kernel of the form (s0 + sp * x.T*x)^d
@@ -114,7 +115,7 @@ class PolynomialKernel(GPKernel):
             dot = np.dot(x1.T, x2)
         except AttributeError:
             dot = x1 * x2
-        return np.power(sigma_0 **2 + sigma_p ** 2 * dot, self._deg)
+        return np.power(sigma_0 ** 2 + sigma_p ** 2 * dot, self._deg)
 
     def make_K(self, Xs=None, hypers=None):
         """ Calculate the Matern kernel matrix for the points in Xs.
@@ -165,12 +166,13 @@ class PolynomialKernel(GPKernel):
         X = np.array(X)
         dims = np.shape(X)
         n = dims[0]
-        d = np.empty((n,n))
-        for i in range (n):
+        d = np.empty((n, n))
+        for i in range(n):
             for j in range(i+1):
                 d[i][j] = np.dot(X[j], X[i])
                 d[j][i] = d[i][j]
         return d
+
 
 class MaternKernel(GPKernel):
 
@@ -182,7 +184,6 @@ class MaternKernel(GPKernel):
         nu (string): '3/2' or '5/2'
         _d (np.ndarray): saved default geometric distances
     """
-
 
     def __init__(self, nu):
         """ Initiate a Matern kernel.
@@ -257,11 +258,11 @@ class MaternKernel(GPKernel):
         """
         ell = hypers[0]
         if self.nu == '3/2':
-            M =  (1.0 + np.sqrt(3.0) * d / ell) * np.exp(-np.sqrt(3) * d / ell)
+            M = (1.0 + np.sqrt(3.0) * d / ell) * np.exp(-np.sqrt(3) * d / ell)
         elif self.nu == '5/2':
             first = (1.0 + np.sqrt(5.0)*d/ell) + 5.0*np.power(d, 2)/3.0/ell**2
             second = np.exp(-np.sqrt(5.0) * d / ell)
-            M =  first * second
+            M = first * second
         return M
 
     def _distance(self, x1, x2):
@@ -301,6 +302,7 @@ class MaternKernel(GPKernel):
         C = 2 * np.dot(xs, xs.T)
         dists = np.sqrt(A + B - C)
         return dists
+
 
 class SEKernel(GPKernel):
 
@@ -377,7 +379,7 @@ class SEKernel(GPKernel):
             se (numpy.ndarray)
         """
         sigma_f, ell = params
-        se_array = sigma_f**2 * np.exp(-0.5/np.power(ell,2) * d_squared)
+        se_array = sigma_f**2 * np.exp(-0.5/np.power(ell, 2) * d_squared)
         return se_array
 
     def _distance(self, x1, x2):
@@ -419,6 +421,7 @@ class SEKernel(GPKernel):
         dists = A + B - C
         return dists
 
+
 class HammingKernel(GPKernel):
 
     """A linear Hamming kernel.
@@ -431,7 +434,7 @@ class HammingKernel(GPKernel):
 
     def __init__(self):
         """ Initiate a Hamming kernel."""
-        super(HammingKernel,self).__init__()
+        super(HammingKernel, self).__init__()
         self.hypers = ['var_p']
 
     def calc_kernel(self, seq1, seq2, hypers=[1.0], normalize=True):
@@ -479,13 +482,13 @@ class HammingKernel(GPKernel):
             return self._base_K*var_p
         n_seqs = len(seqs)
         K = np.zeros((n_seqs, n_seqs))
-        for n1,i in zip(range(n_seqs), seqs.index):
-            for n2,j in zip(range (n_seqs), seqs.index):
+        for n1, i in zip(range(n_seqs), seqs.index):
+            for n2, j in zip(range(n_seqs), seqs.index):
                 seq1 = seqs.iloc[n1]
                 seq2 = seqs.iloc[n2]
-                K[n1,n2] = self.calc_kernel(seq1, seq2,
-                                            hypers=hypers,
-                                            normalize=normalize)
+                K[n1, n2] = self.calc_kernel(seq1, seq2,
+                                             hypers=hypers,
+                                             normalize=normalize)
         return np.array(K)
 
     def set_X(self, X_seqs):
@@ -497,7 +500,7 @@ class HammingKernel(GPKernel):
         Parameters:
             X_seqs (iterable)
         """
-        self.train (X_seqs)
+        self.train(X_seqs)
         self._base_K = self.make_K(X_seqs)
 
     def train(self, X_seqs):
@@ -527,7 +530,7 @@ class HammingKernel(GPKernel):
             if X_seqs.index[i] in self._saved_X.keys():
                 del self._saved_X[X_seqs.index[i]]
 
-    def _get_X(self,seq):
+    def _get_X(self, seq):
         """ Retrieve an input sequence.
 
         Parameters:
@@ -539,7 +542,8 @@ class HammingKernel(GPKernel):
         try:
             return self._saved_X[seq]
         except TypeError:
-            return [str(i) + s for i,s in enumerate(seq)]
+            return [str(i) + s for i, s in enumerate(seq)]
+
 
 class WeightedHammingKernel(HammingKernel):
 
@@ -553,10 +557,10 @@ class WeightedHammingKernel(HammingKernel):
         """ Intiate a WeightedHammingKernel. """
         from Bio.SubsMat import MatrixInfo
         self._weights = MatrixInfo.blosum62
-        self._weights = {k:self.weights[k] for k in self.weights.keys()}
+        self._weights = {k: self.weights[k] for k in self.weights.keys()}
         for k in self._weights.keys():
             self._weights[(k[1], k[0])] = self.weights[k]
-        super(WeightedHammingKernel,self).__init__()
+        super(WeightedHammingKernel, self).__init__()
 
     def make_K(self, seqs=None, hypers=[1.0], normalize=True):
         """ Calculate the weighted Hamming kernel matrix.
@@ -591,14 +595,15 @@ class WeightedHammingKernel(HammingKernel):
         s1 = self._get_X(seq1)
         s2 = self._get_X(seq2)
         k = 0.0
-        for a,b in zip(s1, s2):
+        for a, b in zip(s1, s2):
             try:
-                k += self._weights[(a,b)]
+                k += self._weights[(a, b)]
             except KeyError:
-                k+= 0
+                k += 0
         if normalize:
             k = float(k) / len(s1)
         return k*var_p
+
 
 class StructureKernel(HammingKernel):
 
@@ -606,7 +611,8 @@ class StructureKernel(HammingKernel):
 
     Attributes:
         hypers (list): list of required hyperparameters
-        _saved_X (dict): a dict matching the labels for sequences to their contacts
+        _saved_X (dict): a dict matching the labels for sequences
+            to their contacts
         contacts (list): list of which residues are in contact
     """
 
@@ -634,7 +640,7 @@ class StructureKernel(HammingKernel):
             try:
                 return self._saved_X[seq]
             except:
-                raise ValueError ('Key %s not recognized' %seq)
+                raise ValueError('Key %s not recognized' %seq)
         try:
             return self._saved_X[seq.name]
         except(KeyError, AttributeError):
@@ -642,6 +648,7 @@ class StructureKernel(HammingKernel):
             contacts = [str(con[0]) + seq[con[0]] + str(con[1]) + seq[con[1]]
                         for i, con in enumerate(self.contacts)]
             return contacts
+
 
 class StructureMaternKernel(MaternKernel, StructureKernel):
 
@@ -667,7 +674,6 @@ class StructureMaternKernel(MaternKernel, StructureKernel):
         StructureKernel.__init__(self, contacts)
         MaternKernel.__init__(self, nu)
 
-
     def _distance(self, seq1, seq2):
         """ Calculate the contact distance between two sequences.
 
@@ -688,7 +694,6 @@ class StructureMaternKernel(MaternKernel, StructureKernel):
         n = len(self._get_X(seq1))
         return np.sqrt(n - k)
 
-
     def _get_d(self, X_seqs):
         """ Calculate the contact distances between a set of sequences.
 
@@ -705,12 +710,13 @@ class StructureMaternKernel(MaternKernel, StructureKernel):
         n = len(X_seqs)
         if n == 2:
             return self._distance(X_seqs.iloc[0], X_seqs.iloc[1])
-        D = np.zeros((n,n))
+        D = np.zeros((n, n))
         for i in range(n):
             for j in range(i):
-                D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
-                D[j,i] = D[i,j]
+                D[i, j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j, i] = D[i, j]
         return D
+
 
 class HammingMaternKernel(MaternKernel, HammingKernel):
 
@@ -767,12 +773,13 @@ class HammingMaternKernel(MaternKernel, HammingKernel):
             D (np.ndarray)
         """
         n = len(X_seqs)
-        D = np.zeros((n,n))
+        D = np.zeros((n, n))
         for i in range(n):
             for j in range(i):
-                D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
-                D[j,i] = D[i,j]
+                D[i, j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j, i] = D[i, j]
         return D
+
 
 class StructureSEKernel(SEKernel, StructureKernel):
 
@@ -830,12 +837,13 @@ class StructureSEKernel(SEKernel, StructureKernel):
             D (np.ndarray)
         """
         n = len(X_seqs)
-        D = np.zeros((n,n))
+        D = np.zeros((n, n))
         for i in range(n):
             for j in range(i):
-                D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
-                D[j,i] = D[i,j]
+                D[i, j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j, i] = D[i, j]
         return D
+
 
 class HammingSEKernel(SEKernel, HammingKernel):
 
@@ -888,12 +896,13 @@ class HammingSEKernel(SEKernel, HammingKernel):
             D (np.ndarray)
         """
         n = len(X_seqs)
-        D = np.zeros((n,n))
+        D = np.zeros((n, n))
         for i in range(n):
             for j in range(i):
-                D[i,j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
-                D[j,i] = D[i,j]
+                D[i, j] = self._distance(X_seqs.iloc[i], X_seqs.iloc[j])
+                D[j, i] = D[i, j]
         return D
+
 
 class SumKernel(GPKernel):
 
@@ -917,8 +926,8 @@ class SumKernel(GPKernel):
         hypers = []
         for k in self._kernels:
             hypers += k.hypers
-        self.hypers = [hypers[i] + \
-                       str(hypers[0:i].count(hypers[i])) \
+        self.hypers = [hypers[i] +
+                       str(hypers[0:i].count(hypers[i]))ß
                        for i in range(len(hypers))]
         hypers_inds = [len(k.hypers) for k in self._kernels]
         hypers_inds = np.cumsum(np.array(hypers_inds))
@@ -978,8 +987,9 @@ class SumKernel(GPKernel):
             ks = [kern.calc_kernel(x1, x2) for kern in self._kernels]
         else:
             hypers_inds = self.hypers_inds
-            ks = [kern.calc_kernel(x1,x2,hypers[hypers_inds[i]:hypers_inds[i+1]]) for i,
-                  kern in enumerate(self._kernels)]
+            ks = [kern.calc_kernel(x1, x2, hypers[hypers_inds[i]:
+                                                  hypers_inds[i+1]])
+                  for i, kern in enumerate(self._kernels)]
         return sum(ks)
 
     def train(self, Xs):
@@ -1019,6 +1029,7 @@ class SumKernel(GPKernel):
         for k in self._kernels:
             k.set_X(X)
 
+
 class LinearKernel(GPKernel):
 
     """ The linear (dot product) kernel for two inputs. """
@@ -1028,8 +1039,7 @@ class LinearKernel(GPKernel):
         GPKernel.__init__(self)
         self.hypers = ['var_p']
 
-
-    def make_K (self, X=None, hypers=[1.0]):
+    def make_K(self, X=None, hypers=[1.0]):
         """ Calculate the linear kernel matrix for the points in Xs.
 
         Parameters:
@@ -1047,7 +1057,7 @@ class LinearKernel(GPKernel):
         K = X_mat * X_mat.T * vp
         return np.array(K)
 
-    def calc_kernel (self, x1, x2, hypers=[1.0]):
+    def calc_kernel(self, x1, x2, hypers=[1.0]):
         """ Calculate the linear kernel between x1 and x2.
 
         The linear kernel is the dot product of x1 and x2 multiplied
@@ -1066,7 +1076,7 @@ class LinearKernel(GPKernel):
         vp = hypers[0]
         x1 = self._get_X(x1)
         x2 = self._get_X(x2)
-        return sum(a*b for a, b in zip(x1,x2)) * vp
+        return sum(a*b for a, b in zip(x1, x2)) * vp
 
     def set_X(self, X):
         """ Set a default set of inputs X.

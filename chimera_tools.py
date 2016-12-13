@@ -7,12 +7,13 @@ import numpy as np
 from sys import exit
 import warnings
 
-def contacting_terms (sample_space, contacts):
+
+def contacting_terms(sample_space, contacts):
     """ Lists the possible contacts
 
     Parameters:
-        sample_space (iterable): Each element in sample_space contains the possible
-           amino acids at that position
+        sample_space (iterable): Each element in sample_space contains
+            the possible amino acids at that position
         contacts (iterable): Each element in contacts pairs two positions that
            are considered to be in contact
 
@@ -28,21 +29,25 @@ def contacting_terms (sample_space, contacts):
         second_possibilities = sorted(set(sample_space[second_pos]))
         for aa1 in first_possibilities:
             for aa2 in second_possibilities:
-                contact_terms.append(((first_pos,aa1),(second_pos,aa2)))
+                contact_terms.append(((first_pos, aa1), (second_pos, aa2)))
     return contact_terms
 
-def make_sequence_terms (sample_space):
+
+def make_sequence_terms(sample_space):
     """ List the possible (pos, aa) terms.
 
     Parameters:
-        sample_space (iterable): Each element in sample_space contains the possible
+        sample_space (iterable): Each element in sample_space contains
+            the possible
            amino acids at that position
 
     Returns:
          contact_terms (list): Each item in the list is a contact in the form
             ((pos1,aa1),(pos2,aa2)).
     """
-    return sorted(list(set([(i,t) for i,sp in enumerate(sample_space) for t in sp])))
+    return sorted(list(set([(i, t) for i, sp in enumerate(sample_space)
+                            for t in sp])))
+
 
 def X_from_terms(X_terms, all_terms):
     """ Make binary indicator vectors.
@@ -64,7 +69,8 @@ def X_from_terms(X_terms, all_terms):
     for current_terms in X_terms:
         # determine if all_terms are single terms or collapsed terms
         if isinstance(all_terms[0], tuple):
-            inds = [all_terms.index(c) for c in current_terms if c in all_terms]
+            inds = [all_terms.index(c) for
+                    c in current_terms if c in all_terms]
             X_row = [1 if i in inds else 0 for i in range(len(all_terms))]
         elif isinstance(all_terms[0], list):
             X_row = []
@@ -77,13 +83,14 @@ def X_from_terms(X_terms, all_terms):
         X.append(X_row)
     return np.array(X)
 
-def make_contact_X (seqs, sample_space, contacts):
+
+def make_contact_X(seqs, sample_space, contacts):
     """ Make binary indicator vector for contacts.
 
     Parameters:
         seqs (list): each sequence should be a string.
-        sample_space (iterable): Each element in sample_space contains the possible
-           amino acids at that position.
+        sample_space (iterable): Each element in sample_space
+            contains the possible amino acids at that position.
         contacts (iterable): Each element in contacts pairs two positions that
            are considered to be in contact.
 
@@ -97,6 +104,7 @@ def make_contact_X (seqs, sample_space, contacts):
     X_terms = [get_contacts(seq, contacts) for seq in seqs]
     contact_X = X_from_terms(X_terms, contact_terms)
     return contact_X, contact_terms
+
 
 def make_sequence_X(seqs, sample_space):
     """ Make binary indicator vector for sequence terms.
@@ -116,6 +124,7 @@ def make_sequence_X(seqs, sample_space):
     X_terms = [get_terms(seq) for seq in seqs]
     sequence_X = X_from_terms(X_terms, sequence_terms)
     return sequence_X, sequence_terms
+
 
 def make_X(seqs, sample_space=None, contacts=None, terms=None, collapse=True):
     """ Make combined sequence/structure X.
@@ -188,14 +197,15 @@ def _collapse(X, terms):
     while len(columns) > 0:
         current_col = columns.pop(0)
         kept_columns.append(current_col)
-        current = X[:,current_col]
+        current = X[:, current_col]
         duplicate_cols = [c for c in columns if
-                          np.array_equal(current, X[:,c])]
+                          np.array_equal(current, X[:, c])]
         new_terms.append([terms[c] for c in [current_col] + duplicate_cols])
         for c in duplicate_cols:
             columns.remove(c)
     X = X[:, kept_columns]
     return X, new_terms
+
 
 def get_contacts(seq, contacts):
     """ Gets the contacting terms for a sequence.
@@ -209,8 +219,9 @@ def get_contacts(seq, contacts):
         contacting_terms (list): each term is of the form
             ((pos1, aa1), (pos2, aa2))
     """
-    return [((con[0],seq[con[0]]),(con[1],seq[con[1]]))
-              for con in contacts]
+    return [((con[0], seq[con[0]]), (con[1], seq[con[1]]))
+            for con in contacts]
+
 
 def get_terms(seq):
     """ Get the sequence terms.
@@ -221,10 +232,10 @@ def get_terms(seq):
     Returns:
         terms (list): Each item is a (pos,aa) tuple
     """
-    return [(i,t) for i,t in enumerate(list(seq))]
+    return [(i, t) for i, t in enumerate(list(seq))]
 
 
-def load_assignments (assignments_file):
+def load_assignments(assignments_file):
     """ Convert a SCHEMA assignment file to a dict mapping pos:block.
 
     Parameters:
@@ -234,14 +245,16 @@ def load_assignments (assignments_file):
         assignments (dict)
     """
     assignments_line = [l for l in open(assignments_file).read().split('\n')
-                        if len(l)>0 and l[0]!='#']
+                        if len(l) > 0 and l[0] != '#']
     assignment = [ord(l.split('\t')[2]) - ord('A') for l in assignments_line
-                  if l.split('\t')[2] !='-']
+                  if l.split('\t')[2] != '-']
     nodes_outputfile = [int(l.split('\t')[1])-1 for l in assignments_line
-                        if l.split('\t')[2] !='-'] # -1 because counting 0,1,2...
+                        if l.split('\t')[2] != '-']
+    # -1 because counting 0,1,2...
     return dict(list(zip(nodes_outputfile, assignment)))
 
-def make_sequence (code, assignments_dict, sample_space, default=0):
+
+def make_sequence(code, assignments_dict, sample_space, default=0):
     ''' Returns the chimera sequence as a list.
 
     Parameters:
@@ -256,18 +269,20 @@ def make_sequence (code, assignments_dict, sample_space, default=0):
         seq (list)
     '''
     seq = []
-    for pos,aa in enumerate(sample_space):
+    for pos, aa in enumerate(sample_space):
         # Figure out which parent to use at that position
         if pos in assignments_dict:
-            block = assignments_dict[pos] # the assigned block (based on pos)
+            # the assigned block (based on pos)
+            block = assignments_dict[pos]
             # the parent for that block in this particular chimera
             parent = int(code[block])
         else:
             parent = default
             if (np.array(aa) != aa[0]).any():
                 warnings.warn('Unassigned block not identical for all parents')
-        seq.append (aa[parent])
+        seq.append(aa[parent])
     return seq
+
 
 def substitute_blocks(sequence, blocks, assignments_dict, sample_space):
     """ Substitute chimeric blocks into a sequence.
@@ -286,9 +301,9 @@ def substitute_blocks(sequence, blocks, assignments_dict, sample_space):
     if len(sequence) != len(sample_space):
         raise ValueError('sequence and sample_space must have the same length')
     new_seq = []
-    block_ids = [b for _,b in blocks]
-    parent_ids = [p for p,_ in blocks]
-    for i,s in enumerate(sequence):
+    block_ids = [b for _, b in blocks]
+    parent_ids = [p for p, _ in blocks]
+    for i, s in enumerate(sequence):
         try:
             current_block = assignments_dict[i]
         except KeyError:
@@ -299,6 +314,7 @@ def substitute_blocks(sequence, blocks, assignments_dict, sample_space):
         else:
             new_seq.append(s)
     return ''.join(new_seq)
+
 
 def make_name_dict(dict_file):
     ''' Makes the name dict from a spreadsheet
@@ -313,41 +329,44 @@ def make_name_dict(dict_file):
     Returns:
         res (dict): maps names to chimera codes
     '''
-    name_df = pd.read_excel (dict_file)
+    name_df = pd.read_excel(dict_file)
     name_df['name'] = [s.lower() for s in name_df['name']]
     new_code = [zero_index(c) for c in name_df['code']]
     name_df['code'] = new_code
-    name_dict = {a:b for a,b in zip(name_df['name'], new_code)}
+    name_dict = {a: b for a, b in zip(name_df['name'], new_code)}
     return name_dict
 
-def zero_index (code):
+def zero_index(code):
     '''
     Takes a 1-indexed chimera code and zero-indexes it
     '''
     return ''.join([str(int(x)-1) for x in str(code)])
+
 
 def translate(na_sequence):
     """ Translates a nucleic acid string."""
     codon_dict = {'ATT':'I', 'ATC': 'I', 'ATA': 'I', 'CTG': 'L',
                   'CTC': 'L', 'CTA': 'L', 'CTT': 'L', 'TTA': 'L', 'TTG': 'L',
                   'GTG':'V', 'GTC':'V', 'GTA':'V', 'GTT':'V',
-                  'TTT':'F','TTC':'F',
+                  'TTT':'F', 'TTC':'F',
                   'ATG':'M',
-                  'TGC':'C','TGT':'C',
-                  'GCG':'A','GCT':'A', 'GCC':'A', 'GCA':'A',
+                  'TGC':'C', 'TGT':'C',
+                  'GCG':'A', 'GCT':'A', 'GCC':'A', 'GCA':'A',
                   'GGC':'G', 'GGT':'G', 'GGA':'G', 'GGG':'G',
-                  'CCG':'P','CCT':'P', 'CCC':'P', 'CCA':'P',
+                  'CCG':'P', 'CCT':'P', 'CCC':'P', 'CCA':'P',
                   'ACC':'T', 'ACT':'T', 'ACA':'T', 'ACG':'T',
-                  'AGC':'S','TCT':'S', 'TCC':'S', 'TCA':'S', 'TCG':'S', 'AGT':'S',
-                  'TAT':'Y','TAC':'Y',
+                  'AGC':'S','TCT':'S', 'TCC':'S',
+                  'TCA':'S', 'TCG':'S', 'AGT':'S',
+                  'TAT':'Y', 'TAC':'Y',
                   'TGG':'W',
-                  'CAG':'Q','CAA':'Q',
-                  'AAC':'N','AAT':'N',
-                  'CAC':'H','CAT':'H',
-                  'GAA':'E','GAG':'E',
-                  'GAT':'D','GAC':'D',
-                  'AAA':'K','AAG':'K',
-                  'CGT':'R', 'CGC':'R', 'CGA':'R', 'CGG':'R', 'AGA':'R', 'AGG':'R',
+                  'CAG':'Q', 'CAA':'Q',
+                  'AAC':'N', 'AAT':'N',
+                  'CAC':'H', 'CAT':'H',
+                  'GAA':'E', 'GAG':'E',
+                  'GAT':'D', 'GAC':'D',
+                  'AAA':'K', 'AAG':'K',
+                  'CGT':'R', 'CGC':'R', 'CGA':'R',
+                  'CGG':'R', 'AGA':'R', 'AGG':'R',
                   'TAA':'.', 'TAG':'.', 'TGA':'.'}
     if len(na_sequence) % 3 != 0:
         raise ValueError('na_sequence must have length divisible by 3.')

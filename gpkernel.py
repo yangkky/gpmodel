@@ -14,7 +14,7 @@ class GPKernel(object):
            _saved_X (dict)
     """
 
-    def __init__ (self):
+    def __init__(self):
         """ Create a GPKernel. """
         self._saved_X = {}
         self.hypers = []
@@ -48,6 +48,7 @@ class GPKernel(object):
         """
         if X is None:
             self._saved_X = {}
+            return
         else:
             for i in range(len(X.index)):
                 if X.index[i] in self._saved_X.keys():
@@ -512,7 +513,7 @@ class HammingKernel(GPKernel):
             else:
                 self._saved_X[X_seqs.index[i]] = self._get_X(X_seqs.iloc[i])
 
-    def delete(self,X_seqs=None):
+    def delete(self, X_seqs=None):
         """ Forget the inputs in X_seqs.
 
         Optional parameters:
@@ -521,6 +522,7 @@ class HammingKernel(GPKernel):
         """
         if X_seqs is None:
             self._saved_X = {}
+            return
         for i in range(len(X_seqs.index)):
             if X_seqs.index[i] in self._saved_X.keys():
                 del self._saved_X[X_seqs.index[i]]

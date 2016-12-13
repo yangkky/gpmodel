@@ -86,6 +86,13 @@ def test_predict():
     assert np.isclose(Y_test, Y_check).all()
 
 
+def test_dump_and_load():
+    model = gomodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
+    model.fit(X_df, Y)
+    model.dump('test.pkl')
+    model_2 = gpmodel.GPModel.load('test.pkl')
+    for k
+
 if __name__=="__main__":
     test_init()
     test_regularize()

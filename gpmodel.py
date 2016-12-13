@@ -43,7 +43,7 @@ class GPModel(object):
         _grad (np.ndarray): gradient of the log logistic likelihood
     """
 
-    def __init__ (self, kern, **kwargs):
+    def __init__(self, kern, **kwargs):
         """ Create a new GPModel.
 
         Parameters:
@@ -66,7 +66,6 @@ class GPModel(object):
             self.mean_func = gpmean.GPMean()
         self.variances = None
         self._set_params(**kwargs)
-
 
     def _set_params(self, **kwargs):
         ''' Sets parameters for the model.
@@ -106,7 +105,6 @@ class GPModel(object):
         self._set_objective(objective)
         self._make_hypers(hypers)
 
-
     def _set_objective(self, objective):
         """ Set objective function for model. """
         if objective is not None:
@@ -115,10 +113,9 @@ class GPModel(object):
             elif objective == 'LOO_log_p':
                 self.objective = self._LOO_log_p
             else:
-                raise AttributeError (objective + ' is not a valid objective')
+                raise AttributeError(objective + ' is not a valid objective')
         else:
             self.objective = self._log_ML
-
 
     def _make_hypers(self, hypers):
         """ Set hyperparameters for model. """
@@ -131,9 +128,8 @@ class GPModel(object):
                     Hypers = namedtuple('Hypers', self.kern.hypers)
                 self.hypers = Hypers._make(hypers)
             else:
-                Hypers=namedtuple('Hypers', list(hypers.keys()))
+                Hypers = namedtuple('Hypers', list(hypers.keys()))
                 self.hypers = Hypers(**hypers)
-
 
     def fit(self, X_seqs, Y, variances=None):
         ''' Fit the model to the given data.
@@ -159,7 +155,7 @@ class GPModel(object):
         if self.regr:
             self.mean_func.fit(X_seqs, Y)
             self.Y = Y - self.mean_func.means
-            self.mean, self.std, self.normed_Y = self._normalize (self.Y)
+            self.mean, self.std, self.normed_Y = self._normalize(self.Y)
             if variances is not None:
                 if not np.array_equal(variances.index, Y.index):
                     raise AttributeError('Indices do not match.')
@@ -171,23 +167,20 @@ class GPModel(object):
         else:
             n_guesses = len(self.kern.hypers)
             if self.objective == self._LOO_log_p:
-                raise AttributeError\
-                ('Classification models must be trained on marginal likelihood')
-        if self.guesses == None:
+                raise AttributeError('Classification models must be trained on marginal likelihood')
+        if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
         else:
             guesses = self.guesses
             if len(guesses) != n_guesses:
-                raise AttributeError\
-                ('Length of guesses does not match number of hyperparameters')
+                raise AttributeError('Length of guesses does not match number of hyperparameters')
 
-        bounds = [(1e-5,None) for _ in guesses]
+        bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
         self._set_hypers(minimize_res['x'])
-
 
     def _set_hypers(self, hypers):
         ''' Set model.hypers and quantities used for making predictions.
@@ -200,23 +193,22 @@ class GPModel(object):
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
             self._L = np.linalg.cholesky(self._Ky)
+            mat_Y = np.matrix(self.normed_Y.T)
             self._alpha = np.linalg.lstsq(self._L.T,
-                                         np.linalg.lstsq(self._L,
-                                            np.matrix(self.normed_Y).T)[0])[0]
+                                          np.linalg.lstsq(self._L,
+                                                          mat_Y)[0])[0]
             self.ML = self._log_ML(self.hypers)
             self.log_p = self._LOO_log_p(self.hypers)
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
-            self._W = self._hess (self._f_hat)
+            self._W = self._hess(self._f_hat)
             self._W_root = np.linalg.cholesky(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
-            self._L = np.linalg.cholesky (np.matrix(np.eye(self._ell))+self._W_root\
-                                         *self._Ky*self._W_root)
-            self._grad = np.matrix(np.diag(self._grad_log_logistic_likelihood\
-                                          (self.Y,
-                                           self._f_hat)))
+            self._L = np.linalg.cholesky(np.matrix(np.eye(self._ell)) +
+                                         self._W_root*self._Ky*self._W_root)
+            self._grad = np.matrix(np.diag(self._grad_log_logistic_likelihood
+                                           (self.Y, self._f_hat)))
             self.ML = self._log_ML(self.hypers)
-
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
@@ -231,7 +223,6 @@ class GPModel(object):
         else:
             raise AttributeError('len(hypers) does not match')
         return K, Ky
-
 
     def _normalize(self, data):
         """ Normalize the given data.
@@ -249,7 +240,6 @@ class GPModel(object):
         s = data.std()
         return m, s, (data-m) / s
 
-
     def unnormalize(self, normed):
         """ Inverse of _normalize, but works on single values or arrays.
 
@@ -260,7 +250,6 @@ class GPModel(object):
             normed*self.std * self.mean
         """
         return normed*self.std + self.mean
-
 
     def _predict (self, k, k_star, alpha=None, L=None, unnorm=True):
         """ Make prediction for one sequence.
@@ -283,13 +272,13 @@ class GPModel(object):
                 alpha = self._alpha
             if L is None:
                 L = self._L
-            E = np.dot(k,alpha)
-            v = np.linalg.lstsq(L,k.T)[0]
+            E = np.dot(k, alpha)
+            v = np.linalg.lstsq(L, k.T)[0]
             var = k_star - np.dot(v.T, v)
             if unnorm:
                 E = self.unnormalize(E)
                 var *= self.std**2
-            return (E.item(),var.item())
+            return (E.item(), var.item())
         else:
             f_bar = np.dot(k, self._grad.T)
             v = np.linalg.lstsq(self._L, np.dot(self._W_root, k.T))[0]
@@ -300,7 +289,6 @@ class GPModel(object):
                                      f_bar+i*var,
                                      args=(f_bar.item(), var.item()))[0]
             return (pi_star, f_bar.item(), var.item())
-
 
     def predict(self, new_seqs, delete=True):
         """ Make predictions for each sequence in new_seqs.
@@ -321,8 +309,8 @@ class GPModel(object):
             h = self.hypers
         for ns in new_seqs.index:
             k = np.array([self.kern.calc_kernel(ns, seq1,
-                                                hypers=h) \
-                           for seq1 in self.X_seqs.index])
+                                                hypers=h)
+                          for seq1 in self.X_seqs.index])
             k = k.reshape(1, len(k))
             k_star = self.kern.calc_kernel(ns, ns,
                                            hypers=h)
@@ -335,7 +323,6 @@ class GPModel(object):
             predictions = [(m+p, v)
                            for p, (m, v) in zip(means, predictions)]
         return predictions
-
 
     def _p_integral (self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
@@ -361,7 +348,6 @@ class GPModel(object):
         third = np.exp(-(z-mean)**2/(2*variance))
         return first*second*third
 
-
     def _log_ML (self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
@@ -377,7 +363,7 @@ class GPModel(object):
         if self.regr:
             Y = self.normed_Y.values.reshape(1, len(self.normed_Y))
             K, Ky = self._make_Ks(hypers)
-            L = np.linalg.cholesky (Ky)
+            L = np.linalg.cholesky(Ky)
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq(L, Y.T)[0])[0]
             first = 0.5 * np.dot(Y, alpha)
             second = np.sum(np.log(np.diag(L)))
@@ -389,13 +375,11 @@ class GPModel(object):
             ML = self._logq(f_hat, hypers=hypers)
             return ML.item()
 
-
-    def is_class (self):
+    def is_class(self):
         '''True if Y only contains values 1 and -1, otherwise False'''
-        return all (y in [-1,1] for y in self.Y)
+        return all(y in [-1, 1] for y in self.Y)
 
-
-    def _logistic_likelihood (self, Y, F):
+    def _logistic_likelihood(self, Y, F):
         ''' Calculate logistic likelihood.
 
         Calculates the logistic probability of the outcome y given
@@ -409,15 +393,14 @@ class GPModel(object):
             float
         '''
         if isinstance(Y, np.ndarray):
-            if not ((Y==1).astype(int) + (Y==-1).astype(int)).all():
-                raise RuntimeError ('All values in Y must be -1 or 1')
+            if not ((Y == 1).astype(int) + (Y == -1).astype(int)).all():
+                raise RuntimeError('All values in Y must be -1 or 1')
         else:
             if int(Y) not in [1, -1]:
                 raise RuntimeError('Y must be -1 or 1')
         return 1./(1+np.exp(-Y*F))
 
-
-    def _log_logistic_likelihood (self,Y, F):
+    def _log_logistic_likelihood(self, Y, F):
         """ Calculate the log logistic likelihood.
 
         Calculates the log logistic likelihood of the outcomes Y
@@ -432,12 +415,11 @@ class GPModel(object):
             lll (float): log logistic likelihood
         """
         if len(Y) != len(F):
-            raise RuntimeError ('Y and F must be the same length')
-        lll = np.sum(np.log(self._logistic_likelihood(Y.values,F.values)))
+            raise RuntimeError('Y and F must be the same length')
+        lll = np.sum(np.log(self._logistic_likelihood(Y.values, F.values)))
         return lll
 
-
-    def _grad_log_logistic_likelihood (self,Y,F):
+    def _grad_log_logistic_likelihood(self, Y, F):
         """ Calculate the gradient of the log logistic likelihood.
 
         Calculates the gradient of the logistic likelihood of the
@@ -454,11 +436,10 @@ class GPModel(object):
         """
         Y = Y.values
         F = F.values
-        glll = (Y + 1) / 2.0 -  self._logistic_likelihood(1.0, F)
+        glll = (Y + 1) / 2.0 - self._logistic_likelihood(1.0, F)
         return np.diag(glll)
 
-
-    def _hess (self,F):
+    def _hess(self, F):
         """ Calculate the negative _hessian of the logistic likelihod.
 
         Calculates the negative hessian of the logistic likelihood
@@ -473,18 +454,17 @@ class GPModel(object):
         """
         F = F.values
         pi = self._logistic_likelihood(1.0, F)
-        W =  pi * (1 - pi)
+        W = pi * (1 - pi)
         return np.diag(W)
 
-
-    def _find_F (self, hypers, guess=None, threshold=.0001, evals=1000):
+    def _find_F(self, hypers, guess=None, threshold=.0001, evals=1000):
         """Calculates f_hat according to Algorithm 3.1 in RW.
 
         Returns:
             f_hat (pd.Series)
         """
         ell = len(self.Y)
-        if guess == None:
+        if guess is None:
             f_hat = pd.Series(np.zeros(ell))
         elif len(guess) == l:
             f_hat = guess
@@ -498,7 +478,7 @@ class GPModel(object):
             W_root = np.linalg.cholesky(W)
             trip_dot = (W_root.dot(K)).dot(W_root)
             L = np.linalg.cholesky(np.eye(ell) + trip_dot)
-            b =  W.dot(f_hat.T)
+            b = W.dot(f_hat.T)
             b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
             b = b.reshape(len(b), 1)
             trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
@@ -517,7 +497,6 @@ class GPModel(object):
             f_hat = f_new
         raise RuntimeError('Maximum evaluations reached without convergence.')
 
-
     def _logq(self, F, hypers):
         ''' Calculate negative log marginal likelihood.
 
@@ -534,21 +513,21 @@ class GPModel(object):
         '''
         ell = self._ell
         K = self.kern.make_K(hypers=hypers)
-        W = self._hess (F)
+        W = self._hess(F)
         W_root = np.linalg.cholesky(W)
         F_mat = F.values.reshape(len(F), 1)
         trip_dot = (W_root.dot(K)).dot(W_root)
         L = np.linalg.cholesky(np.eye(ell) + trip_dot)
-        b = W.dot(F_mat) + np.diag(self._grad_log_logistic_likelihood(self.Y, F)).reshape(len(F), 1)
+        b = W.dot(F_mat) + np.diag(self._grad_log_logistic_likelihood(
+            self.Y, F)).reshape(len(F), 1)
         b = b.reshape(len(b), 1)
         trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
         a = b - W_root.dot(np.linalg.lstsq(L.T, trip_dot_lstsq)[0])
-        _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(self.Y, F) \
-        + np.sum(np.log(np.diag(L)))
+        _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(
+            self.Y, F) + np.sum(np.log(np.diag(L)))
         return _logq
 
-
-    def _LOO_log_p (self, hypers):
+    def _LOO_log_p(self, hypers):
         """ Calculates the negative LOO log probability.
 
         For now, only for regression
@@ -561,13 +540,11 @@ class GPModel(object):
         LOO = self.LOO_res(hypers)
         vs = LOO['v']
         mus = LOO['mu']
-        log_ps = -0.5*np.log(vs) - \
-        (self.normed_Y-mus)**2 / 2 / vs - 0.5*np.log(2*np.pi)
-        return_me = -sum (log_ps)
+        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs - 0.5*np.log(2*np.pi)
+        return_me = -sum(log_ps)
         return return_me
 
-
-    def LOO_res (self, hypers, add_mean=False, unnorm=False):
+    def LOO_res(self, hypers, add_mean=False, unnorm=False):
         """ Calculates LOO regression predictions.
 
         Calculates the LOO predictions according to Equation 5.12 from RW.
@@ -594,10 +571,9 @@ class GPModel(object):
         if add_mean:
             mus += self.mean_func.means
         return pd.DataFrame(list(zip(mus, vs)), index=self.normed_Y.index,
-                           columns=['mu', 'v'])
+                            columns=['mu', 'v'])
 
-
-    def score (self, X, Y, *args):
+    def score(self, X, Y, *args):
         ''' Score the model on the given points.
 
         Predicts Y for the sequences in X, then scores the predictions.
@@ -609,11 +585,12 @@ class GPModel(object):
                 'R2', or 'R' for regression. Default is 'kendalltau.'
 
         Returns:
-            res: If one score, result is a float. If multiple, result is a dict.
+            res: If one score, result is a float. If multiple,
+                result is a dict.
         '''
         # Check that X and Y have the same indices
         if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
-            raise ValueError\
+            raise ValueError
             ('X and Y must be the same length and have the same indices.')
         # Make predictions
         predicted = self.predict(X)
@@ -624,7 +601,7 @@ class GPModel(object):
             return roc_auc_score(Y, [p[0] for p in predicted])
 
         else:
-            pred_Y = [y for (y,v) in predicted]
+            pred_Y = [y for (y, v) in predicted]
 
             # if nothing specified, return Kendall's Tau
             if not args:
@@ -641,11 +618,11 @@ class GPModel(object):
                 elif t == 'R2':
                     from sklearn.metrics import r2_score
                     scores[t] = r2_score(Y, pred_Y)
-                elif t =='R':
-                    scores[t] = np.corrcoef(Y, pred_Y)[0,1]
+                elif t == 'R':
+                    scores[t] = np.corrcoef(Y, pred_Y)[0, 1]
                 else:
-                    raise ValueError ('Invalid metric.')
-            if len (list(scores.keys())) == 1:
+                    raise ValueError('Invalid metric.')
+            if len(list(scores.keys())) == 1:
                 return scores[list(scores.keys())[0]]
             else:
                 return scores
@@ -659,13 +636,12 @@ class GPModel(object):
         Parameters:
             model (string): path to saved model
         '''
-        with open(model,'rb') as m_file:
+        with open(model, 'rb') as m_file:
             attributes = pickle.load(m_file, encoding='latin1')
         model = cls(attributes['kern'])
         del attributes['kern']
         model._set_params(**attributes)
         return model
-
 
     def dump(self, f):
         ''' Save the model.
@@ -676,7 +652,7 @@ class GPModel(object):
         Parameters:
             f (string): path to where model should be saved
         '''
-        save_me = {k:self.__dict__[k] for k in list(self.__dict__.keys())}
+        save_me = {k: self.__dict__[k] for k in list(self.__dict__.keys())}
         if self.objective == self._log_ML:
             save_me['objective'] = 'log_ML'
         else:
@@ -684,7 +660,7 @@ class GPModel(object):
         save_me['guesses'] = self.guesses
         try:
             names = self.hypers._fields
-            hypers = {n:h for n,h in zip(names, self.hypers)}
+            hypers = {n: h for n, h in zip(names, self.hypers)}
             save_me['hypers'] = hypers
         except AttributeError:
             pass
@@ -702,26 +678,22 @@ class LassoGPModel(GPModel):
         self._gamma_0 = kwargs.get('gamma', 0)
         GPModel.__init__(self, kernel, **kwargs)
 
-
     def predict(self, X):
         X, _ = self._regularize(X, mask=self._mask)
         return GPModel.predict(self, X)
-
 
     def fit(self, X, y, variances=None):
         minimize_res = minimize(self._log_ML_from_gamma,
                                 self._gamma_0,
                                 args=(X, y, variances),
                                 method='Powell',
-                                options={'xtol':1e-8, 'ftol':1e-8})
+                                options={'xtol': 1e-8, 'ftol': 1e-8})
         self.gamma = minimize_res['x']
-
 
     def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
         return self.ML
-
 
     def _regularize(self, X, **kwargs):
         """ Perform feature selection on X.
@@ -764,7 +736,6 @@ class TermedLassoGPModel(LassoGPModel):
 
     """ A LassoGPModel that converts sequences to indicator vectors. """
 
-
     def _make_X(self, X_seqs, terms, collapse=False):
         """ Convert sequences to binary indicator vectors.
 
@@ -780,26 +751,23 @@ class TermedLassoGPModel(LassoGPModel):
         X, _ = chimera_tools.make_X(seqs, terms=terms)
         return pd.DataFrame(np.array(X), index=X_seqs.index)
 
-
     def predict(self, X_seqs):
         X = self._make_X(X_seqs, self._terms)
         return GPModel.predict(self, X)
-
 
     def fit(self, X_seqs, y, terms, variances=None):
         minimize_res = minimize(self._log_ML_from_gamma,
                                 self._gamma_0,
                                 args=(X_seqs, y, terms, variances),
                                 method='Powell',
-                                options={'xtol':1e-8, 'ftol':1e-8})
+                                options={'xtol': 1e-8, 'ftol': 1e-8})
         self.gamma = minimize_res['x']
 
-
     def _log_ML_from_gamma(self, gamma, X_seqs, y, terms, variances=None):
-        X, self._mask, self._terms = self._regularize(X_seqs, terms, gamma=gamma, y=y)
+        X, self._mask, self._terms = self._regularize(X_seqs, terms,
+                                                      gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
         return self.ML
-
 
     def _regularize(self, X_seqs, terms, **kwargs):
         X = self._make_X(X_seqs, terms)

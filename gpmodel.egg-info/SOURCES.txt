@@ -1,3 +1,4 @@
+setup.py
 gpmodel/__init__.py
 gpmodel/chimera_tools.py
 gpmodel/gpentropy.py

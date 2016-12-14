@@ -6,4 +6,5 @@ setup(name='gpmodel',
       description='Classes for Gaussian process modeling of proteins.',
       packages=['gpmodel'],
       license='MIT',
-      author='Kevin Yang')
+      author='Kevin Yang',
+      author_email='seinchin@gmail.com')

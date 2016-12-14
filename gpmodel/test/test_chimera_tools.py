@@ -1,11 +1,11 @@
 import sys
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-from chimera_tools import *
+
 import pandas as pd
 import numpy as np
 import pickle
+from gpmodel.chimera_tools import *
 
-contacts = [(0,1), (0,2), (1,2)]
+contacts = [(0, 1), (0, 2), (1, 2)]
 sample_space = [('A', 'B', 'C'), ('A', 'A', 'C'), ('B', 'A', 'D')]
 contact_terms = [((0, 'A'), (1, 'A')),
                  ((0, 'A'), (1, 'C')),

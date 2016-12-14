@@ -9,12 +9,10 @@ import scipy
 from scipy import stats
 from sklearn import metrics, linear_model
 
-sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
-sys.path.append('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel
-import gpmodel
-import gpmean
-import chimera_tools
+from gpmodel import gpkernel
+from gpmodel import gpmodel
+from gpmodel import gpmean
+from gpmodel import chimera_tools
 
 
 seqs = pd.DataFrame([['R', 'Y', 'M', 'A'], ['R', 'T', 'H', 'A'],

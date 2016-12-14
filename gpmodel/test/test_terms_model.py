@@ -1,12 +1,9 @@
-import sys
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-
 import pandas as pd
 import numpy as np
 import pickle
 
-import gpmodel
-import gpkernel
+from gpmodel import gpmodel
+from gpmodel import gpkernel
 
 contact_terms = [((0, 'A'), (1, 'A')),
                  ((0, 'A'), (1, 'C')),
@@ -49,10 +46,12 @@ seqs_df = pd.DataFrame(seqs_df, index=['A', 'B', 'C'])
 model = gpmodel.TermedLassoGPModel(gpkernel.SEKernel(), gamma=-5)
 Y = pd.Series([1.0, 0.1, 0.2], index=seqs_df.index)
 
+
 def test_make_X():
     X = model._make_X(seqs_df, terms)
     X = X.values
     assert np.array_equal(complete_X, X)
+
 
 def test_regularize():
     X, mask, reg_terms = model._regularize(seqs_df, terms, y=Y, gamma=-4)
@@ -63,6 +62,7 @@ def test_regularize():
     X, reg_mask, reg_terms = model._regularize(seqs_df, terms, mask=test_mask)
     assert reg_terms == [t for t, m in zip(terms, test_mask) if m]
     assert (reg_mask == test_mask).all()
+
 
 def test_log_ML_from_gamma():
     g = -2.0
@@ -81,7 +81,6 @@ def test_fit():
     assert len(model.X_seqs.columns == 2)
 
 
-
 def test_predict():
     model = gpmodel.TermedLassoGPModel(gpkernel.LinearKernel(), gamma=-5)
     model.fit(seqs_df, Y, terms)
@@ -90,7 +89,7 @@ def test_predict():
     assert np.isclose(preds[0][1], 0.04072834275708116)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     test_make_X()
     test_regularize()
     test_log_ML_from_gamma()

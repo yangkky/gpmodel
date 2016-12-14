@@ -1,10 +1,9 @@
-import sys
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpmean
 import pandas as pd
 import numpy as np
-import chimera_tools
 from sklearn import linear_model
+
+from gpmodel import gpmean
+from gpmodel import chimera_tools
 
 
 seqs = pd.DataFrame([['R','Y','M','A'],['C','T','I','A'], ['R','T','M','B']],

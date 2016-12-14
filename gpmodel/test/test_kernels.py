@@ -1,10 +1,11 @@
 import sys
-sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel
+import pytest
+
 import pandas as pd
 import numpy as np
-import pytest
+
+from gpmodel import gpkernel
+
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])

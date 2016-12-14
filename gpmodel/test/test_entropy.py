@@ -1,17 +1,18 @@
 import sys
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
-import gpkernel
-import gpentropy
+
 import pandas as pd
 import numpy as np
+
+from gpmodel import gpkernel
+from gpmodel import gpentropy
 
 seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
                     index=['A','B','C'], columns=[0,1,2,3])
 
 seqs = seqs.append(seqs.iloc[0])
-seqs.index = ['A','B','C','D']
+seqs.index = ['A', 'B', 'C', 'D']
 space = [('R'), ('Y', 'T'), ('M', 'H'), ('A')]
-contacts = [(0,1),(2,3)]
+contacts = [(0, 1), (2, 3)]
 
 X = np.array([[1.0, 2.0], [3.0, -1.0], [2.0, -2.0]])
 X_df = pd.DataFrame(X, index=['A','B','C'])

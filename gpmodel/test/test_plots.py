@@ -1,7 +1,4 @@
-import sys
 import string
-sys.path.append('/Users/kevinyang/Documents/Projects/GPModel')
-sys.path.append ('/Users/seinchin/Documents/Caltech/Arnold Lab/Programming tools/GPModel')
 
 import pandas as pd
 import numpy as np
@@ -9,7 +6,8 @@ import matplotlib.pyplot as plt
 import argparse
 import seaborn as sns
 
-import gpkernel, gpmodel
+from gpmodel import gpkernel
+from gpmodel import gpmodel
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-k', '--kernel',required=True)

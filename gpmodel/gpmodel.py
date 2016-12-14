@@ -9,8 +9,8 @@ from scipy import stats, integrate
 import pandas as pd
 from sklearn import linear_model
 
-import gpmean
-import chimera_tools
+from gpmodel import gpmean
+from gpmodel import chimera_tools
 
 
 class GPModel(object):

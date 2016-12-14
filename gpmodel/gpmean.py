@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from sys import exit
-import chimera_tools
+from gpmodel import chimera_tools
 
 
 class GPMean(object):

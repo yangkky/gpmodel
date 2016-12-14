@@ -927,7 +927,7 @@ class SumKernel(GPKernel):
         for k in self._kernels:
             hypers += k.hypers
         self.hypers = [hypers[i] +
-                       str(hypers[0:i].count(hypers[i]))ß
+                       str(hypers[0:i].count(hypers[i]))
                        for i in range(len(hypers))]
         hypers_inds = [len(k.hypers) for k in self._kernels]
         hypers_inds = np.cumsum(np.array(hypers_inds))

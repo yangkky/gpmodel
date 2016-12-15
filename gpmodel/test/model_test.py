@@ -91,7 +91,6 @@ def test_creation():
 
 
 def test_score():
-    print('Testing score ...')
     model = gpmodel.GPModel(struct)
     model.fit(seqs, reg_Ys)
     preds = model.predict(seqs)
@@ -128,8 +127,6 @@ def test_score():
     AUC = metrics.auc(fpr, tpr)
     assert AUC == score
 
-    print('score passes all tests. ')
-
 
 def test_regression():
     model = gpmodel.GPModel(struct)
@@ -159,7 +156,6 @@ def test_regression():
 
     Y_mat = np.matrix(normed_Ys)
 
-    print('Testing objective functions for regression models...')
     # test marginal likelihood
     vp = 1.0
     vn = model.hypers.var_n
@@ -185,8 +181,6 @@ def test_regression():
     assert np.isclose(log_p_1, log_p_2), \
         ('Regression model does not correctly '
          'calculate LOO log predictive probability')
-
-    print('Testing regression ... ')
     # test predictions
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
                                            seq1, [model.hypers.var_p],
@@ -299,8 +293,6 @@ def test_regression():
     assert np.isclose(ED, predictions[1][0])
     assert np.isclose(var_A, predictions[0][1])
     assert np.isclose(var_D, predictions[1][1])
-
-    print('Testing LOO predictions...')
     K_inv = np.linalg.inv(Ky)
     mus = np.diag(Y_mat.T - K_inv*Y_mat.T/K_inv)
     vs = np.diag(1/K_inv)
@@ -320,7 +312,6 @@ def test_regression():
     assert res.equals(res2), \
         'Regression model does not correctly predict LOO values'
 
-    print('Testing regression with known variances...')
     model = gpmodel.GPModel(struct, guesses=(100.0,))
     model.fit(seqs, reg_Ys, variances=variances)
     assert np.array_equal(model._K + np.diag(variances) / model.std**2,
@@ -333,11 +324,9 @@ def test_regression():
         'Regression model.log_p is incorrect'
     variances.index = ['C', 'D', 'E', 'F']
     pytest.raises(AttributeError, "model.fit(seqs, reg_Ys, variances)")
-    print('Regression model passes all tests.\n')
 
 
 def test_classification():
-    print('Testing constructors for classification models...')
     model = gpmodel.GPModel(struct, objective='LOO_log_p')
     pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
     model = gpmodel.GPModel(struct)
@@ -349,7 +338,6 @@ def test_classification():
     assert np.isclose(model.ML, 2.45520196), \
         'Classification model.ML is incorrect'
     assert model._ell == len(seqs.index)
-    print('Testing marginal likelihood for classification model...')
     assert model._logistic_likelihood(1, 0) == 0.5
     assert model._logistic_likelihood(-1, 0) == 0.5
     pytest.raises(RuntimeError, "model._logistic_likelihood(-2,1)")
@@ -428,8 +416,6 @@ def test_classification():
     preds = model.predict(test_seqs)
     for p1, p2 in zip(preds, [0.19135300948986966, 0.7792652942911565]):
         assert np.isclose(p1[0], p2), 'Predictions failed.'
-
-    print('Classification models pass all tests.')
 
 
 if __name__ == "__main__":

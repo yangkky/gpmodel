@@ -19,8 +19,6 @@ X = np.array([[1.0, 2.0], [3.0, -1.0], [2.0, -2.0]])
 X_df = pd.DataFrame(X, index=['A','B','C'])
 
 def test_gpkernel():
-    """ Test the base class GPKernel. """
-    print('Testing GPKernel...')
     kernel = gpkernel.GPKernel()
     assert not kernel._saved_X
     assert kernel.hypers == []
@@ -30,11 +28,9 @@ def test_gpkernel():
     assert sorted(kernel._saved_X.keys()) == ['B', 'C']
     assert np.isclose(kernel._get_X('B'), X[1]).all()
     assert np.isclose(kernel._get_X(X[2]), X[2]).all()
-    print('GPKernel passes all tests.')
+
 
 def test_se_kernel():
-    """ Tests for the squared exponential kernels. """
-    print('Testing SEKernel...')
     # Test __init__
     kern = gpkernel.SEKernel()
     assert kern.hypers == ['sigma_f', 'ell']
@@ -81,11 +77,7 @@ def test_se_kernel():
     assert kern.calc_kernel('A', xb, params) == actual[0,1]
 
 
-    print('SEKernel passes all tests.')
-
 def test_polynomial_kernel():
-    """ Tests for the polynomial kernel. """
-    print('Testing PolynomialKernel...')
     kern1 = gpkernel.PolynomialKernel(1)
     kern3 = gpkernel.PolynomialKernel(3)
     assert kern1.hypers == ['sigma_0', 'sigma_p']
@@ -122,12 +114,9 @@ def test_polynomial_kernel():
     assert np.isclose(kern1._saved_X['A'], xa).all()
     assert np.isclose(kern1._dots, dot).all()
     assert np.isclose(kern3.make_K(hypers=params), K3).all()
-    print('PolynomialKernel passes all tests.')
+
 
 def test_matern_kernel():
-    """ Tests for the matern kernels. """
-    print('Testing MaternKernel...')
-
     # Test __init__
     kern1 = gpkernel.MaternKernel(nu='3/2')
     kern2 = gpkernel.MaternKernel(nu='5/2')
@@ -184,16 +173,11 @@ def test_matern_kernel():
     assert np.isclose(kern1.make_K(Xs, hypers=params), actual1).all()
     assert np.isclose(kern2.make_K(Xs, hypers=params), actual2).all()
     assert np.isclose(kern1.make_K(hypers=params), actual1).all()
-    assert kern1.calc_kernel(xa, xb, params) == actual1[0,1]
-    assert kern2.calc_kernel('A', xb, params) == actual2[0,1]
+    assert kern1.calc_kernel(xa, xb, params) == actual1[0, 1]
+    assert kern2.calc_kernel('A', xb, params) == actual2[0, 1]
 
-
-    print('MaternKernel passes all tests.')
 
 def test_hamming_kernel():
-    """
-    Tests for the HammingKernel
-    """
     vp = 0.4
     K = pd.DataFrame([[4.,2.,3.,4.],
                       [2.,4.,3.,2.],
@@ -202,7 +186,6 @@ def test_hamming_kernel():
                     index=seqs.index,
                     columns=seqs.index)
     norm = 4.0
-    print('Testing HammingKernel...')
     kern = gpkernel.HammingKernel()
     assert kern.hypers == ['var_p']
 
@@ -252,7 +235,6 @@ def test_hamming_kernel():
     assert np.isclose(kern._base_K, K/norm).all()
     assert np.isclose(kern.make_K(hypers=[vp]),K/norm*vp).all(),\
     'Failed make_K using saved base_K'
-    print('HammingKernel passes all tests.')
 
 def test_structure_kernel():
     # test with repeats
@@ -264,7 +246,6 @@ def test_structure_kernel():
                      index=seqs.index,
                      columns=seqs.index)
     norm = 2.0
-    print('Testing StructureKernel...')
     kern = gpkernel.StructureKernel(contacts)
     assert kern.hypers == ['var_p']
 
@@ -316,131 +297,8 @@ def test_structure_kernel():
     assert kern.calc_kernel('C','C',hypers=[vp], normalize=True) == 2*vp/norm,\
     'Failed calc_kernel with normalization.'
 
-    print('StructureKernel passes all tests.')
-
-def test_se(kern):
-    # test squared exponential function
-    print('Testing squared exponential functions...')
-    # test dimension check
-
-    # test on single values
-    first = 4
-    second = 2
-    params = [0.2, 2]
-    sigma_f, ell = params
-    actual = sigma_f**2 * np.exp(-0.5*(first-second)**2/ell**2)
-    assert kern.se([first, second],params) == actual,\
-        'kern.se failed for 1-dimensional, 2 sample, row case.'
-    assert kern.se(np.array([[first], [second]]),params) == actual,\
-        'kern.se failed for 1-dimensional, 2 sample , column case.'
-    # try it with matrices
-    assert kern.se(np.matrix([[first], [second]]),params) == actual,\
-        'kern.se failed for 1-dimensional, 2 sample , column matrix case.'
-    assert kern.se(np.matrix([first, second]),params) == actual,\
-        'kern.se failed for 1-dimensional, 2 sample, row matrix case.'
-    # Try it with DataFrames
-    df = pd.DataFrame(np.array([[first], [second]]), index=['A', 'B'])
-    assert kern.se(df, params) == actual,\
-        'kern.se failed for 1-dimensional, 2 sample, DataFrame.'
-
-    xa = np.array([2.0, 3.0, 4.0])
-    xb = np.array([1.0, 3.0, 5.0])
-    xc = np.array([-2.0, 0.0, 2.0])
-
-    # test on numpy.ndarray with 3 measurements, 1 dimension
-    d_squared = np.empty((3,3))
-    for i in range(3):
-        for j in range(3):
-            d_squared[i][j] = (xa[i] - xa[j])**2
-    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
-    from_kernel = kern.se(xa, params)
-    assert np.array_equal(actual, from_kernel), \
-        'kern.se failed for 1-dimensional, 3 sample, row case.'
-    x_columns = np.array([[x] for x in xa])
-    from_kernel = kern.se(x_columns, params)
-    assert np.array_equal(actual, from_kernel), \
-        'kern.se failed for 1-dimensional, 3 sample, column case.'
-    # with matrices
-    from_kernel = kern.se(np.matrix(xa), params)
-    assert np.array_equal(actual, from_kernel), \
-        'kern.se failed for 1-dimensional, 3 sample, row matrix case.'
-    from_kernel = kern.se(np.matrix(x_columns), params)
-    assert np.array_equal(actual, from_kernel), \
-        'kern.se failed for 1-dimensional, 3 sample, column matrix case.'
-    # With DataFrame
-    inds = ['A','B','C']
-    df = pd.DataFrame(xa, index=inds)
-    from_kernel = kern.se(df, params)
-    actual = pd.DataFrame(actual, index=inds, columns=inds)
-    assert actual.equals(from_kernel), \
-        'kern.se failed for 1-dimensional, 3 sample, DataFrame case.'
-
-
-
-    # test on numpy.ndarray with 2 measurements, 3 dimensions
-    xs = np.concatenate((xa, xb))
-    xs = xs.reshape((2,3))
-    d_squared = sum([(x1-x2)**2 for x1, x2 in zip(xs[0], xs[1])])
-    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
-    from_kernel = kern.se(xs, params)
-    assert actual == from_kernel, \
-        'kern.se failed for 3-dimensional, 2 sample case.'
-    # with a matrix
-    from_kernel = kern.se(np.matrix(xs), params)
-    assert actual == from_kernel, \
-        'kern.se failed for 3-dimensional, 2 sample, matrix case.'
-    # with a DataFrame
-    from_kernel = kern.se(pd.DataFrame(xs), params)
-    assert actual == from_kernel, \
-        'kern.se failed for 3-dimensional, 2 sample, DataFrame case.'
-
-    # test on numpy.ndarray with 3 measurements, 3 dimensions, constant ells
-    xs = np.concatenate((xa, xb, xc))
-    xs = xs.reshape((3,3))
-    d_squared = np.empty((3,3))
-    for i in range(3):
-        for j in range(3):
-            d_squared[i][j] = sum([(x1-x2)**2 for x1, x2 in zip(xs[i], xs[j])])
-    actual = sigma_f**2 * np.exp(-d_squared*0.5/ell**2)
-    from_kernel = kern.se(xs, params)
-    assert np.allclose(actual,from_kernel), \
-        'kern.se failed for 3-dimensional, 3 sample case.'
-    # with a matrix
-    from_kernel = kern.se(np.matrix(xs), params)
-    assert np.allclose(actual,from_kernel), \
-        'kern.se failed for 3-dimensional, 3 sample matrix case.'
-    # with a DataFrame
-    df = pd.DataFrame(xs, index=inds)
-    actual = pd.DataFrame(actual, index=inds, columns=inds)
-    from_kernel = kern.se(df, params)
-    assert np.allclose(np.array(from_kernel), np.array(actual)), \
-        'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
-    assert all([a==f for a, f in zip(actual.index, from_kernel.index)]), \
-        'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
-    assert all([a==f for a, f in zip(actual.columns, from_kernel.columns)]), \
-        'kern.se failed for 3-dimensional, 3 sample DataFrame case.'
-
-    # test dist_to_se
-    dists = np.array ([[1, 3, 2],
-                       [3, 1, 0],
-                       [2, 0, 1]])
-    from_kernel = kern.dist_to_se(dists, params)
-    actual = sigma_f**2 * np.exp(dists**2 * -0.5/ell**2)
-    assert np.array_equal(actual, from_kernel), \
-        'kern.dist_to_se failed.'
-    # with a DataFrame
-    dists = pd.DataFrame(dists, index=inds, columns=inds)
-    actual = pd.DataFrame(actual, index=inds, columns=inds)
-    from_kernel = kern.dist_to_se(dists, params)
-    assert from_kernel.equals(actual), \
-        'kern.dist_to_se failed with a DataFrame.'
-
-    print('Squared exponential functions pass all tests.')
 
 def test_protein_matern_kernels():
-    """ Test StructureMaternKernel and HammingMaternKernel. """
-    print('Testing StructureMaternKernel...')
-
     ssek1 = gpkernel.StructureMaternKernel(contacts, '3/2')
     ssek2 = gpkernel.StructureMaternKernel(contacts, '5/2')
     assert ssek1.hypers == ['ell']
@@ -481,9 +339,7 @@ def test_protein_matern_kernels():
     assert np.isclose(ssek1.make_K(hypers=params), actual1).all(),\
         'StructureMaternKernel fails make_K.'
 
-    print('StructureMaternKernel passes all tests.')
 
-    print('Testing HammingMaternKernel...')
 
     ssek1 = gpkernel.HammingMaternKernel('3/2')
     ssek2 = gpkernel.HammingMaternKernel('5/2')
@@ -525,13 +381,8 @@ def test_protein_matern_kernels():
     assert np.isclose(ssek1.make_K(hypers=params), actual1).all(),\
         'HammingMaternKernel fails make_K.'
 
-    print('HammingMaternKernel passes all tests.')
 
 def test_protein_se_kernels():
-    """ Test StructureSEKernel and HammingSEKernel. """
-
-    print('Testing StructureSEKernel...')
-
     ssek = gpkernel.StructureSEKernel(contacts)
     assert ssek.hypers == ['sigma_f', 'ell']
     K = np.array([[2.0,0.0,1.0,2.0],
@@ -563,11 +414,6 @@ def test_protein_se_kernels():
     # Retest make_K
     assert np.isclose(ssek.make_K(hypers=params), actual).all(),\
         'StructureSEKernel fails make_K.'
-
-    print('StructureSEKernel passes all tests.')
-
-
-    print('Testing HammingSEKernel...')
 
     ssek = gpkernel.HammingSEKernel()
 
@@ -601,10 +447,8 @@ def test_protein_se_kernels():
     assert np.isclose(ssek.make_K(hypers=params), actual).all(),\
         'HammingSEKernel fails make_K.'
 
-    print('HammingSEKernel passes all tests.')
 
 def test_linear_kernel():
-    print('Testing LinearKernel...')
     kern = gpkernel.LinearKernel()
     X = pd.DataFrame([[4.,2.,3.,4.],
                       [2.,0.,1.,2.],
@@ -649,12 +493,7 @@ def test_linear_kernel():
     'Failed calc_kernel with untrained, trained sequences.'
 
 
-    print('LinearKernel passes all tests.')
-
-
 def test_sum_kernel():
-    """ Test SumKernel. """
-    print('Testing SumKernel...')
     kern52 = gpkernel.MaternKernel('5/2')
     kernSE = gpkernel.SEKernel()
     kern32 = gpkernel.MaternKernel('3/2')
@@ -676,7 +515,7 @@ def test_sum_kernel():
     kernel.delete(X_df.loc[['A']])
     for k in kernel._kernels:
         assert sorted(k._saved_X.keys()) == ['B', 'C']
-    print("SumKernel passes all tests.")
+
 
 if __name__=="__main__":
     test_gpkernel()

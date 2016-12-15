@@ -77,7 +77,7 @@ def test_fit():
     np.random.seed(1)
     model = gpmodel.TermedLassoGPModel(gpkernel.LinearKernel(), gamma=-5)
     model.fit(seqs_df, Y, terms)
-    assert(np.isclose(model.ML, 3.3895503170039034))
+    assert(np.isclose(model.ML, 3.3172204743384364))
     assert len(model.X_seqs.columns == 2)
 
 
@@ -85,8 +85,8 @@ def test_predict():
     model = gpmodel.TermedLassoGPModel(gpkernel.LinearKernel(), gamma=-5)
     model.fit(seqs_df, Y, terms)
     preds = model.predict(seqs_df)
-    assert np.isclose(preds[0][0], 0.85724109890691791)
-    assert np.isclose(preds[0][1], 0.04072834275708116)
+    assert np.isclose(preds[0][0], 0.85392212302832238)
+    assert np.isclose(preds[0][1], 0.06143903217800441)
 
 
 if __name__ == "__main__":

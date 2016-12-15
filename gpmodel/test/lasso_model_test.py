@@ -88,11 +88,11 @@ def test_predict():
 
 
 def test_dump_and_load():
-    model = gomodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
+    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
     model.fit(X_df, Y)
     model.dump('test.pkl')
     model_2 = gpmodel.GPModel.load('test.pkl')
-    for k
+    assert model.gamma == model_2.gamma
 
 
 if __name__ == "__main__":

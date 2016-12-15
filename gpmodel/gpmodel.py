@@ -195,10 +195,9 @@ class GPModel(object):
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
             self._L = np.linalg.cholesky(self._Ky)
-            mat_Y = np.matrix(self.normed_Y.T)
-            self._alpha = np.linalg.lstsq(self._L.T,
-                                          np.linalg.lstsq(self._L,
-                                                          mat_Y)[0])[0]
+            mat_Y = self.normed_Y.T
+            _a = np.linalg.lstsq(self._L, mat_Y)[0]
+            self._alpha = np.linalg.lstsq(self._L.T, _a)[0]
             self.ML = self._log_ML(self.hypers)
             self.log_p = self._LOO_log_p(self.hypers)
         else:

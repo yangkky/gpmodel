@@ -68,23 +68,28 @@ all_terms = [[(0, 'A'), (2, 'B'), ((0, 'A'), (1, 'A')),
 seqs = ['AAB', 'BAD', 'BCA']
 assignments = {0:0, 1:0, 2:1}
 
+
 def test_contacting_terms():
     made_terms = contacting_terms(sample_space, contacts)
     for a, b in zip(made_terms, contact_terms):
         assert a == b
 
+
 def test_sequence_terms():
     assert sequence_terms == make_sequence_terms(sample_space)
+
 
 def test_contact_X():
     X, terms = make_contact_X(seqs, sample_space, contacts)
     assert np.array_equal(X, contact_X)
     assert terms == contact_terms
 
+
 def test_sequence_X():
     X, terms = make_sequence_X(seqs, sample_space)
     assert np.array_equal(X, sequence_X)
     assert terms == sequence_terms
+
 
 def test_in_sequence():
     assert in_sequence(seqs[0], contact_terms[0])
@@ -92,9 +97,11 @@ def test_in_sequence():
     assert in_sequence(seqs[0], sequence_terms[0])
     assert ~in_sequence(seqs[0], sequence_terms[1])
 
+
 def test_present():
     assert present('AAB', (1, 'A'))
     assert ~present('AAB', (1, 'B'))
+
 
 def test_X():
     X, terms = make_X(seqs, sample_space, contacts)
@@ -114,27 +121,32 @@ def test_X():
     X, terms = make_X(seqs, terms=terms)
     assert np.array_equal(X, complete_X)
 
+
 def test_contacts():
     terms = get_contacts(seqs[0], contacts)
     assert terms == [((0, 'A'), (1, 'A')), ((0, 'A'), (2, 'B')),
                      ((1, 'A'), (2, 'B'))]
 
+
 def test_terms():
     terms = get_terms(seqs[0])
-    assert terms == [(0,'A'), (1,'A'), (2,'B')]
+    assert terms == [(0, 'A'), (1, 'A'), (2, 'B')]
+
 
 def test_sequence():
     seq = make_sequence('02', assignments, sample_space)
     assert seq == ['A', 'A', 'D']
-    seq = substitute_blocks('AAD', [(2,0)], assignments, sample_space)
+    seq = substitute_blocks('AAD', [(2, 0)], assignments, sample_space)
     assert seq == 'CCD'
 
+
 def test_loads():
-    with open('data/assignment_dict.pkl', 'rb') as f:
+    with open('gpmodel/test/data/assignment_dict.pkl', 'rb') as f:
         real_dict = pickle.load(f)
-    assert load_assignments('data/nlibrary.output') == real_dict
-    assert make_name_dict('data/test_dict.xlsx') == \
-    {'first':'012', 'second':'210', 'third':'102'}
+    assert load_assignments('gpmodel/test/data/nlibrary.output') == real_dict
+    assert make_name_dict('gpmodel/test/data/test_dict.xlsx') == \
+        {'first':'012', 'second':'210', 'third':'102'}
+
 
 def test_zeroing():
     assert zero_index('21123') == '10012'

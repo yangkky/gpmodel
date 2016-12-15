@@ -7,4 +7,6 @@ setup(name='gpmodel',
       packages=['gpmodel'],
       license='MIT',
       author='Kevin Yang',
-      author_email='seinchin@gmail.com')
+      author_email='seinchin@gmail.com',
+      test_suite='nose.collector',
+      tests_require=['nose'])

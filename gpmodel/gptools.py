@@ -1,14 +1,15 @@
-import matplotlib.pyplot as plt
-import gpmodel
+from sys import exit
 import math
+
 import numpy as np
-import gpkernel
 import pandas as pd
 from sklearn import metrics
-from sys import exit
 import scipy
-
+import matplotlib.pyplot as plt
 import seaborn as sns
+
+from gpmodel import gpmodel
+from gpmodel import gpkernel
 
 rc = {'lines.linewidth': 3,
       'axes.labelsize': 30,
@@ -54,7 +55,7 @@ def cv(Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
         for test_inds in changed_index:
             train_inds = list(set(Xs.index) - set(test_inds))
             model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
-            preds = model.predicts(Xs.loc[[test_inds]])
+            preds = model.predict(Xs.loc[[test_inds]])
             predicted += [p[0] for p in preds]
             actual += list(Ys.loc[[test_inds]])
         if not regr:
@@ -74,7 +75,7 @@ def cv(Xs, Ys, model, n_train, replicates=50, keep_inds=[]):
         # fit the model
         model.fit(Xs.loc[train_inds], Ys.loc[train_inds])
         # make predictions
-        preds = model.predicts(Xs.loc[test_inds])
+        preds = model.predict(Xs.loc[test_inds])
         predictions = [p[0] for p in preds]
         truth = list(Ys.loc[test_inds])
         predicted += predictions

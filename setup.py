@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(name='gpmodel',
       version='1.0',
-      url='http://githubcom/yangkky/gpmodel',
+      url='http://github.com/yangkky/gpmodel',
       description='Classes for Gaussian process modeling of proteins.',
       packages=['gpmodel'],
       license='MIT',

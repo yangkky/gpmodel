@@ -10,6 +10,7 @@ import pandas as pd
 from sklearn import linear_model
 
 from gpmodel import gpmean
+from gpmodel import gptools
 from gpmodel import chimera_tools
 
 
@@ -194,7 +195,7 @@ class GPModel(object):
 
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
-            self._L = np.linalg.cholesky(self._Ky)
+            self._L = gptools.cholesky(self._Ky)
             mat_Y = self.normed_Y.T
             _a = np.linalg.lstsq(self._L, mat_Y)[0]
             self._alpha = np.linalg.lstsq(self._L.T, _a)[0]
@@ -203,9 +204,9 @@ class GPModel(object):
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
             self._W = self._hess(self._f_hat)
-            self._W_root = np.linalg.cholesky(self._W)
+            self._W_root = gptools.cholesky(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
-            self._L = np.linalg.cholesky(np.matrix(np.eye(self._ell)) +
+            self._L = gptools.cholesky(np.matrix(np.eye(self._ell)) +
                                          self._W_root*self._Ky*self._W_root)
             self._grad = np.matrix(np.diag(self._grad_log_logistic_likelihood
                                            (self.Y, self._f_hat)))
@@ -364,7 +365,7 @@ class GPModel(object):
         if self.regr:
             Y = self.normed_Y.values.reshape(1, len(self.normed_Y))
             K, Ky = self._make_Ks(hypers)
-            L = np.linalg.cholesky(Ky)
+            L = gptools.cholesky(Ky)
             alpha = np.linalg.lstsq(L.T, np.linalg.lstsq(L, Y.T)[0])[0]
             first = 0.5 * np.dot(Y, alpha)
             second = np.sum(np.log(np.diag(L)))
@@ -476,9 +477,9 @@ class GPModel(object):
         for i in range(evals):
             # find new f_hat
             W = self._hess(f_hat)
-            W_root = np.linalg.cholesky(W)
+            W_root = gptools.cholesky(W)
             trip_dot = (W_root.dot(K)).dot(W_root)
-            L = np.linalg.cholesky(np.eye(ell) + trip_dot)
+            L = gptools.cholesky(np.eye(ell) + trip_dot)
             b = W.dot(f_hat.T)
             b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
             b = b.reshape(len(b), 1)
@@ -515,10 +516,10 @@ class GPModel(object):
         ell = self._ell
         K = self.kern.make_K(hypers=hypers)
         W = self._hess(F)
-        W_root = np.linalg.cholesky(W)
+        W_root = gptools.cholesky(W)
         F_mat = F.values.reshape(len(F), 1)
         trip_dot = (W_root.dot(K)).dot(W_root)
-        L = np.linalg.cholesky(np.eye(ell) + trip_dot)
+        L = gptools.cholesky(np.eye(ell) + trip_dot)
         b = W.dot(F_mat) + np.diag(self._grad_log_logistic_likelihood(
             self.Y, F)).reshape(len(F), 1)
         b = b.reshape(len(b), 1)

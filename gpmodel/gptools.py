@@ -10,6 +10,11 @@ import seaborn as sns
 
 from gpmodel import gpmodel
 from gpmodel import gpkernel
+try:
+    from cholesky import chol
+    fast_chol = True
+except ImportError:
+    fast_chol = False
 
 rc = {'lines.linewidth': 3,
       'axes.labelsize': 30,
@@ -172,7 +177,7 @@ def log_marginal_likelihood(variances, model):
         var_n, var_p = variances
         K_mat = np.matrix(model.K)
         Ky = K_mat*var_p+np.identity(len(K_mat))*var_n
-        L = np.linalg.cholesky(Ky)
+        L = cholesky(Ky)
         alpha = np.linalg.lstsq(L.T,
                                 np.linalg.lstsq(L, np.matrix(Y_mat).T)[0])[0]
         first = -0.5*Y_mat*alpha
@@ -189,7 +194,7 @@ def log_marginal_likelihood(variances, model):
         W_root = scipy.linalg.sqrtm(W)
         F_mat = np.matrix(f_hat)
         ell = len(model.Y)
-        L = np.linalg.cholesky(np.matrix(np.eye(ell))+W_root*K_mat*W_root)
+        L = cholesky(np.matrix(np.eye(ell))+W_root*K_mat*W_root)
         b = W*F_mat.T + np.matrix(np.diag(model.grad_log_logistic_likelihood
                                           (model.Y, f_hat))).T
         a = b - W_root*np.linalg.lstsq(L.T,
@@ -282,6 +287,15 @@ def plot_ML_parts(model, ranges, lab='', n=100,
     else:
         plt.title(lab)
     return (fit, complexity, ML)
+
+
+def cholesky(A):
+    if fast_chol:
+        L, _, _ = chol.modified_cholesky(A)
+    else:
+        L = np.linalg.cholesky(A)
+    return L
+
 
 if __name__ == "__main__":
     pass

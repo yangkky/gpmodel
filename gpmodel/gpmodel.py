@@ -725,7 +725,7 @@ class LassoGPModel(GPModel):
         if gamma is not None:
             if y is None:
                 raise ValueError("Missing argument 'y'.")
-            clf = linear_model.Lasso(alpha=np.exp(gamma), max_iter=10000)
+            clf = linear_model.Lasso(alpha=np.exp(gamma), max_iter=100000)
             clf.fit(X, y)
             weights = pd.DataFrame()
             weights['weight'] = clf.coef_

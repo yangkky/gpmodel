@@ -195,11 +195,13 @@ class GPModel(object):
 
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
-            self._L = gptools.cholesky(self._Ky)
-            mat_Y = self.normed_Y.T
-            _a = np.linalg.lstsq(self._L, mat_Y)[0]
-            self._alpha = np.linalg.lstsq(self._L.T, _a)[0]
-            self.ML = self._log_ML(self.hypers)
+            self._L, p = gptools.cholesky(self._Ky)
+            mat_Y = self.normed_Y.T.values
+            self._alpha = gptools.cholesky_solve(self._L, p, mat_Y)
+            first = 0.5 * np.dot(mat_Y, self._alpha)
+            second = np.sum(np.log(np.diag(self._L)))
+            third = len(self._K)/2.*np.log(2*np.pi)
+            self.ML = (first+second+third).item()
             self.log_p = self._LOO_log_p(self.hypers)
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
@@ -363,10 +365,10 @@ class GPModel(object):
             log_ML (float)
         """
         if self.regr:
-            Y = self.normed_Y.values.reshape(1, len(self.normed_Y))
+            Y = self.normed_Y.T.values
             K, Ky = self._make_Ks(hypers)
-            L = gptools.cholesky(Ky)
-            alpha = np.linalg.lstsq(L.T, np.linalg.lstsq(L, Y.T)[0])[0]
+            L, p = gptools.cholesky(Ky)
+            alpha = gptools.cholesky_solve(L, p, Y)
             first = 0.5 * np.dot(Y, alpha)
             second = np.sum(np.log(np.diag(L)))
             third = len(K)/2.*np.log(2*np.pi)
@@ -679,6 +681,9 @@ class LassoGPModel(GPModel):
 
     def __init__(self, kernel, **kwargs):
         self._gamma_0 = kwargs.get('gamma', 0)
+        self._clf = linear_model.Lasso(alpha=np.exp(self._gamma_0),
+                                       warm_start=False,
+                                       max_iter=100000)
         GPModel.__init__(self, kernel, **kwargs)
 
     def predict(self, X):
@@ -692,7 +697,7 @@ class LassoGPModel(GPModel):
                                 method='Powell',
                                 options={'xtol': 1e-8, 'ftol': 1e-8})
         self.gamma = minimize_res['x']
-
+    
     def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)
@@ -725,10 +730,10 @@ class LassoGPModel(GPModel):
         if gamma is not None:
             if y is None:
                 raise ValueError("Missing argument 'y'.")
-            clf = linear_model.Lasso(alpha=np.exp(gamma), max_iter=100000)
-            clf.fit(X, y)
+            self._clf.alpha = np.exp(gamma)
+            self._clf.fit(X, y)
             weights = pd.DataFrame()
-            weights['weight'] = clf.coef_
+            weights['weight'] = self._clf.coef_
             mask = ~np.isclose(weights['weight'], 0.0)
         X = X.transpose()[mask].transpose()
         X.columns = list(range(np.shape(X)[1]))

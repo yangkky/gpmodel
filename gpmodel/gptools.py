@@ -292,13 +292,18 @@ def plot_ML_parts(model, ranges, lab='', n=100,
 def cholesky(A):
     if fast_chol:
         L, p, _ = chol.modified_cholesky(A)
-        P = np.zeros((len(p), len(p)))
-        for i in range(len(p)):
-            P[i, p[i]] = 1
-        L = np.dot(P.T, L)
     else:
         L = np.linalg.cholesky(A)
-    return L
+        p = []
+    return L, p
+
+
+def cholesky_solve(L, p, b):
+    if fast_chol:
+        x = chol.modified_cholesky_solve(L, p, b)
+    else:
+        x = np.linalg.lstsq(L.T, np.linalg.lstsq(L, b.T)[0])[0]
+    return x
 
 
 if __name__ == "__main__":

@@ -244,8 +244,9 @@ def load_assignments(assignments_file):
     Returns:
         assignments (dict)
     """
-    assignments_line = [l for l in open(assignments_file).read().split('\n')
-                        if len(l) > 0 and l[0] != '#']
+    with open(assignments_file) as f:
+        assignments_line = [l for l in f.read().split('\n')
+                            if len(l) > 0 and l[0] != '#']
     assignment = [ord(l.split('\t')[2]) - ord('A') for l in assignments_line
                   if l.split('\t')[2] != '-']
     nodes_outputfile = [int(l.split('\t')[1])-1 for l in assignments_line

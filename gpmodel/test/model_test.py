@@ -332,7 +332,8 @@ def test_classification():
     model = gpmodel.GPModel(struct)
     model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5, .5, .6, .1])
-    true_vps = np.array([43.7865018929, 43.763806573])
+    true_vps = np.array([43.7865018929, 43.763806573,
+                         43.7993636657, 43.7893659609])
     assert np.isclose(model.hypers.var_p, true_vps).any(),\
         'Classification model.hypers.var_p is incorrect'
     assert np.isclose(model.ML, 2.45520196), \
@@ -414,7 +415,7 @@ def test_classification():
 
     # test predictions
     preds = model.predict(test_seqs)
-    for p1, p2 in zip(preds, [0.19135300948986966, 0.7792652942911565]):
+    for p1, p2 in zip(preds, [0.19135285438781463, 0.779243365755702]):
         assert np.isclose(p1[0], p2), 'Predictions failed.'
 
 

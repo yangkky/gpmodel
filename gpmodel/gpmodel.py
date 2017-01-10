@@ -12,6 +12,7 @@ from sklearn import linear_model
 from gpmodel import gpmean
 from gpmodel import gptools
 from gpmodel import chimera_tools
+from cholesky import chol
 
 
 class GPModel(object):
@@ -206,12 +207,13 @@ class GPModel(object):
         else:
             self._f_hat = self._find_F(hypers=self.hypers)
             self._W = self._hess(self._f_hat)
-            self._W_root = gptools.cholesky(self._W)
+            self._W_root = np.sqrt(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
-            self._L = gptools.cholesky(np.matrix(np.eye(self._ell)) +
-                                         self._W_root*self._Ky*self._W_root)
-            self._grad = np.matrix(np.diag(self._grad_log_logistic_likelihood
-                                           (self.Y, self._f_hat)))
+            triple_dot = np.dot(self._W_root, self._Ky).dot(self._W_root)
+            self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
+                                                         triple_dot)
+            self._grad = np.diag(self._grad_log_logistic_likelihood
+                                 (self.Y, self._f_hat))
             self.ML = self._log_ML(self.hypers)
 
     def _make_Ks(self, hypers):
@@ -285,7 +287,9 @@ class GPModel(object):
             return (E.item(), var.item())
         else:
             f_bar = np.dot(k, self._grad.T)
-            v = np.linalg.lstsq(self._L, np.dot(self._W_root, k.T))[0]
+            Wk = np.dot(self._W_root, k.T)
+            Wk = Wk.reshape((Wk.shape[0], ))
+            v = chol.modified_cholesky_lower_tri_solve(self._L, self._p, Wk)
             var = k_star - np.dot(v.T, v)
             i = 10
             pi_star = integrate.quad(self._p_integral,
@@ -479,14 +483,16 @@ class GPModel(object):
         for i in range(evals):
             # find new f_hat
             W = self._hess(f_hat)
-            W_root = gptools.cholesky(W)
+            W_root = np.sqrt(W)
             trip_dot = (W_root.dot(K)).dot(W_root)
-            L = gptools.cholesky(np.eye(ell) + trip_dot)
+            L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
             b = W.dot(f_hat.T)
             b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
             b = b.reshape(len(b), 1)
-            trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
-            a = b - W_root.dot(np.linalg.lstsq(L.T, trip_dot_lstsq)[0])
+            inside = W_root.dot(K).dot(b).reshape(L.shape[0])
+            trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)\
+                .reshape(b.shape)
+            a = b - W_root.dot(trip_dot_lstsq)
             f_new = K.dot(a)
             f_new = f_new.reshape((len(f_new), ))
             sq_error = np.sum((f_hat.values - f_new) ** 2)
@@ -518,15 +524,17 @@ class GPModel(object):
         ell = self._ell
         K = self.kern.make_K(hypers=hypers)
         W = self._hess(F)
-        W_root = gptools.cholesky(W)
+        W_root = np.sqrt(W)
         F_mat = F.values.reshape(len(F), 1)
         trip_dot = (W_root.dot(K)).dot(W_root)
-        L = gptools.cholesky(np.eye(ell) + trip_dot)
-        b = W.dot(F_mat) + np.diag(self._grad_log_logistic_likelihood(
+        L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
+        b = W.dot(F_mat)
+        b += np.diag(self._grad_log_logistic_likelihood(
             self.Y, F)).reshape(len(F), 1)
         b = b.reshape(len(b), 1)
-        trip_dot_lstsq = np.linalg.lstsq(L, (W_root.dot(K)).dot(b))[0]
-        a = b - W_root.dot(np.linalg.lstsq(L.T, trip_dot_lstsq)[0])
+        inside = W_root.dot(K).dot(b).reshape(L.shape[0])
+        trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside).reshape(b.shape)
+        a = b - W_root.dot(trip_dot_lstsq)
         _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(
             self.Y, F) + np.sum(np.log(np.diag(L)))
         return _logq
@@ -697,7 +705,7 @@ class LassoGPModel(GPModel):
                                 method='Powell',
                                 options={'xtol': 1e-8, 'ftol': 1e-8})
         self.gamma = minimize_res['x']
-    
+
     def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
         GPModel.fit(self, X, y, variances=variances)

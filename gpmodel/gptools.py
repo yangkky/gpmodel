@@ -10,11 +10,7 @@ import seaborn as sns
 
 from gpmodel import gpmodel
 from gpmodel import gpkernel
-try:
-    from cholesky import chol
-    fast_chol = True
-except ImportError:
-    fast_chol = False
+
 
 rc = {'lines.linewidth': 3,
       'axes.labelsize': 30,
@@ -287,23 +283,6 @@ def plot_ML_parts(model, ranges, lab='', n=100,
     else:
         plt.title(lab)
     return (fit, complexity, ML)
-
-
-def cholesky(A):
-    if fast_chol:
-        L, p, _ = chol.modified_cholesky(A)
-    else:
-        L = np.linalg.cholesky(A)
-        p = []
-    return L, p
-
-
-def cholesky_solve(L, p, b):
-    if fast_chol:
-        x = chol.modified_cholesky_solve(L, p, b)
-    else:
-        x = np.linalg.lstsq(L.T, np.linalg.lstsq(L, b.T)[0])[0]
-    return x
 
 
 if __name__ == "__main__":

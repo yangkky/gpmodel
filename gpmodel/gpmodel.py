@@ -196,9 +196,9 @@ class GPModel(object):
 
         if self.regr:
             self._K, self._Ky = self._make_Ks(hypers)
-            self._L, p = gptools.cholesky(self._Ky)
+            self._L, self._p, _ = chol.modified_cholesky(self._Ky)
             mat_Y = self.normed_Y.T.values
-            self._alpha = gptools.cholesky_solve(self._L, p, mat_Y)
+            self._alpha = chol.modified_cholesky_solve(self._L, self._p, mat_Y)
             first = 0.5 * np.dot(mat_Y, self._alpha)
             second = np.sum(np.log(np.diag(self._L)))
             third = len(self._K)/2.*np.log(2*np.pi)
@@ -274,12 +274,10 @@ class GPModel(object):
                 classification
         """
         if self.regr:
-            if alpha is None:
-                alpha = self._alpha
-            if L is None:
-                L = self._L
+            alpha = self._alpha
+            L = self._L
             E = np.dot(k, alpha)
-            v = np.linalg.lstsq(L, k.T)[0]
+            v = chol.modified_cholesky_lower_tri_solve(L, self._p, k[0])
             var = k_star - np.dot(v.T, v)
             if unnorm:
                 E = self.unnormalize(E)
@@ -371,8 +369,8 @@ class GPModel(object):
         if self.regr:
             Y = self.normed_Y.T.values
             K, Ky = self._make_Ks(hypers)
-            L, p = gptools.cholesky(Ky)
-            alpha = gptools.cholesky_solve(L, p, Y)
+            L, p, _ = chol.modified_cholesky(Ky)
+            alpha = chol.modified_cholesky_solve(L, p, Y)
             first = 0.5 * np.dot(Y, alpha)
             second = np.sum(np.log(np.diag(L)))
             third = len(K)/2.*np.log(2*np.pi)

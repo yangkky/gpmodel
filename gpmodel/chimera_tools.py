@@ -48,7 +48,7 @@ def make_sequence_terms(sample_space):
     return sorted(list(set([(i, t) for i, sp in enumerate(sample_space)
                             for t in sp])))
 
-@profile
+
 def X_from_terms(X_terms, all_terms):
     """ Make binary indicator vectors.
 

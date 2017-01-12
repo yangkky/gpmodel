@@ -42,13 +42,13 @@ def make_sequence_terms(sample_space):
            amino acids at that position
 
     Returns:
-         contact_terms (list): Each item in the list is a contact in the form
-            ((pos1,aa1),(pos2,aa2)).
+         sequence_terms (list): Each item in the list is a term in the form
+            (pos1,aa1).
     """
     return sorted(list(set([(i, t) for i, sp in enumerate(sample_space)
                             for t in sp])))
 
-
+@profile
 def X_from_terms(X_terms, all_terms):
     """ Make binary indicator vectors.
 
@@ -65,14 +65,18 @@ def X_from_terms(X_terms, all_terms):
     Returns:
         X (np.ndarray)
     """
-    X = []
-    for current_terms in X_terms:
-        # determine if all_terms are single terms or collapsed terms
-        if isinstance(all_terms[0], tuple):
-            inds = [all_terms.index(c) for
-                    c in current_terms if c in all_terms]
-            X_row = [1 if i in inds else 0 for i in range(len(all_terms))]
-        elif isinstance(all_terms[0], list):
+
+    # determine if all_terms are single terms or collapsed terms
+    if isinstance(all_terms[0], tuple):
+        terms_dict = {term:i for i, term in enumerate(all_terms)}
+        X = np.zeros((len(X_terms), len(all_terms)))
+        for i, current_terms in enumerate(X_terms):
+            for term in current_terms:
+                X[i, terms_dict[term]] = 1.0
+        return X
+    elif isinstance(all_terms[0], list):
+        X = []
+        for current_terms in X_terms:
             X_row = []
             for terms in all_terms:
                 is_in = sum([0 if t in current_terms else 1 for t in terms])
@@ -80,8 +84,8 @@ def X_from_terms(X_terms, all_terms):
                     X_row.append(0)
                 else:
                     X_row.append(1)
-        X.append(X_row)
-    return np.array(X)
+            X.append(X_row)
+        return np.array(X)
 
 
 def make_contact_X(seqs, sample_space, contacts):
@@ -162,12 +166,18 @@ def make_X(seqs, sample_space=None, contacts=None, terms=None, collapse=True):
             X = [[in_sequence(seq, term)
                   for term in terms] for seq in seqs]
             return X, terms
+    if sample_space is None:
+        amino_acids = ('G', 'A', 'L', 'M', 'F', 'W', 'K', 'Q', 'E', 'S',
+                       'P', 'V', 'I', 'C', 'Y', 'H', 'R', 'N', 'D', 'T', '-')
+        sample_space = [amino_acids for _ in seqs[0]]
     seq_X, sequence_terms = make_sequence_X(seqs, sample_space)
-    struct_X, contact_terms = make_contact_X(seqs, sample_space, contacts)
-    seq_X = seq_X.tolist()
-    struct_X = struct_X.tolist()
-    X = [seq_X[i] + struct_X[i] for i in range(len(seqs))]
-    terms = sequence_terms + contact_terms
+    X = seq_X.tolist()
+    terms = sequence_terms
+    if contacts is not None:
+        struct_X, contact_terms = make_contact_X(seqs, sample_space, contacts)
+        struct_X = struct_X.tolist()
+        X = [X[i] + struct_X[i] for i in range(len(seqs))]
+        terms += contact_terms
     X = np.array(X)
     if not collapse:
         return X, terms

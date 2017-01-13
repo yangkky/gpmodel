@@ -209,7 +209,7 @@ class GPModel(object):
             self._W = self._hess(self._f_hat)
             self._W_root = np.sqrt(self._W)
             self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
-            triple_dot = np.dot(self._W_root, self._Ky).dot(self._W_root)
+            triple_dot = self._W_root @ self._Ky @ self._W_root
             self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
                                                          triple_dot)
             self._grad = np.diag(self._grad_log_logistic_likelihood
@@ -531,7 +531,8 @@ class GPModel(object):
             self.Y, F)).reshape(len(F), 1)
         b = b.reshape(len(b), 1)
         inside = W_root.dot(K).dot(b).reshape(L.shape[0])
-        trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside).reshape(b.shape)
+        trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)
+        trip_dot_lstsq = trip_dot_lstsq.reshape(b.shape)
         a = b - W_root.dot(trip_dot_lstsq)
         _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(
             self.Y, F) + np.sum(np.log(np.diag(L)))
@@ -744,47 +745,3 @@ class LassoGPModel(GPModel):
         X = X.transpose()[mask].transpose()
         X.columns = list(range(np.shape(X)[1]))
         return X, mask
-
-
-class TermedLassoGPModel(LassoGPModel):
-
-    """ A LassoGPModel that converts sequences to indicator vectors. """
-
-    def _make_X(self, X_seqs, terms, collapse=False):
-        """ Convert sequences to binary indicator vectors.
-
-        Parameters:
-            X_seqs (pd.DataFrame)
-            terms (iterable)
-            collapse (Boolean) default is False
-
-        Returns:
-            X (pd.DataFrame)
-        """
-        seqs = [''.join(s) for _, s in X_seqs.iterrows()]
-        X, _ = chimera_tools.make_X(seqs, terms=terms)
-        return pd.DataFrame(np.array(X), index=X_seqs.index)
-
-    def predict(self, X_seqs):
-        X = self._make_X(X_seqs, self._terms)
-        return GPModel.predict(self, X)
-
-    def fit(self, X_seqs, y, terms, variances=None):
-        minimize_res = minimize(self._log_ML_from_gamma,
-                                self._gamma_0,
-                                args=(X_seqs, y, terms, variances),
-                                method='Powell',
-                                options={'xtol': 1e-8, 'ftol': 1e-8})
-        self.gamma = minimize_res['x']
-
-    def _log_ML_from_gamma(self, gamma, X_seqs, y, terms, variances=None):
-        X, self._mask, self._terms = self._regularize(X_seqs, terms,
-                                                      gamma=gamma, y=y)
-        GPModel.fit(self, X, y, variances=variances)
-        return self.ML
-
-    def _regularize(self, X_seqs, terms, **kwargs):
-        X = self._make_X(X_seqs, terms)
-        X, mask = LassoGPModel._regularize(self, X, **kwargs)
-        terms = [t for t, keep in zip(terms, mask) if keep]
-        return X, mask, terms

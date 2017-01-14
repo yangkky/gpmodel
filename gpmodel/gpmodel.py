@@ -2,6 +2,7 @@
 
 from collections import namedtuple
 import pickle
+import abc
 
 import numpy as np
 from scipy.optimize import minimize
@@ -13,6 +14,170 @@ from gpmodel import gpmean
 from gpmodel import gptools
 from gpmodel import chimera_tools
 from cholesky import chol
+
+
+class GPModelBase(abc.ABC):
+
+    """ Base class for Gaussian process models. """
+
+    @abc.abstractmethod
+    def __init__(self, kernel, **kwargs):
+        self.kern = kernel
+        self.guesses = None
+        self._set_params(**kwargs)
+
+    @abc.abstractmethod
+    def predict(self, X):
+        return
+
+    @abc.abstractmethod
+    def fit(self, X, Y):
+        return
+
+    def _set_params(self, **kwargs):
+        ''' Sets parameters for the model.
+
+        This function can be used to set the value of any or all
+        attributes for the model. However, it does not necessarily
+        update dependencies, so use with caution.
+        '''
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+        hypers = kwargs.get('hypers', None)
+        self._make_hypers(hypers)
+
+    @abc.abstractmethod
+    def _make_hypers(self, hypers):
+        """ Set hyperparameters for model. """
+        return
+
+
+class GPRegressor(GPModelBase):
+
+    """ A Gaussian process regression model for proteins. """
+
+    def __init__(self, kernel, **kwargs):
+        GPBase.__init__(self, kernel, **kwargs)
+        if 'objective' not in list(kwargs.keys()):
+            kwargs['objective'] = 'log_ML'
+        if 'mean_func' not in list(kwargs.keys()):
+            self.mean_func = gpmean.GPMean()
+        self.variances = None
+
+    def _make_hypers(self, hypers):
+        """ Set hyperparameters for model. """
+        if hypers is not None:
+            if type(hypers) is not dict:
+                if self.variances is None:
+                    hypers_list = ['var_n'] + self.kern.hypers
+                    Hypers = namedtuple('Hypers', hypers_list)
+                else:
+                    Hypers = namedtuple('Hypers', self.kern.hypers)
+                self.hypers = Hypers._make(hypers)
+            else:
+                Hypers = namedtuple('Hypers', list(hypers.keys()))
+                self.hypers = Hypers(**hypers)
+
+    def fit(self, X_seqs, Y, variances=None):
+        ''' Fit the model to the given data.
+
+        Set the hyperparameters by training on the given data.
+        Update all dependent values.
+
+        Measurement variances can be given, or
+        a global measurement variance will be estimated.
+
+        Parameters:
+            X_seqs (pandas.DataFrame): Sequences in training set
+            Y (pandas.Series): measurements in training set
+            variances (pandas.Series): measurement variances. Index must
+                match index for Y. Optional.
+        '''
+        self.X_seqs = X_seqs
+        self.Y = Y
+        self._ell = len(Y)
+        self.kern.delete()
+        self.kern.set_X(X_seqs)
+        self.mean_func.fit(X_seqs, Y)
+        self.Y = Y - self.mean_func.means
+        self.mean, self.std, self.normed_Y = self._normalize(self.Y)
+        if variances is not None:
+            if not np.array_equal(variances.index, Y.index):
+                raise AttributeError('Indices do not match.')
+            self.variances = variances / self.std**2
+            n_guesses = len(self.kern.hypers)
+        else:
+            self.variances = None
+            n_guesses = 1 + len(self.kern.hypers)
+        if self.guesses is None:
+            guesses = [0.9 for _ in range(n_guesses)]
+        else:
+            guesses = self.guesses
+            if len(guesses) != n_guesses:
+                raise AttributeError(('Length of guesses does not match '
+                                      'number of hyperparameters'))
+
+        bounds = [(1e-5, None) for _ in guesses]
+        minimize_res = minimize(self.objective,
+                                (guesses),
+                                bounds=bounds,
+                                method='L-BFGS-B')
+        self._set_hypers(minimize_res['x'])
+
+
+class GPClassifer(GPModelBase):
+
+    """ A Gaussian process classification model for proteins. """
+
+    def __init__(self, kernel, **kwargs):
+        GPBase.__init__(self, kernel, **kwargs)
+
+    def _make_hypers(self, hypers):
+        """ Set hyperparameters for model. """
+        if hypers is not None:
+            if type(hypers) is not dict:
+                Hypers = namedtuple('Hypers', self.kern.hypers)
+                self.hypers = Hypers._make(hypers)
+            else:
+                Hypers = namedtuple('Hypers', list(hypers.keys()))
+                self.hypers = Hypers(**hypers)
+
+    def fit(self, X_seqs, Y, variances=None):
+        ''' Fit the model to the given data.
+
+        Set the hyperparameters by training on the given data.
+        Update all dependent values.
+
+        For regression models, measurement variances can be given, or
+        a global measurement variance will be estimated.
+
+        Parameters:
+            X_seqs (pandas.DataFrame): Sequences in training set
+            Y (pandas.Series): measurements in training set
+            variances (pandas.Series): measurement variances. Index must
+                match index for Y. Optional.
+        '''
+        self.X_seqs = X_seqs
+        self.Y = Y
+        self._ell = len(Y)
+        self.kern.delete()
+        self.kern.set_X(X_seqs)
+        self.regr = not self.is_class()
+        n_guesses = len(self.kern.hypers)
+        if self.guesses is None:
+            guesses = [0.9 for _ in range(n_guesses)]
+        else:
+            guesses = self.guesses
+            if len(guesses) != n_guesses:
+                raise AttributeError(('Length of guesses does not match '
+                                      'number of hyperparameters'))
+
+        bounds = [(1e-5, None) for _ in guesses]
+        minimize_res = minimize(self.objective,
+                                (guesses),
+                                bounds=bounds,
+                                method='L-BFGS-B')
+        self._set_hypers(minimize_res['x'])
 
 
 class GPModel(object):

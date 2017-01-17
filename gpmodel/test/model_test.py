@@ -39,25 +39,23 @@ test_seqs = pd.DataFrame([['R', 'Y', 'M', 'A'],
 
 
 def test_creation():
-    print('Testing constructors, fits, and pickling method...')
-
-    model = gpmodel.GPModel(struct, mean_func=func,
-                            objective='LOO_log_p', guesses=(1.0,))
+    model = gpmodel.GPRegressor(struct, mean_func=func,
+                                objective='LOO_log_p', guesses=(1.0,))
     assert model.mean_func == func
     assert model.objective == model._LOO_log_p
     pytest.raises(AttributeError, 'model.fit(seqs, reg_Ys)')
-    model._set_params(objective='log_ML')
+    model._set_params(objective=model._log_ML)
     assert model.objective == model._log_ML
 
-    model_2 = gpmodel.GPModel(struct, objective='log_ML')
+    model_2 = gpmodel.GPRegressor(struct, objective='log_ML')
     assert model != model_2
 
     # create a model
-    model = gpmodel.GPModel(struct, guesses=(2, 2), objective='LOO_log_p')
+    model = gpmodel.GPRegressor(struct, guesses=(2, 2), objective='LOO_log_p')
     # pickle the model
     model.dump('test_creation.pkl')
     # reload the model
-    model = gpmodel.GPModel.load('test_creation.pkl')
+    model = gpmodel.GPRegressor.load('test_creation.pkl')
     # delete the pickle
     os.remove('test_creation.pkl')
     # test the model
@@ -76,7 +74,7 @@ def test_creation():
     # pickle the model
     model.dump('test_creation.pkl')
     # reload the model
-    model = gpmodel.GPModel.load('test_creation.pkl')
+    model = gpmodel.GPRegressor.load('test_creation.pkl')
     # delete the pickle
     os.remove('test_creation.pkl')
     # test the model
@@ -89,9 +87,16 @@ def test_creation():
     assert np.isclose(model._alpha, alpha).all()
     assert np.isclose(model._L, L).all()
 
+    model = gpmodel.GPClassifer(struct)
+    assert model.objective == model._log_ML
+    model.dump('test_creation.pkl')
+    model = gpmodel.GPClassifer.load('test_creation.pkl')
+    assert model.objective == model._log_ML
+    os.remove('test_creation.pkl')
+
 
 def test_score():
-    model = gpmodel.GPModel(struct)
+    model = gpmodel.GPRegressor(struct)
     model.fit(seqs, reg_Ys)
     preds = model.predict(seqs)
     pred_Y = [p[0] for p in preds]
@@ -129,7 +134,7 @@ def test_score():
 
 
 def test_regression():
-    model = gpmodel.GPModel(struct)
+    model = gpmodel.GPRegressor(struct)
     model.fit(seqs, reg_Ys)
     assert np.isclose(model.hypers.var_p, 0.63016924576335664),\
         'Regression model.hypers.var_p is incorrect'
@@ -212,7 +217,7 @@ def test_regression():
     assert np.isclose(v, var_D)
 
     # test regression with StructureSEKernel
-    model = gpmodel.GPModel(SE_kern)
+    model = gpmodel.GPRegressor(SE_kern)
     model.fit(seqs, reg_Ys)
     kA = np.matrix([model.kern.calc_kernel(test_seqs.loc['A'],
                                            seq1, [model.hypers.sigma_f,
@@ -254,7 +259,7 @@ def test_regression():
     assert model.ML == ML
 
     # test predictions with mean function
-    model = gpmodel.GPModel(struct, mean_func=func)
+    model = gpmodel.GPRegressor(struct, mean_func=func)
     model.fit(seqs, reg_Ys)
     X, terms = chimera_tools.make_X([''.join(row) for _, row
                                      in seqs.iterrows()],
@@ -312,7 +317,7 @@ def test_regression():
     assert res.equals(res2), \
         'Regression model does not correctly predict LOO values'
 
-    model = gpmodel.GPModel(struct, guesses=(100.0,))
+    model = gpmodel.GPRegressor(struct, guesses=(100.0,))
     model.fit(seqs, reg_Ys, variances=variances)
     assert np.array_equal(model._K + np.diag(variances) / model.std**2,
                           model._Ky)
@@ -327,9 +332,7 @@ def test_regression():
 
 
 def test_classification():
-    model = gpmodel.GPModel(struct, objective='LOO_log_p')
-    pytest.raises(AttributeError, 'model.fit( seqs, class_Ys)')
-    model = gpmodel.GPModel(struct)
+    model = gpmodel.GPClassifer(struct)
     model.fit(seqs, class_Ys)
     test_F = pd.Series([-.5, .5, .6, .1])
     true_vps = np.array([43.7865018929, 43.763806573,

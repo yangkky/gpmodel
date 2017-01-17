@@ -16,15 +16,13 @@ from gpmodel import chimera_tools
 from cholesky import chol
 
 
-class GPModelBase(abc.ABC):
+class BaseGPModel(abc.ABC):
 
     """ Base class for Gaussian process models. """
 
     @abc.abstractmethod
-    def __init__(self, kernel, **kwargs):
+    def __init__(self, kernel):
         self.kern = kernel
-        self.guesses = None
-        self._set_params(**kwargs)
 
     @abc.abstractmethod
     def predict(self, X):
@@ -51,18 +49,79 @@ class GPModelBase(abc.ABC):
         """ Set hyperparameters for model. """
         return
 
+    @classmethod
+    def load(cls, model):
+        ''' Load a saved model.
 
-class GPRegressor(GPModelBase):
+        Use pickle to load the saved model.
+
+        Parameters:
+            model (string): path to saved model
+        '''
+        with open(model, 'rb') as m_file:
+            attributes = pickle.load(m_file, encoding='latin1')
+        model = cls(attributes['kern'])
+        del attributes['kern']
+        if attributes['objective'] == 'LOO_log_p':
+            model.objective = model._LOO_log_p
+        else:
+            model.objective = model._log_ML
+        del attributes['objective']
+        model._set_params(**attributes)
+        return model
+
+    def dump(self, f):
+        ''' Save the model.
+
+        Use pickle to save a dict containing the model's
+        attributes.
+
+        Parameters:
+            f (string): path to where model should be saved
+        '''
+        save_me = {k: self.__dict__[k] for k in list(self.__dict__.keys())}
+        if self.objective == self._log_ML:
+            save_me['objective'] = 'log_ML'
+        else:
+            save_me['objective'] = 'LOO_log_p'
+        save_me['guesses'] = self.guesses
+        try:
+            names = self.hypers._fields
+            hypers = {n: h for n, h in zip(names, self.hypers)}
+            save_me['hypers'] = hypers
+        except AttributeError:
+            pass
+        with open(f, 'wb') as f:
+            pickle.dump(save_me, f)
+
+
+class GPRegressor(BaseGPModel):
 
     """ A Gaussian process regression model for proteins. """
 
     def __init__(self, kernel, **kwargs):
-        GPBase.__init__(self, kernel, **kwargs)
+        BaseGPModel.__init__(self, kernel)
+        self.guesses = None
         if 'objective' not in list(kwargs.keys()):
             kwargs['objective'] = 'log_ML'
         if 'mean_func' not in list(kwargs.keys()):
             self.mean_func = gpmean.GPMean()
         self.variances = None
+        self._set_objective(kwargs['objective'])
+        del kwargs['objective']
+        self._set_params(**kwargs)
+
+    def _set_objective(self, objective):
+        """ Set objective function for model. """
+        if objective is not None:
+            if objective == 'log_ML':
+                self.objective = self._log_ML
+            elif objective == 'LOO_log_p':
+                self.objective = self._LOO_log_p
+            else:
+                raise AttributeError(objective + ' is not a valid objective')
+        else:
+            self.objective = self._log_ML
 
     def _make_hypers(self, hypers):
         """ Set hyperparameters for model. """
@@ -124,233 +183,6 @@ class GPRegressor(GPModelBase):
                                 method='L-BFGS-B')
         self._set_hypers(minimize_res['x'])
 
-
-class GPClassifer(GPModelBase):
-
-    """ A Gaussian process classification model for proteins. """
-
-    def __init__(self, kernel, **kwargs):
-        GPBase.__init__(self, kernel, **kwargs)
-
-    def _make_hypers(self, hypers):
-        """ Set hyperparameters for model. """
-        if hypers is not None:
-            if type(hypers) is not dict:
-                Hypers = namedtuple('Hypers', self.kern.hypers)
-                self.hypers = Hypers._make(hypers)
-            else:
-                Hypers = namedtuple('Hypers', list(hypers.keys()))
-                self.hypers = Hypers(**hypers)
-
-    def fit(self, X_seqs, Y, variances=None):
-        ''' Fit the model to the given data.
-
-        Set the hyperparameters by training on the given data.
-        Update all dependent values.
-
-        For regression models, measurement variances can be given, or
-        a global measurement variance will be estimated.
-
-        Parameters:
-            X_seqs (pandas.DataFrame): Sequences in training set
-            Y (pandas.Series): measurements in training set
-            variances (pandas.Series): measurement variances. Index must
-                match index for Y. Optional.
-        '''
-        self.X_seqs = X_seqs
-        self.Y = Y
-        self._ell = len(Y)
-        self.kern.delete()
-        self.kern.set_X(X_seqs)
-        self.regr = not self.is_class()
-        n_guesses = len(self.kern.hypers)
-        if self.guesses is None:
-            guesses = [0.9 for _ in range(n_guesses)]
-        else:
-            guesses = self.guesses
-            if len(guesses) != n_guesses:
-                raise AttributeError(('Length of guesses does not match '
-                                      'number of hyperparameters'))
-
-        bounds = [(1e-5, None) for _ in guesses]
-        minimize_res = minimize(self.objective,
-                                (guesses),
-                                bounds=bounds,
-                                method='L-BFGS-B')
-        self._set_hypers(minimize_res['x'])
-
-
-class GPModel(object):
-
-    """A Gaussian process model for proteins.
-
-    Attributes:
-        X_seqs (DataFrame): The sequences in the training set
-        Y (Series): The outputs for the training set
-        variances (Series): measurement variances for the training set
-        normed_Y (Series): normalized outputs for the training set
-        mean (float): mean of unnormed Ys
-        std (float): standard deviation of unnormed Ys
-        kern (GPKernel): a kernel for calculating covariances
-        mean_func (GPMean): mean function
-        hypers (namedtuple): the hyperparameters
-        regr (Boolean): classification or regression
-        _K (pd.DataFrame): Covariance matrix
-        _Ky (np.ndarray): noisy covariance matrix [K+var_n*I]
-        _L (np.ndarray): lower triangular Cholesky decomposition of Ky for
-            regression models. Lower triangular Cholesky decomposition of
-            (I + W_root*Ky*W_root.T) for classification models.
-        _alpha (np.ndarray): L.T\(L\Y)
-        ML (float): The negative log marginal likelihood
-        log_p (float): the negative LOO log likelihood
-        _ell (int): number of training samples
-        _f_hat (Series): MAP values of the latent function for training set
-        _W (np.ndarray): negative _hessian of the log likelihood
-        _W_root (np.ndarray): Square root of W
-        _grad (np.ndarray): gradient of the log logistic likelihood
-    """
-
-    def __init__(self, kern, **kwargs):
-        """ Create a new GPModel.
-
-        Parameters:
-            kern (GPKernel): kernel to use
-
-        Optional keyword parameters:
-            guesses (iterable): initial guesses for the
-                hyperparameters.
-                Default is [0.9 for _ in range(len(hypers))].
-            objective (String): objective function to use in training
-                model. Choices are 'log_ML' and 'LOO_log_p'.
-                Classification must be trained on 'log_ML.' Default
-                is 'log_ML'.
-        """
-        self.kern = kern
-        self.guesses = None
-        if 'objective' not in list(kwargs.keys()):
-            kwargs['objective'] = 'log_ML'
-        if 'mean_func' not in list(kwargs.keys()):
-            self.mean_func = gpmean.GPMean()
-        self.variances = None
-        self._set_params(**kwargs)
-
-    def _set_params(self, **kwargs):
-        ''' Sets parameters for the model.
-
-        This function can be used to set the value of any or all
-        attributes for the model. However, it does not necessarily
-        update dependencies, so use with caution.
-
-        Optional Keyword Parameters:
-            X_seqs (DataFrame): The sequences in the training set
-            Y (Series): The outputs for the training set
-            normed_Y (Series): normalized outputs for the training set
-            mean (float): mean of unnormed Ys
-            std (float): standard deviation of unnormed Ys
-            kern (GPKernel): a kernel for calculating covariances
-            mean_func (GPMean): mean function
-            hypers (namedtuple): the hyperparameters
-            regr (Boolean): classification or regression
-            _K (pdDataFrame): Covariance matrix
-            _Ky (np.ndarray): noisy covariance matrix [K+var_n*I]
-            _L (np.ndarray): lower triangular Cholesky decomposition of Ky for
-                regression models. Lower triangular Cholesky decomposition of
-                (I + W_root*Ky*W_root.T) for classification models.
-            _alpha (np.ndarray): L.T\(L\Y)
-            ML (float): The negative log marginal likelihood
-            log_p (float): the negative LOO log likelihood
-            _ell (int): number of training samples
-            _f_hat (Series): MAP values of the latent function for training set
-            _W (np.ndarray): negative _hessian of the log likelihood
-            _W_root (np.ndarray): Square root of W
-            _grad (np.ndarray): gradient of the log logistic likelihood
-        '''
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-        objective = kwargs.get('objective', None)
-        hypers = kwargs.get('hypers', None)
-        self._set_objective(objective)
-        self._make_hypers(hypers)
-
-    def _set_objective(self, objective):
-        """ Set objective function for model. """
-        if objective is not None:
-            if objective == 'log_ML':
-                self.objective = self._log_ML
-            elif objective == 'LOO_log_p':
-                self.objective = self._LOO_log_p
-            else:
-                raise AttributeError(objective + ' is not a valid objective')
-        else:
-            self.objective = self._log_ML
-
-    def _make_hypers(self, hypers):
-        """ Set hyperparameters for model. """
-        if hypers is not None:
-            if type(hypers) is not dict:
-                if self.regr and self.variances is None:
-                    hypers_list = ['var_n'] + self.kern.hypers
-                    Hypers = namedtuple('Hypers', hypers_list)
-                else:
-                    Hypers = namedtuple('Hypers', self.kern.hypers)
-                self.hypers = Hypers._make(hypers)
-            else:
-                Hypers = namedtuple('Hypers', list(hypers.keys()))
-                self.hypers = Hypers(**hypers)
-
-    def fit(self, X_seqs, Y, variances=None):
-        ''' Fit the model to the given data.
-
-        Set the hyperparameters by training on the given data.
-        Update all dependent values.
-
-        For regression models, measurement variances can be given, or
-        a global measurement variance will be estimated.
-
-        Parameters:
-            X_seqs (pandas.DataFrame): Sequences in training set
-            Y (pandas.Series): measurements in training set
-            variances (pandas.Series): measurement variances. Index must
-                match index for Y. Optional.
-        '''
-        self.X_seqs = X_seqs
-        self.Y = Y
-        self._ell = len(Y)
-        self.kern.delete()
-        self.kern.set_X(X_seqs)
-        self.regr = not self.is_class()
-        if self.regr:
-            self.mean_func.fit(X_seqs, Y)
-            self.Y = Y - self.mean_func.means
-            self.mean, self.std, self.normed_Y = self._normalize(self.Y)
-            if variances is not None:
-                if not np.array_equal(variances.index, Y.index):
-                    raise AttributeError('Indices do not match.')
-                self.variances = variances / self.std**2
-                n_guesses = len(self.kern.hypers)
-            else:
-                self.variances = None
-                n_guesses = 1 + len(self.kern.hypers)
-        else:
-            n_guesses = len(self.kern.hypers)
-            if self.objective == self._LOO_log_p:
-                raise AttributeError(('Classification models must be trained '
-                                      'on marginal likelihood'))
-        if self.guesses is None:
-            guesses = [0.9 for _ in range(n_guesses)]
-        else:
-            guesses = self.guesses
-            if len(guesses) != n_guesses:
-                raise AttributeError(('Length of guesses does not match '
-                                      'number of hyperparameters'))
-
-        bounds = [(1e-5, None) for _ in guesses]
-        minimize_res = minimize(self.objective,
-                                (guesses),
-                                bounds=bounds,
-                                method='L-BFGS-B')
-        self._set_hypers(minimize_res['x'])
-
     def _set_hypers(self, hypers):
         ''' Set model.hypers and quantities used for making predictions.
 
@@ -358,28 +190,15 @@ class GPModel(object):
             hypers (iterable or dict)
         '''
         self._make_hypers(hypers)
-
-        if self.regr:
-            self._K, self._Ky = self._make_Ks(hypers)
-            self._L, self._p, _ = chol.modified_cholesky(self._Ky)
-            mat_Y = self.normed_Y.T.values
-            self._alpha = chol.modified_cholesky_solve(self._L, self._p, mat_Y)
-            first = 0.5 * np.dot(mat_Y, self._alpha)
-            second = np.sum(np.log(np.diag(self._L)))
-            third = len(self._K)/2.*np.log(2*np.pi)
-            self.ML = (first+second+third).item()
-            self.log_p = self._LOO_log_p(self.hypers)
-        else:
-            self._f_hat = self._find_F(hypers=self.hypers)
-            self._W = self._hess(self._f_hat)
-            self._W_root = np.sqrt(self._W)
-            self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
-            triple_dot = self._W_root @ self._Ky @ self._W_root
-            self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
-                                                         triple_dot)
-            self._grad = np.diag(self._grad_log_logistic_likelihood
-                                 (self.Y, self._f_hat))
-            self.ML = self._log_ML(self.hypers)
+        self._K, self._Ky = self._make_Ks(hypers)
+        self._L, self._p, _ = chol.modified_cholesky(self._Ky)
+        mat_Y = self.normed_Y.T.values
+        self._alpha = chol.modified_cholesky_solve(self._L, self._p, mat_Y)
+        first = 0.5 * np.dot(mat_Y, self._alpha)
+        second = np.sum(np.log(np.diag(self._L)))
+        third = len(self._K)/2.*np.log(2*np.pi)
+        self.ML = (first+second+third).item()
+        self.log_p = self._LOO_log_p(self.hypers)
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
@@ -435,31 +254,17 @@ class GPModel(object):
             k_star (float): k* in equation 2.24
 
         Returns:
-            res (tuple): (E,v) as floats for regression, pi_star for
-                classification
+            res (tuple): (E,v) as floats
         """
-        if self.regr:
-            alpha = self._alpha
-            L = self._L
-            E = np.dot(k, alpha)
-            v = chol.modified_cholesky_lower_tri_solve(L, self._p, k[0])
-            var = k_star - np.dot(v.T, v)
-            if unnorm:
-                E = self.unnormalize(E)
-                var *= self.std**2
-            return (E.item(), var.item())
-        else:
-            f_bar = np.dot(k, self._grad.T)
-            Wk = np.dot(self._W_root, k.T)
-            Wk = Wk.reshape((Wk.shape[0], ))
-            v = chol.modified_cholesky_lower_tri_solve(self._L, self._p, Wk)
-            var = k_star - np.dot(v.T, v)
-            i = 10
-            pi_star = integrate.quad(self._p_integral,
-                                     -i*var+f_bar,
-                                     f_bar+i*var,
-                                     args=(f_bar.item(), var.item()))[0]
-            return (pi_star, f_bar.item(), var.item())
+        alpha = self._alpha
+        L = self._L
+        E = np.dot(k, alpha)
+        v = chol.modified_cholesky_lower_tri_solve(L, self._p, k[0])
+        var = k_star - np.dot(v.T, v)
+        if unnorm:
+            E = self.unnormalize(E)
+            var *= self.std**2
+        return (E.item(), var.item())
 
     def predict(self, new_seqs, delete=True):
         """ Make predictions for each sequence in new_seqs.
@@ -474,10 +279,7 @@ class GPModel(object):
         """
         predictions = []
         self.kern.train(new_seqs)
-        if self.regr:
-            h = self.hypers[1::]
-        else:
-            h = self.hypers
+        h = self.hypers[1::]
         for ns in new_seqs.index:
             k = np.array([self.kern.calc_kernel(ns, seq1,
                                                 hypers=h)
@@ -489,10 +291,245 @@ class GPModel(object):
         if delete:
             inds = list(set(new_seqs.index) - set(self.X_seqs.index))
             self.kern.delete(new_seqs.loc[inds, :])
-        if self.regr:
-            means = self.mean_func.mean(new_seqs)
-            predictions = [(m+p, v)
-                           for p, (m, v) in zip(means, predictions)]
+        means = self.mean_func.mean(new_seqs)
+        predictions = [(m+p, v) for p, (m, v) in zip(means, predictions)]
+        return predictions
+
+    def _log_ML(self, hypers):
+        """ Returns the negative log marginal likelihood for the model.
+
+        Uses RW Equation 5.8.
+
+        Parameters:
+            hypers (iterable): the hyperparameters
+
+        Returns:
+            log_ML (float)
+        """
+        Y = self.normed_Y.T.values
+        K, Ky = self._make_Ks(hypers)
+        L, p, _ = chol.modified_cholesky(Ky)
+        alpha = chol.modified_cholesky_solve(L, p, Y)
+        first = 0.5 * np.dot(Y, alpha)
+        second = np.sum(np.log(np.diag(L)))
+        third = len(K)/2.*np.log(2*np.pi)
+        ML = (first+second+third).item()
+        return ML
+
+    def _LOO_log_p(self, hypers):
+        """ Calculates the negative LOO log probability.
+
+        Equation 5.10 and 5.11 from RW
+        Parameters:
+            variances (iterable)
+        Returns:
+            log_p
+        """
+        LOO = self.LOO_res(hypers)
+        vs = LOO['v']
+        mus = LOO['mu']
+        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs
+        log_ps -= 0.5*np.log(2*np.pi)
+        return_me = -sum(log_ps)
+        return return_me
+
+    def LOO_res(self, hypers, add_mean=False, unnorm=False):
+        """ Calculates LOO regression predictions.
+
+        Calculates the LOO predictions according to Equation 5.12 from RW.
+
+        Parameters:
+            hypers (iterable)
+            add_mean (Boolean): whether or not to add in the mean function.
+                Default is False.
+            unnormalize (Boolean): whether or not to unnormalize.
+                Default is False unless the mean is added back, in which
+                case always True.
+        Returns:
+            res (pandas.DataFrame): columns are 'mu' and 'v'
+        """
+        K, Ky = self._make_Ks(hypers)
+        K_inv = np.linalg.inv(Ky)
+        Y = self.normed_Y.values.reshape(len(self.normed_Y), 1)
+        mus = np.diag(Y - np.dot(K_inv, Y) / K_inv)
+        vs = np.diag(1 / K_inv)
+        if add_mean or unnorm:
+            mus = self.unnormalize(mus)
+            vs = np.array(vs).copy()
+            vs *= self.std**2
+        if add_mean:
+            mus += self.mean_func.means
+        return pd.DataFrame(list(zip(mus, vs)), index=self.normed_Y.index,
+                            columns=['mu', 'v'])
+
+    def score(self, X, Y, *args):
+        ''' Score the model on the given points.
+
+        Predicts Y for the sequences in X, then scores the predictions.
+
+        Parameters:
+            X (pandas.DataFrame)
+            Y (pandas.Series)
+            type (string): 'kendalltau', 'R2', or 'R'. Default is 'kendalltau.'
+
+        Returns:
+            res: If one score, result is a float. If multiple,
+                result is a dict.
+        '''
+        # Check that X and Y have the same indices
+        if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
+            raise ValueError
+            ('X and Y must be the same length and have the same indices.')
+        # Make predictions
+        predicted = self.predict(X)
+        pred_Y = [y for (y, v) in predicted]
+
+        # if nothing specified, return Kendall's Tau
+        if not args:
+            r1 = stats.rankdata(Y)
+            r2 = stats.rankdata(pred_Y)
+            return stats.kendalltau(r1, r2).correlation
+
+        scores = {}
+        for t in args:
+            if t == 'kendalltau':
+                r1 = stats.rankdata(Y)
+                r2 = stats.rankdata(pred_Y)
+                scores[t] = stats.kendalltau(r1, r2).correlation
+            elif t == 'R2':
+                from sklearn.metrics import r2_score
+                scores[t] = r2_score(Y, pred_Y)
+            elif t == 'R':
+                scores[t] = np.corrcoef(Y, pred_Y)[0, 1]
+            else:
+                raise ValueError('Invalid metric.')
+        if len(list(scores.keys())) == 1:
+            return scores[list(scores.keys())[0]]
+        else:
+            return scores
+
+
+class GPClassifer(BaseGPModel):
+
+    """ A Gaussian process classification model for proteins. """
+
+    def __init__(self, kernel, **kwargs):
+        BaseGPModel.__init__(self, kernel)
+        self.guesses = None
+        self._set_params(**kwargs)
+        self.objective = self._log_ML
+
+    def _make_hypers(self, hypers):
+        """ Set hyperparameters for model. """
+        if hypers is not None:
+            if type(hypers) is not dict:
+                Hypers = namedtuple('Hypers', self.kern.hypers)
+                self.hypers = Hypers._make(hypers)
+            else:
+                Hypers = namedtuple('Hypers', list(hypers.keys()))
+                self.hypers = Hypers(**hypers)
+
+    def fit(self, X_seqs, Y, variances=None):
+        ''' Fit the model to the given data.
+
+        Set the hyperparameters by training on the given data.
+        Update all dependent values.
+
+        Parameters:
+            X_seqs (pandas.DataFrame): Sequences in training set
+            Y (pandas.Series): measurements in training set
+        '''
+        self.X_seqs = X_seqs
+        self.Y = Y
+        self._ell = len(Y)
+        self.kern.delete()
+        self.kern.set_X(X_seqs)
+        n_guesses = len(self.kern.hypers)
+        if self.guesses is None:
+            guesses = [0.9 for _ in range(n_guesses)]
+        else:
+            guesses = self.guesses
+            if len(guesses) != n_guesses:
+                raise AttributeError(('Length of guesses does not match '
+                                      'number of hyperparameters'))
+
+        bounds = [(1e-5, None) for _ in guesses]
+        minimize_res = minimize(self.objective,
+                                (guesses),
+                                bounds=bounds,
+                                method='L-BFGS-B')
+        self._set_hypers(minimize_res['x'])
+
+    def _set_hypers(self, hypers):
+        ''' Set model.hypers and quantities used for making predictions.
+
+        Parameters:
+            hypers (iterable or dict)
+        '''
+        self._make_hypers(hypers)
+        self._f_hat = self._find_F(hypers=self.hypers)
+        self._W = self._hess(self._f_hat)
+        self._W_root = np.sqrt(self._W)
+        self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
+        triple_dot = self._W_root @ self._Ky @ self._W_root
+        self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
+                                                     triple_dot)
+        self._grad = np.diag(self._grad_log_logistic_likelihood
+                             (self.Y, self._f_hat))
+        self.ML = self._log_ML(self.hypers)
+
+    def _predict(self, k, k_star, alpha=None, L=None, unnorm=True):
+        """ Make prediction for one sequence.
+
+        Predicts the mean and variance for one new sequence given its
+        covariance vector.
+
+        Uses Equations 2.23 and 2.24 of RW
+
+        Parameters:
+            k (np.matrix): k in equations 2.23 and 2.24
+            k_star (float): k* in equation 2.24
+
+        Returns:
+            res (tuple): probability, f_star, var
+        """
+        f_bar = np.dot(k, self._grad.T)
+        Wk = np.dot(self._W_root, k.T)
+        Wk = Wk.reshape((Wk.shape[0], ))
+        v = chol.modified_cholesky_lower_tri_solve(self._L, self._p, Wk)
+        var = k_star - np.dot(v.T, v)
+        i = 10
+        pi_star = integrate.quad(self._p_integral,
+                                 -i*var+f_bar,
+                                 f_bar+i*var,
+                                 args=(f_bar.item(), var.item()))[0]
+        return (pi_star, f_bar.item(), var.item())
+
+    def predict(self, new_seqs, delete=True):
+        """ Make predictions for each sequence in new_seqs.
+
+        Uses Equations 2.23 and 2.24 of RW
+        Parameters:
+            new_seqs (DataFrame): sequences to predict.
+                They must have unique indices.
+
+         Returns:
+            predictions (list)
+        """
+        predictions = []
+        self.kern.train(new_seqs)
+        h = self.hypers
+        for ns in new_seqs.index:
+            k = np.array([self.kern.calc_kernel(ns, seq1,
+                                                hypers=h)
+                          for seq1 in self.X_seqs.index])
+            k = k.reshape(1, len(k))
+            k_star = self.kern.calc_kernel(ns, ns,
+                                           hypers=h)
+            predictions.append(self._predict(k, k_star))
+        if delete:
+            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
+            self.kern.delete(new_seqs.loc[inds, :])
         return predictions
 
     def _p_integral(self, z, mean, variance):
@@ -522,8 +559,7 @@ class GPModel(object):
     def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
-        Uses RW Equation 5.8 for regression models and Equation 3.32 for
-        classification models.
+        Uses RW Equation 3.32.
 
         Parameters:
             hypers (iterable): the hyperparameters
@@ -531,24 +567,9 @@ class GPModel(object):
         Returns:
             log_ML (float)
         """
-        if self.regr:
-            Y = self.normed_Y.T.values
-            K, Ky = self._make_Ks(hypers)
-            L, p, _ = chol.modified_cholesky(Ky)
-            alpha = chol.modified_cholesky_solve(L, p, Y)
-            first = 0.5 * np.dot(Y, alpha)
-            second = np.sum(np.log(np.diag(L)))
-            third = len(K)/2.*np.log(2*np.pi)
-            ML = (first+second+third).item()
-            return ML
-        else:
-            f_hat = self._find_F(hypers=hypers)
-            ML = self._logq(f_hat, hypers=hypers)
-            return ML.item()
-
-    def is_class(self):
-        '''True if Y only contains values 1 and -1, otherwise False'''
-        return all(y in [-1, 1] for y in self.Y)
+        f_hat = self._find_F(hypers=hypers)
+        ML = self._logq(f_hat, hypers=hypers)
+        return ML.item()
 
     def _logistic_likelihood(self, Y, F):
         ''' Calculate logistic likelihood.
@@ -703,54 +724,7 @@ class GPModel(object):
             self.Y, F) + np.sum(np.log(np.diag(L)))
         return _logq
 
-    def _LOO_log_p(self, hypers):
-        """ Calculates the negative LOO log probability.
-
-        For now, only for regression
-        Equation 5.10 and 5.11 from RW
-        Parameters:
-            variances (iterable)
-        Returns:
-            log_p
-        """
-        LOO = self.LOO_res(hypers)
-        vs = LOO['v']
-        mus = LOO['mu']
-        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs
-        log_ps -= 0.5*np.log(2*np.pi)
-        return_me = -sum(log_ps)
-        return return_me
-
-    def LOO_res(self, hypers, add_mean=False, unnorm=False):
-        """ Calculates LOO regression predictions.
-
-        Calculates the LOO predictions according to Equation 5.12 from RW.
-
-        Parameters:
-            hypers (iterable)
-            add_mean (Boolean): whether or not to add in the mean function.
-                Default is False.
-            unnormalize (Boolean): whether or not to unnormalize.
-                Default is False unless the mean is added back, in which
-                case always True.
-        Returns:
-            res (pandas.DataFrame): columns are 'mu' and 'v'
-        """
-        K, Ky = self._make_Ks(hypers)
-        K_inv = np.linalg.inv(Ky)
-        Y = self.normed_Y.values.reshape(len(self.normed_Y), 1)
-        mus = np.diag(Y - np.dot(K_inv, Y) / K_inv)
-        vs = np.diag(1 / K_inv)
-        if add_mean or unnorm:
-            mus = self.unnormalize(mus)
-            vs = np.array(vs).copy()
-            vs *= self.std**2
-        if add_mean:
-            mus += self.mean_func.means
-        return pd.DataFrame(list(zip(mus, vs)), index=self.normed_Y.index,
-                            columns=['mu', 'v'])
-
-    def score(self, X, Y, *args):
+    def score(self, X, Y):
         ''' Score the model on the given points.
 
         Predicts Y for the sequences in X, then scores the predictions.
@@ -758,12 +732,9 @@ class GPModel(object):
         Parameters:
             X (pandas.DataFrame)
             Y (pandas.Series)
-            type (string): always AUC for classification. 'kendalltau',
-                'R2', or 'R' for regression. Default is 'kendalltau.'
 
         Returns:
-            res: If one score, result is a float. If multiple,
-                result is a dict.
+            res: The auc on the test points.
         '''
         # Check that X and Y have the same indices
         if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
@@ -773,94 +744,24 @@ class GPModel(object):
         predicted = self.predict(X)
 
         # for classification, return the ROC AUC
-        if not self.regr:
-            from sklearn.metrics import roc_auc_score
-            return roc_auc_score(Y, [p[0] for p in predicted])
-
-        else:
-            pred_Y = [y for (y, v) in predicted]
-
-            # if nothing specified, return Kendall's Tau
-            if not args:
-                r1 = stats.rankdata(Y)
-                r2 = stats.rankdata(pred_Y)
-                return stats.kendalltau(r1, r2).correlation
-
-            scores = {}
-            for t in args:
-                if t == 'kendalltau':
-                    r1 = stats.rankdata(Y)
-                    r2 = stats.rankdata(pred_Y)
-                    scores[t] = stats.kendalltau(r1, r2).correlation
-                elif t == 'R2':
-                    from sklearn.metrics import r2_score
-                    scores[t] = r2_score(Y, pred_Y)
-                elif t == 'R':
-                    scores[t] = np.corrcoef(Y, pred_Y)[0, 1]
-                else:
-                    raise ValueError('Invalid metric.')
-            if len(list(scores.keys())) == 1:
-                return scores[list(scores.keys())[0]]
-            else:
-                return scores
-
-    @classmethod
-    def load(cls, model):
-        ''' Load a saved model.
-
-        Use pickle to load the saved model.
-
-        Parameters:
-            model (string): path to saved model
-        '''
-        with open(model, 'rb') as m_file:
-            attributes = pickle.load(m_file, encoding='latin1')
-        model = cls(attributes['kern'])
-        del attributes['kern']
-        model._set_params(**attributes)
-        return model
-
-    def dump(self, f):
-        ''' Save the model.
-
-        Use cPickle to save a dict containing the model's
-        attributes.
-
-        Parameters:
-            f (string): path to where model should be saved
-        '''
-        save_me = {k: self.__dict__[k] for k in list(self.__dict__.keys())}
-        if self.objective == self._log_ML:
-            save_me['objective'] = 'log_ML'
-        else:
-            save_me['objective'] = 'LOO_log_p'
-        save_me['guesses'] = self.guesses
-        try:
-            names = self.hypers._fields
-            hypers = {n: h for n, h in zip(names, self.hypers)}
-            save_me['hypers'] = hypers
-        except AttributeError:
-            pass
-        with open(f, 'wb') as f:
-            pickle.dump(save_me, f)
+        from sklearn.metrics import roc_auc_score
+        return roc_auc_score(Y, [p[0] for p in predicted])
 
 
-class LassoGPModel(GPModel):
+class LassoGPRegressor(GPRegressor):
 
-    """ Extends GPModel with L1 regression for feature selection.
-
-    """
+    """ Extends GPRegressor with L1 regression for feature selection. """
 
     def __init__(self, kernel, **kwargs):
         self._gamma_0 = kwargs.get('gamma', 0)
         self._clf = linear_model.Lasso(alpha=np.exp(self._gamma_0),
                                        warm_start=False,
                                        max_iter=100000)
-        GPModel.__init__(self, kernel, **kwargs)
+        GPRegressor.__init__(self, kernel, **kwargs)
 
     def predict(self, X):
         X, _ = self._regularize(X, mask=self._mask)
-        return GPModel.predict(self, X)
+        return GPRegressor.predict(self, X)
 
     def fit(self, X, y, variances=None):
         minimize_res = minimize(self._log_ML_from_gamma,
@@ -872,7 +773,7 @@ class LassoGPModel(GPModel):
 
     def _log_ML_from_gamma(self, gamma, X, y, variances=None):
         X, self._mask = self._regularize(X, gamma=gamma, y=y)
-        GPModel.fit(self, X, y, variances=variances)
+        GPRegressor.fit(self, X, y, variances=variances)
         return self.ML
 
     def _regularize(self, X, **kwargs):

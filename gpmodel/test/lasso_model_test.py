@@ -31,14 +31,14 @@ Y = pd.Series(Y, index=X_df.index)
 
 
 def test_init():
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=1)
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel(), gamma=1)
     assert model._gamma_0 == 1
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel())
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel())
     assert model._gamma_0 == 0
 
 
 def test_regularize():
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel())
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel())
     pytest.raises(ValueError, model._regularize, X_df, gamma=0)
     X, mask = model._regularize(X_df, y=Y, gamma=0)
     assert np.isclose(X.values,
@@ -56,8 +56,8 @@ def test_regularize():
 
 def test_log_ML_from_lambda():
     g = 0.0
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel())
-    model2 = gpmodel.GPModel(gpkernel.LinearKernel())
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel())
+    model2 = gpmodel.GPRegressor(gpkernel.LinearKernel())
     X, mask = model._regularize(X_df, gamma=g, y=Y)
     model2.fit(X, Y)
     neg_ML = model._log_ML_from_gamma(g, X, Y)
@@ -65,7 +65,7 @@ def test_log_ML_from_lambda():
 
 
 def test_fit():
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=0.1)
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel(), gamma=0.1)
     np.random.seed(1)
     model.fit(X_df, Y)
     assert len(model.X_seqs.columns) == 19
@@ -74,24 +74,24 @@ def test_fit():
 
 
 def test_predict():
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel(), gamma=-2)
     model.fit(X_df, Y)
     np.random.seed(1)
     X_test = np.random.random(size=(1, n_dims))
     X_test = pd.DataFrame(X_test, index=['A'])
     X_masked = X_test.transpose()[model._mask].transpose()
     Y_test = model.predict(X_test)
-    check_model = gpmodel.GPModel(gpkernel.LinearKernel())
+    check_model = gpmodel.GPRegressor(gpkernel.LinearKernel())
     check_model.fit(model.X_seqs, Y)
     Y_check = check_model.predict(X_masked)
     assert np.isclose(Y_test, Y_check).all()
 
 
 def test_dump_and_load():
-    model = gpmodel.LassoGPModel(gpkernel.LinearKernel(), gamma=-2)
+    model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel(), gamma=-2)
     model.fit(X_df, Y)
     model.dump('test.pkl')
-    model_2 = gpmodel.GPModel.load('test.pkl')
+    model_2 = gpmodel.GPRegressor.load('test.pkl')
     assert model.gamma == model_2.gamma
 
 

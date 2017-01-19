@@ -3,80 +3,34 @@
 import numpy as np
 import pandas as pd
 from sys import exit
+import abc
 
 
-class GPKernel(object):
+class BaseKernel(abc.ABC):
 
     """ A Gaussian Process kernel.
 
        Attributes:
            hypers (list)
-           _saved_X (dict)
     """
 
+    @abc.abstractmethod
     def __init__(self):
         """ Create a GPKernel. """
-        self._saved_X = {}
         self.hypers = []
 
-    def set_X(self, X):
-        """ Set a default set of inputs X.
-
-        Parameters:
-            X (pd.DataFrame)
-        """
-        self.train(X)
-
-    def train(self, X):
-        """ Remember the inputs in X.
-
-        Parameters:
-            X (pd.DataFrame): Saves the inputs in X to a dictionary
-                using the index as the keys.
-        """
-        for i in range(len(X.index)):
-            if X.index[i] in self._saved_X.keys():
-                pass
-            else:
-                self._saved_X[X.index[i]] = X.iloc[i]
-
-    def delete(self, X=None):
-        """ Forget the inputs in X.
-
-        Parameters:
-            X (pd.DataFrame): Deletes the inputs in X
-        """
-        if X is None:
-            self._saved_X = {}
-            return
-        else:
-            for i in range(len(X.index)):
-                if X.index[i] in self._saved_X.keys():
-                    del self._saved_X[X.index[i]]
-
-    def _get_X(self, x):
-        """ Retrieve an input x.
-
-        Parameters:
-            x: x can be the key used to remember x or the actual values.
-
-        Returns:
-            x
-        """
-        try:
-            return self._saved_X[x]
-        except (KeyError, AttributeError, TypeError):
-            return x
+    @abc.abstractmethod
+    def cov(self, X1, X2, hypers=None):
+        """ Calculate the covariance. """
+        return np.zeros((len(X1), len(X2)))
 
 
-class PolynomialKernel(GPKernel):
+class PolynomialKernel(BaseKernel):
 
     """ A Polynomial kernel of the form (s0 + sp * x.T*x)^d
 
     Attributes:
     hypers (list): names of the hyperparameters required
-    _saved_X (dict): dict of saved index:X pairs
-    _dots (np.ndarray): saved default x.T*x
     _deg (integer): degree of polynomial
     """
 
@@ -86,45 +40,20 @@ class PolynomialKernel(GPKernel):
         Parameters:
             d (integer): degree of the polynomial
         """
-        GPKernel.__init__(self)
         if not isinstance(d, int):
             raise TypeError('d must be an integer.')
         if d < 1:
             raise ValueError('d must be greater than or equal to 1.')
         self.hypers = ['sigma_0', 'sigma_p']
         self._deg = d
-        self._dot = np.array([[]])
 
-    def calc_kernel(self, x1, x2, hypers):
-        """ Calculate the polynomial kernel between x1 and x2.
+    def cov(self, X1, X2, hypers=None):
+        """ Calculate the polynomial covariance matrix between X1 and X2.
 
         Parameters:
-            x1 (np.ndarray or string): either an array
-                representing the sequence or the key for that sequence
-                if it has been saved.
-            x2 (np.ndarray or string)
+            X1 (np.ndarray):
+            X2 (np.ndarray)
             hypers (iterable):
-
-        Returns:
-            k (float)
-        """
-        x1 = self._get_X(x1)
-        x2 = self._get_X(x2)
-        sigma_0, sigma_p = hypers
-        try:
-            dot = np.dot(x1.T, x2)
-        except AttributeError:
-            dot = x1 * x2
-        return np.power(sigma_0 ** 2 + sigma_p ** 2 * dot, self._deg)
-
-    def make_K(self, Xs=None, hypers=None):
-        """ Calculate the Matern kernel matrix for the points in Xs.
-
-        Parameters:
-            Xs (np.ndarray or pd.DataFrame): If none given, uses
-                saved values.
-            hypers (iterable): the hyperparameters. Default is
-                sigma_0 = sigma_p = 1.0.
 
         Returns:
             K (np.ndarray)
@@ -133,45 +62,8 @@ class PolynomialKernel(GPKernel):
             sigma_0, sigma_p = (1.0, 1.0)
         else:
             sigma_0, sigma_p = hypers
-        if Xs is None:
-            dots = self._dots
-        else:
-            dots = self._get_all_dots(Xs)
-        return np.power(sigma_0 ** 2 + sigma_p ** 2 * dots, self._deg)
-
-    def set_X(self, X):
-        """ Remember a default set of inputs X.
-
-        Extends the method from GPKernel by also remembering an array
-        of dot products between the inputs in X.
-
-        Parameters:
-            X (np.ndarray or pd.DataFrame)
-        """
-        self.train(X)
-        self._dots = self._get_all_dots(X)
-
-    def _get_all_dots(self, X):
-        """ Calculates the dot products between x_i in X.
-
-        Each row of X represents one measurement. Each column represents
-        a dimension.
-
-        Parameters:
-            X: np.ndarray or np.matrix or pd.Dataframe
-
-        Returns:
-            D (np.ndarray or float)
-        """
-        X = np.array(X)
-        dims = np.shape(X)
-        n = dims[0]
-        d = np.empty((n, n))
-        for i in range(n):
-            for j in range(i+1):
-                d[i][j] = np.dot(X[j], X[i])
-                d[j][i] = d[i][j]
-        return d
+        dot = np.dot(X1.T, X2)
+        return np.power(sigma_0 ** 2 + sigma_p ** 2 * dot, self._deg)
 
 
 class MaternKernel(GPKernel):
@@ -182,7 +74,6 @@ class MaternKernel(GPKernel):
         hypers (list): names of the hyperparameters required
         _saved_X (dict): dict of saved index:X pairs
         nu (string): '3/2' or '5/2'
-        _d (np.ndarray): saved default geometric distances
     """
 
     def __init__(self, nu):
@@ -191,46 +82,28 @@ class MaternKernel(GPKernel):
         Parameters:
             nu (string): '3/2' or '5/2'
         """
-        GPKernel.__init__(self)
         if nu not in ['3/2', '5/2']:
             raise ValueError("nu must be '3/2' or '5/2'")
         self.hypers = ['ell']
         self.nu = nu
-        self._d = np.array([[]])
 
-    def calc_kernel(self, x1, x2, hypers):
-        """ Calculate the Matern kernel between x1 and x2.
+    def cov(self, X1, X2, hypers=None):
+        """ Calculate the Matern kernel between X1 and X2.
 
         Parameters:
-            x1 (np.ndarray or string): either an array
-                representing the sequence or the key for that sequence
-                if it has been saved.
-            x2 (np.ndarray or string)
+            X1 (np.ndarray):
+            x2 (np.ndarray)
             hypers (iterable): default is ell=1.0.
-
-        Returns:
-            k (float)
-        """
-        d = self._distance(x1, x2)
-        return float(self._matern(d, hypers))
-
-    def make_K(self, Xs=None, hypers=[1.0]):
-        """ Calculate the Matern kernel matrix for the points in Xs.
-
-        Parameters:
-            Xs (np.ndarray or pd.DataFrame): If none given, uses
-                saved values.
-            hypers (iterable): the hyperparameters. Default is ell=1.0.
 
         Returns:
             K (np.ndarray)
         """
-        if Xs is None:
-            return self._matern(self._d, hypers)
+        if hypers = None:
+            ell = 1.0
         else:
-            d = self._get_d(Xs)
-            K = self._matern(d, hypers)
-            return K
+            ell = hypers[0]
+        return float(self._matern(d, hypers))
+
 
     def set_X(self, X):
         """ Remember a default set of inputs X.
@@ -265,36 +138,18 @@ class MaternKernel(GPKernel):
             M = first * second
         return M
 
-    def _distance(self, x1, x2):
-        """ Calculate the geometric distance between two points.
+    def _get_d(self, X1, X2):
+        """ Calculates the geometric distances between rows of X1 and X2.
 
-        The geometric distance between two points is the L2 norm of
-        their difference.
-
-        Parameters:
-            x1 (np.ndarray or string): either a array
-                representing the sequence or the key for that sequence
-                if it has been saved.
-            seq2 (np.ndarray or string)
-
-        Returns:
-            d (float)
-        """
-        x1 = self._get_X(x1)
-        x2 = self._get_X(x2)
-        return np.linalg.norm(x1 - x2)
-
-    def _get_d(self, xs):
-        """ Calculates the geometric distances between x_i in xs.
-
-        Each row of xs represents one measurement. Each column represents
-        a dimension.
+        Each row of X1 and C2 represents one measurement. Each column
+        represents a dimension.
 
         Parameters:
-            xs: ndarray or np.matrix or pd.Dataframe
+            X1 (np.ndarray)
+            X2 (np.ndarray)
 
         Returns:
-            D (np.ndarray or float)
+            D (np.ndarray)
         """
         xs = np.array(xs)
         A = np.sum(xs ** 2, axis=1).reshape((len(xs), 1))

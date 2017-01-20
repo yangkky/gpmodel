@@ -28,6 +28,7 @@ class BaseKernel(abc.ABC):
     def fit(self, X):
         return
 
+
 class PolynomialKernel(BaseKernel):
 
     """ A Polynomial kernel of the form (s0 + sp * x.T*x)^d

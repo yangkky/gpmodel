@@ -137,7 +137,7 @@ class GPRegressor(BaseGPModel):
                 Hypers = namedtuple('Hypers', list(hypers.keys()))
                 self.hypers = Hypers(**hypers)
 
-    def fit(self, X_seqs, Y, variances=None):
+    def fit(self, X, Y, variances=None):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
@@ -152,12 +152,13 @@ class GPRegressor(BaseGPModel):
             variances (pandas.Series): measurement variances. Index must
                 match index for Y. Optional.
         '''
-        self.X_seqs = X_seqs
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kern.delete()
-        self.kern.set_X(X_seqs)
-        self.mean_func.fit(X_seqs, Y)
+        self.kern.fit(X)
+        self.mean_func.fit(X, Y)
         self.Y = Y - self.mean_func.means
         self.mean, self.std, self.normed_Y = self._normalize(self.Y)
         if variances is not None:
@@ -205,10 +206,10 @@ class GPRegressor(BaseGPModel):
         if len(hypers) == len(self.kern.hypers):
             if self.variances is None:
                 raise AttributeError('No variances given.')
-            K = self.kern.make_K(hypers=hypers)
+            K = self.kern.cov(hypers=hypers)
             Ky = K + np.diag(self.variances)
         elif len(hypers) == len(self.kern.hypers) + 1:
-            K = self.kern.make_K(hypers=hypers[1::])
+            K = self.kern.cov(hypers=hypers[1::])
             Ky = K + np.identity(len(K)) * hypers[0]
         else:
             raise AttributeError('len(hypers) does not match')
@@ -266,34 +267,29 @@ class GPRegressor(BaseGPModel):
             var *= self.std**2
         return (E.item(), var.item())
 
-    def predict(self, new_seqs, delete=True):
+    def predict(self, X):
         """ Make predictions for each sequence in new_seqs.
 
         Uses Equations 2.23 and 2.24 of RW
         Parameters:
-            new_seqs (DataFrame): sequences to predict.
-                They must have unique indices.
+            new_seqs (pd.DataFrame or np.ndarray): sequences to predict.
 
          Returns:
-            predictions (list): (E,v) as floats
+            predictions (np.ndarray): len(X) x 2. Columns are means
+                and variances.
         """
-        predictions = []
-        self.kern.train(new_seqs)
         h = self.hypers[1::]
-        for ns in new_seqs.index:
-            k = np.array([self.kern.calc_kernel(ns, seq1,
-                                                hypers=h)
-                          for seq1 in self.X_seqs.index])
-            k = k.reshape(1, len(k))
-            k_star = self.kern.calc_kernel(ns, ns,
-                                           hypers=h)
-            predictions.append(self._predict(k, k_star))
-        if delete:
-            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
-            self.kern.delete(new_seqs.loc[inds, :])
-        means = self.mean_func.mean(new_seqs)
-        predictions = [(m+p, v) for p, (m, v) in zip(means, predictions)]
-        return predictions
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        k_star = self.kern.cov(X, self.X, hypers=h)
+        k_star_star = self.kern.cov(X, X, hypers=h)
+        E = k_star @ self._alpha
+        v = np.zeros(len(self.X), len(X))
+        for i in range(len(X)):
+            v[:, i] = chol.modified_cholesky_lower_tri_solve(L, self._p,
+                                                             k_star[i])
+        var = k_star - v.T @ v
+        return np.concatenate((E, V), axis=0)
 
     def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
@@ -442,8 +438,7 @@ class GPClassifer(BaseGPModel):
         self.X_seqs = X_seqs
         self.Y = Y
         self._ell = len(Y)
-        self.kern.delete()
-        self.kern.set_X(X_seqs)
+        self.kern.fit(X_seqs)
         n_guesses = len(self.kern.hypers)
         if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
@@ -470,7 +465,7 @@ class GPClassifer(BaseGPModel):
         self._f_hat = self._find_F(hypers=self.hypers)
         self._W = self._hess(self._f_hat)
         self._W_root = np.sqrt(self._W)
-        self._Ky = np.matrix(self.kern.make_K(hypers=self.hypers))
+        self._Ky = np.matrix(self.kern.cov(hypers=self.hypers))
         triple_dot = self._W_root @ self._Ky @ self._W_root
         self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
                                                      triple_dot)
@@ -505,7 +500,7 @@ class GPClassifer(BaseGPModel):
                                  args=(f_bar.item(), var.item()))[0]
         return (pi_star, f_bar.item(), var.item())
 
-    def predict(self, new_seqs, delete=True):
+    def predict(self, new_seqs):
         """ Make predictions for each sequence in new_seqs.
 
         Uses Equations 2.23 and 2.24 of RW
@@ -520,16 +515,13 @@ class GPClassifer(BaseGPModel):
         self.kern.train(new_seqs)
         h = self.hypers
         for ns in new_seqs.index:
-            k = np.array([self.kern.calc_kernel(ns, seq1,
-                                                hypers=h)
+            k = np.array([self.kern.cov(ns, seq1,
+                                        hypers=h)
                           for seq1 in self.X_seqs.index])
             k = k.reshape(1, len(k))
-            k_star = self.kern.calc_kernel(ns, ns,
-                                           hypers=h)
+            k_star = self.kern.cov(ns, ns,
+                                   hypers=h)
             predictions.append(self._predict(k, k_star))
-        if delete:
-            inds = list(set(new_seqs.index) - set(self.X_seqs.index))
-            self.kern.delete(new_seqs.loc[inds, :])
         return predictions
 
     def _p_integral(self, z, mean, variance):
@@ -662,7 +654,7 @@ class GPClassifer(BaseGPModel):
             f_hat = guess
         else:
             raise ValueError('Initial guess must have same dimensions as Y')
-        K = self.kern.make_K(hypers=hypers)
+        K = self.kern.cov(hypers=hypers)
         n_below = 0
         for i in range(evals):
             # find new f_hat
@@ -706,7 +698,7 @@ class GPClassifer(BaseGPModel):
             _logq (float)
         '''
         ell = self._ell
-        K = self.kern.make_K(hypers=hypers)
+        K = self.kern.cov(hypers=hypers)
         W = self._hess(F)
         W_root = np.sqrt(W)
         F_mat = F.values.reshape(len(F), 1)

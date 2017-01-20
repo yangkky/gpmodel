@@ -24,6 +24,9 @@ class BaseKernel(abc.ABC):
         """ Calculate the covariance. """
         return np.zeros((len(X1), len(X2)))
 
+    @abc.abstractmethod
+    def fit(self, X):
+        return
 
 class PolynomialKernel(BaseKernel):
 
@@ -46,28 +49,45 @@ class PolynomialKernel(BaseKernel):
             raise ValueError('d must be greater than or equal to 1.')
         self.hypers = ['sigma_0', 'sigma_p']
         self._deg = d
+        self._saved = None
+        self._X = None
 
-    def cov(self, X1, X2, hypers=None):
+    def fit(self, X):
+        """ Remember an input. """
+        self._saved = X @ X.T
+
+    def cov(self, X1=None, X2=None, hypers=(1.0, 1.0)):
         """ Calculate the polynomial covariance matrix between X1 and X2.
+
+        If neither X1 nor X2 is given, they are assumed to be saved from fit.
 
         Parameters:
             X1 (np.ndarray):
-            X2 (np.ndarray)
+            X2 (np.ndarray):
             hypers (iterable):
 
         Returns:
             K (np.ndarray)
         """
-        if hypers is None:
-            sigma_0, sigma_p = (1.0, 1.0)
-        else:
-            sigma_0, sigma_p = hypers
-        return np.power(sigma_0 ** 2 + sigma_p ** 2 * X1.T @ X2, self._deg)
+        sigma_0, sigma_p = hypers
+        if X1 is None and X2 is None:
+            return np.power(sigma_0 ** 2 + sigma_p ** 2 * self._saved,
+                            self._deg)
+        return np.power(sigma_0 ** 2 + sigma_p ** 2 * X1 @ X2.T, self._deg)
 
 
 class BaseRadialKernel(BaseKernel):
 
     """ Base class for radial kernel functions. """
+
+    def __init__(self):
+        return
+
+    def cov(self, X1, X2, hypers=None):
+        return BaseKernel.cov(X1, X2)
+
+    def fit(self, X):
+        self._saved = self._distance(X, X)
 
     def _distance(self, X1, X2):
         """ Calculates the squared distances between rows of X1 and X2.
@@ -82,11 +102,10 @@ class BaseRadialKernel(BaseKernel):
         Returns:
             D (np.ndarray): n x m
         """
-        xs = np.array(xs)
-        A = np.sum(xs ** 2, axis=1).reshape((len(X1), 1))
-        B = np.sum(xs ** 2, axis=1).reshape((len(X2), 1)).T
+        A = np.sum(X1 ** 2, axis=1).reshape((len(X1), 1))
+        B = np.sum(X2 ** 2, axis=1).reshape((len(X2), 1)).T
         C = 2 * X1 @ X2.T
-        return A + B - C
+        return np.abs(A + B - C)
 
 
 class MaternKernel(BaseRadialKernel):
@@ -110,7 +129,11 @@ class MaternKernel(BaseRadialKernel):
         self.hypers = ['ell']
         self.nu = nu
 
-    def cov(self, X1, X2, hypers=None):
+    def fit(self, X):
+        BaseRadialKernel.fit(self, X)
+        self._saved = np.sqrt(self._saved)
+
+    def cov(self, X1=None, X2=None, hypers=(1.0, )):
         """ Calculate the Matern kernel between X1 and X2.
 
         Parameters:
@@ -121,18 +144,24 @@ class MaternKernel(BaseRadialKernel):
         Returns:
             K (np.ndarray)
         """
-        if hypers = None:
-            ell = 1.0
+        if X1 is None and X2 is None:
+            D = self._saved
         else:
-            ell = hypers[0]
-        D = np.sqrt(self._distance(X1, X2))
+            D = np.sqrt(self._distance(X1, X2))
         if self.nu == '3/2':
-            M = (1.0 + np.sqrt(3.0) * D / ell) * np.exp(-np.sqrt(3) * D / ell)
+            return self._m32(D, hypers)
         elif self.nu == '5/2':
-            first = (1.0 + np.sqrt(5.0)*D/ell) + 5.0*np.power(D, 2)/3.0/ell**2
-            second = np.exp(-np.sqrt(5.0) * D / ell)
-            M = first * second
-        return M
+            return self._m52(D, hypers)
+
+    def _m32(self, D, hypers):
+        ell = hypers[0]
+        return (1.0 + np.sqrt(3.0) * D / ell) * np.exp(-np.sqrt(3) * D / ell)
+
+    def _m52(self, D, hypers):
+        ell = hypers[0]
+        first = (1.0 + np.sqrt(5.0)*D/ell) + 5.0*np.power(D, 2)/3.0/ell**2
+        second = np.exp(-np.sqrt(5.0) * D / ell)
+        return first * second
 
 
 class SEKernel(BaseRadialKernel):
@@ -149,7 +178,7 @@ class SEKernel(BaseRadialKernel):
         """ Initiate a SEKernel. """
         self.hypers = ['sigma_f', 'ell']
 
-    def cov(self, X1, X2, hypers=None):
+    def cov(self, X1=None, X2=None, hypers=(1.0, 1.0)):
         """ Calculate the squared exponential kernel between x1 and x2.
 
         Parameters:
@@ -160,11 +189,11 @@ class SEKernel(BaseRadialKernel):
         Returns:
             K (np.ndarray)
         """
-        if hypers = None:
-            sigma_f, ell = 1.0, 1.0
+        sigma_f, ell = hypers
+        if X1 is None and X2 is None:
+            D = self._saved
         else:
-            sigma_f, ell = hypers
-        D = self._distance(X1, X2)
+            D = self._distance(X1, X2)
         return sigma_f**2 * np.exp(-0.5/np.power(ell, 2) * D)
 
 
@@ -198,7 +227,11 @@ class SumKernel(BaseKernel):
         hypers_inds = np.insert(hypers_inds, 0, 0)
         self.hypers_inds = hypers_inds.astype(int)
 
-    def calc_kernel(self, X1, X2, hypers=None):
+    def fit(self, X):
+        for kernel in self._kernels:
+            kernel.fit(X)
+
+    def cov(self, X1=None, X2=None, hypers=None):
         """ Calculate the sum kernel between two inputs.
 
         Parameters:
@@ -217,7 +250,7 @@ class SumKernel(BaseKernel):
             Ks = [kern.cov(X1, X2, hypers[hypers_inds[i]:
                                           hypers_inds[i+1]])
                   for i, kern in enumerate(self._kernels)]
-        return np.sum(Ks)
+        return sum(Ks)
 
 
 class LinearKernel(BaseKernel):
@@ -228,7 +261,10 @@ class LinearKernel(BaseKernel):
         """ Initiates a LinearKernel. """
         self.hypers = ['var_p']
 
-    def calc_kernel(self, X1, X2, hypers=None):
+    def fit(self, X):
+        self._saved = X @ X.T
+
+    def cov(self, X1=None, X2=None, hypers=(1.0, )):
         """ Calculate the linear kernel between x1 and x2.
 
         The linear kernel is the dot product of x1 and x2 multiplied
@@ -243,4 +279,6 @@ class LinearKernel(BaseKernel):
             K (np.ndarray)
         """
         vp = hypers[0]
+        if X1 is None and X2 is None:
+            return vp * self._saved
         return vp * X1 @ X2.T

@@ -22,7 +22,7 @@ class BaseGPModel(abc.ABC):
 
     @abc.abstractmethod
     def __init__(self, kernel):
-        self.kern = kernel
+        self.kernel = kernel
 
     @abc.abstractmethod
     def predict(self, X):
@@ -43,11 +43,6 @@ class BaseGPModel(abc.ABC):
             setattr(self, key, value)
         hypers = kwargs.get('hypers', None)
         self._make_hypers(hypers)
-
-    @abc.abstractmethod
-    def _make_hypers(self, hypers):
-        """ Set hyperparameters for model. """
-        return
 
     @classmethod
     def load(cls, model):
@@ -128,10 +123,10 @@ class GPRegressor(BaseGPModel):
         if hypers is not None:
             if type(hypers) is not dict:
                 if self.variances is None:
-                    hypers_list = ['var_n'] + self.kern.hypers
+                    hypers_list = ['var_n'] + self.kernel.hypers
                     Hypers = namedtuple('Hypers', hypers_list)
                 else:
-                    Hypers = namedtuple('Hypers', self.kern.hypers)
+                    Hypers = namedtuple('Hypers', self.kernel.hypers)
                 self.hypers = Hypers._make(hypers)
             else:
                 Hypers = namedtuple('Hypers', list(hypers.keys()))
@@ -147,28 +142,29 @@ class GPRegressor(BaseGPModel):
         a global measurement variance will be estimated.
 
         Parameters:
-            X_seqs (pandas.DataFrame): Sequences in training set
-            Y (pandas.Series): measurements in training set
-            variances (pandas.Series): measurement variances. Index must
-                match index for Y. Optional.
+            X (np.ndarray): n x d
+            Y (np.ndarray): n.
+            variances (np.ndarray): n. Optional.
         '''
         if isinstance(X, pd.DataFrame):
             X = X.values
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kern.fit(X)
-        self.mean_func.fit(X, Y)
-        self.Y = Y - self.mean_func.means
+        self.kernel.fit(X)
         self.mean, self.std, self.normed_Y = self._normalize(self.Y)
+        self.mean_func.fit(X, self.normed_Y)
+        self.normed_Y -= self.mean_func.mean(X).T[0]
         if variances is not None:
             if not np.array_equal(variances.index, Y.index):
                 raise AttributeError('Indices do not match.')
             self.variances = variances / self.std**2
-            n_guesses = len(self.kern.hypers)
+            n_guesses = len(self.kernel.hypers)
         else:
             self.variances = None
-            n_guesses = 1 + len(self.kern.hypers)
+            n_guesses = 1 + len(self.kernel.hypers)
         if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
         else:
@@ -182,34 +178,21 @@ class GPRegressor(BaseGPModel):
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
-        self._set_hypers(minimize_res['x'])
-
-    def _set_hypers(self, hypers):
-        ''' Set model.hypers and quantities used for making predictions.
-
-        Parameters:
-            hypers (iterable or dict)
-        '''
-        self._make_hypers(hypers)
-        self._K, self._Ky = self._make_Ks(hypers)
-        self._L, self._p, _ = chol.modified_cholesky(self._Ky)
-        mat_Y = self.normed_Y.T.values
-        self._alpha = chol.modified_cholesky_solve(self._L, self._p, mat_Y)
-        first = 0.5 * np.dot(mat_Y, self._alpha)
-        second = np.sum(np.log(np.diag(self._L)))
-        third = len(self._K)/2.*np.log(2*np.pi)
-        self.ML = (first+second+third).item()
-        self.log_p = self._LOO_log_p(self.hypers)
+        self._make_hypers(minimize_res['x'])
+        if self.objective == self._log_ML:
+            self.log_p = self._LOO_log_p(self.hypers)
+        else:
+            self.ML = self._log_ML(self.hypers)
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
-        if len(hypers) == len(self.kern.hypers):
+        if len(hypers) == len(self.kernel.hypers):
             if self.variances is None:
                 raise AttributeError('No variances given.')
-            K = self.kern.cov(hypers=hypers)
+            K = self.kernel.cov(hypers=hypers)
             Ky = K + np.diag(self.variances)
-        elif len(hypers) == len(self.kern.hypers) + 1:
-            K = self.kern.cov(hypers=hypers[1::])
+        elif len(hypers) == len(self.kernel.hypers) + 1:
+            K = self.kernel.cov(hypers=hypers[1::])
             Ky = K + np.identity(len(K)) * hypers[0]
         else:
             raise AttributeError('len(hypers) does not match')
@@ -242,54 +225,33 @@ class GPRegressor(BaseGPModel):
         """
         return normed*self.std + self.mean
 
-    def _predict(self, k, k_star, alpha=None, L=None, unnorm=True):
-        """ Make prediction for one sequence.
-
-        Predicts the mean and variance for one new sequence given its
-        covariance vector.
-
-        Uses Equations 2.23 and 2.24 of RW
-
-        Parameters:
-            k (np.matrix): k in equations 2.23 and 2.24
-            k_star (float): k* in equation 2.24
-
-        Returns:
-            res (tuple): (E,v) as floats
-        """
-        alpha = self._alpha
-        L = self._L
-        E = np.dot(k, alpha)
-        v = chol.modified_cholesky_lower_tri_solve(L, self._p, k[0])
-        var = k_star - np.dot(v.T, v)
-        if unnorm:
-            E = self.unnormalize(E)
-            var *= self.std**2
-        return (E.item(), var.item())
-
     def predict(self, X):
         """ Make predictions for each sequence in new_seqs.
+
+        Predictions are scaled as the original outputs (not normalized)
 
         Uses Equations 2.23 and 2.24 of RW
         Parameters:
             new_seqs (pd.DataFrame or np.ndarray): sequences to predict.
 
          Returns:
-            predictions (np.ndarray): len(X) x 2. Columns are means
-                and variances.
+            means, cov as np.ndarrays. means.shape is (n,), cov.shape is (n,n)
         """
         h = self.hypers[1::]
         if isinstance(X, pd.DataFrame):
             X = X.values
-        k_star = self.kern.cov(X, self.X, hypers=h)
-        k_star_star = self.kern.cov(X, X, hypers=h)
+        k_star = self.kernel.cov(X, self.X, hypers=h)
+        k_star_star = self.kernel.cov(X, X, hypers=h)
         E = k_star @ self._alpha
-        v = np.zeros(len(self.X), len(X))
+        v = np.zeros((len(self.X), len(X)))
         for i in range(len(X)):
-            v[:, i] = chol.modified_cholesky_lower_tri_solve(L, self._p,
+            v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
                                                              k_star[i])
-        var = k_star - v.T @ v
-        return np.concatenate((E, V), axis=0)
+        var = k_star_star - v.T @ v
+        E += self.mean_func.mean(X)
+        E = self.unnormalize(E)
+        var *= self.std ** 2
+        return E, var
 
     def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
@@ -302,15 +264,16 @@ class GPRegressor(BaseGPModel):
         Returns:
             log_ML (float)
         """
-        Y = self.normed_Y.T.values
-        K, Ky = self._make_Ks(hypers)
-        L, p, _ = chol.modified_cholesky(Ky)
-        alpha = chol.modified_cholesky_solve(L, p, Y)
-        first = 0.5 * np.dot(Y, alpha)
-        second = np.sum(np.log(np.diag(L)))
-        third = len(K)/2.*np.log(2*np.pi)
-        ML = (first+second+third).item()
-        return ML
+        self._K, self._Ky = self._make_Ks(hypers)
+        self._L, self._p, _ = chol.modified_cholesky(self._Ky)
+        self._alpha = chol.modified_cholesky_solve(self._L, self._p,
+                                                   self.normed_Y)
+        self._alpha = self._alpha.reshape(self._ell, 1)
+        first = 0.5 * np.dot(self.normed_Y, self._alpha)
+        second = np.sum(np.log(np.diag(self._L)))
+        third = len(self._K)/2.*np.log(2*np.pi)
+        self.ML = (first+second+third).item()
+        return self.ML
 
     def _LOO_log_p(self, hypers):
         """ Calculates the negative LOO log probability.
@@ -322,8 +285,8 @@ class GPRegressor(BaseGPModel):
             log_p
         """
         LOO = self.LOO_res(hypers)
-        vs = LOO['v']
-        mus = LOO['mu']
+        vs = LOO[:, 1]
+        mus = LOO[:, 0]
         log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs
         log_ps -= 0.5*np.log(2*np.pi)
         return_me = -sum(log_ps)
@@ -342,11 +305,11 @@ class GPRegressor(BaseGPModel):
                 Default is False unless the mean is added back, in which
                 case always True.
         Returns:
-            res (pandas.DataFrame): columns are 'mu' and 'v'
+            res (np.ndarray): columns are 'mu' and 'v'
         """
         K, Ky = self._make_Ks(hypers)
         K_inv = np.linalg.inv(Ky)
-        Y = self.normed_Y.values.reshape(len(self.normed_Y), 1)
+        Y = self.normed_Y
         mus = np.diag(Y - np.dot(K_inv, Y) / K_inv)
         vs = np.diag(1 / K_inv)
         if add_mean or unnorm:
@@ -355,8 +318,7 @@ class GPRegressor(BaseGPModel):
             vs *= self.std**2
         if add_mean:
             mus += self.mean_func.means
-        return pd.DataFrame(list(zip(mus, vs)), index=self.normed_Y.index,
-                            columns=['mu', 'v'])
+        return np.array(list(zip(mus, vs)))
 
     def score(self, X, Y, *args):
         ''' Score the model on the given points.
@@ -425,20 +387,20 @@ class GPClassifer(BaseGPModel):
                 Hypers = namedtuple('Hypers', list(hypers.keys()))
                 self.hypers = Hypers(**hypers)
 
-    def fit(self, X_seqs, Y, variances=None):
+    def fit(self, X, Y, variances=None):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
         Update all dependent values.
 
         Parameters:
-            X_seqs (pandas.DataFrame): Sequences in training set
-            Y (pandas.Series): measurements in training set
+            X (np.ndarray): Sequences in training set
+            Y (np.ndarray): measurements in training set
         '''
-        self.X_seqs = X_seqs
+        self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kern.fit(X_seqs)
+        self.kernel.fit(X_seqs)
         n_guesses = len(self.kern.hypers)
         if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
@@ -453,7 +415,7 @@ class GPClassifer(BaseGPModel):
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
-        self._set_hypers(minimize_res['x'])
+        self._make_hypers(minimize_res['x'])
 
     def _set_hypers(self, hypers):
         ''' Set model.hypers and quantities used for making predictions.

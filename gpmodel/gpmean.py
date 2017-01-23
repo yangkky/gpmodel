@@ -31,7 +31,7 @@ class GPMean(object):
         if self._clf is not None:
             return self._clf.predict(X)
         else:
-            return np.zeros(len(X))
+            return np.zeros((len(X), 1))
 
 
 class StructureSequenceMean(GPMean):

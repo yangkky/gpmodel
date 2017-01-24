@@ -503,11 +503,8 @@ class GPClassifer(BaseGPModel):
             first = 1./(1+np.exp(-z))
         except OverflowError:
             first = 0.
-        try:
-            second = 1/np.sqrt(2*np.pi*variance)
-        except:
-            second = -1
-        third = np.exp(-(z-mean)**2/(2*variance))
+        second = 1 / np.sqrt(2 * np.pi * variance)
+        third = np.exp(-(z-mean) ** 2 / (2*variance))
         return first*second*third
 
     def _log_ML(self, hypers):
@@ -528,15 +525,17 @@ class GPClassifer(BaseGPModel):
     def _logistic_likelihood(self, Y, F):
         ''' Calculate logistic likelihood.
 
-        Calculates the logistic probability of the outcome y given
-        the latent  variable f according to Equation 3.2 in RW.
+        Calculates the logistic probability of the outcomes G given
+        the latent variables F according to Equation 3.2 in RW.
+
+        Inputs for all the probability functions must be floats or 1D arrays.
 
         Parameters:
             Y (float or np.ndarray): +/- 1
             F (float or np.ndarray): value of latent function
 
         Returns:
-            float
+            float or ndarray
         '''
         if isinstance(Y, np.ndarray):
             if not ((Y == 1).astype(int) + (Y == -1).astype(int)).all():
@@ -544,7 +543,7 @@ class GPClassifer(BaseGPModel):
         else:
             if int(Y) not in [1, -1]:
                 raise RuntimeError('Y must be -1 or 1')
-        return 1./(1+np.exp(-Y*F))
+        return 1./(1 + np.exp(-Y * F))
 
     def _log_logistic_likelihood(self, Y, F):
         """ Calculate the log logistic likelihood.
@@ -554,15 +553,15 @@ class GPClassifer(BaseGPModel):
         3.15 of RW.
 
         Parameters:
-            Y (Series): outputs, +/-1
-            F (Series): values for the latent function
+            Y (np.ndarray): outputs, +/-1
+            F (np.ndarray): values for the latent function
 
         Returns:
             lll (float): log logistic likelihood
         """
-        if len(Y) != len(F):
+        if isinstance(Y, np.ndarray) and len(Y) != len(F):
             raise RuntimeError('Y and F must be the same length')
-        lll = np.sum(np.log(self._logistic_likelihood(Y.values, F.values)))
+        lll = np.sum(np.log(self._logistic_likelihood(Y, F)))
         return lll
 
     def _grad_log_logistic_likelihood(self, Y, F):
@@ -573,32 +572,29 @@ class GPClassifer(BaseGPModel):
         Uses Equation 3.15 of RW.
 
         Parameters:
-            Y (Series): outputs, +/-1
-            F (Series): values for the latent function
+            Y (np.ndarray): outputs, +/-1
+            F (np.ndarray): values for the latent function
 
         Returns:
             glll (np.ndarray): diagonal matrix containing the
                 gradient of the log likelihood
         """
-        Y = Y.values
-        F = F.values
         glll = (Y + 1) / 2.0 - self._logistic_likelihood(1.0, F)
         return np.diag(glll)
 
     def _hess(self, F):
-        """ Calculate the negative _hessian of the logistic likelihod.
+        """ Calculate the negative hessian of the logistic likelihod.
 
         Calculates the negative hessian of the logistic likelihood
         according to Equation 3.15 of RW.
 
         Parameters:
-            F (Series): values for the latent function
+            F (np.ndarray): values for the latent function
 
         Returns:
             W (np.matrix): diagonal negative hessian of the log
                 likelihood matrix
         """
-        F = F.values
         pi = self._logistic_likelihood(1.0, F)
         W = pi * (1 - pi)
         return np.diag(W)
@@ -607,16 +603,16 @@ class GPClassifer(BaseGPModel):
         """Calculates f_hat according to Algorithm 3.1 in RW.
 
         Returns:
-            f_hat (pd.Series)
+            f_hat (np.ndarray)
         """
         ell = len(self.Y)
         if guess is None:
-            f_hat = pd.Series(np.zeros(ell))
+            f_hat = np.zeros(ell)
         elif len(guess) == l:
             f_hat = guess
         else:
             raise ValueError('Initial guess must have same dimensions as Y')
-        K = self.kern.cov(hypers=hypers)
+        K = self.kernel.cov(hypers=hypers)
         n_below = 0
         for i in range(evals):
             # find new f_hat
@@ -633,14 +629,12 @@ class GPClassifer(BaseGPModel):
             a = b - W_root.dot(trip_dot_lstsq)
             f_new = K.dot(a)
             f_new = f_new.reshape((len(f_new), ))
-            sq_error = np.sum((f_hat.values - f_new) ** 2)
-            f_new = pd.Series(f_new)
+            sq_error = np.sum((f_hat - f_new) ** 2)
             if sq_error / np.sum(f_new) < threshold:
                 n_below += 1
             else:
                 n_below = 0
             if n_below > 9:
-                f_new.index = self.X_seqs.index
                 return f_new
             f_hat = f_new
         raise RuntimeError('Maximum evaluations reached without convergence.')
@@ -649,7 +643,7 @@ class GPClassifer(BaseGPModel):
         ''' Calculate negative log marginal likelihood.
 
         Finds the negative log marginal likelihood for Laplace's
-        approximation Equation 5.20 or 3.12 from RW, as described
+        approximation Equation 5.20 or 3.32 from RW, as described
         in Algorithm 5.1
 
         Parameters:
@@ -660,21 +654,20 @@ class GPClassifer(BaseGPModel):
             _logq (float)
         '''
         ell = self._ell
-        K = self.kern.cov(hypers=hypers)
+        K = self.kernel.cov(hypers=hypers)
         W = self._hess(F)
         W_root = np.sqrt(W)
-        F_mat = F.values.reshape(len(F), 1)
-        trip_dot = (W_root.dot(K)).dot(W_root)
+        F_mat = F.reshape(len(F), 1)
+        trip_dot = W_root @ K @ W_root
         L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
-        b = W.dot(F_mat)
+        b = W @ F_mat
         b += np.diag(self._grad_log_logistic_likelihood(
             self.Y, F)).reshape(len(F), 1)
-        b = b.reshape(len(b), 1)
-        inside = W_root.dot(K).dot(b).reshape(L.shape[0])
+        inside = (W_root @ K @ b).reshape(L.shape[0])
         trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)
         trip_dot_lstsq = trip_dot_lstsq.reshape(b.shape)
-        a = b - W_root.dot(trip_dot_lstsq)
-        _logq = 0.5 * np.dot(a.T, F_mat) - self._log_logistic_likelihood(
+        a = b - W_root @ trip_dot_lstsq
+        _logq = 0.5 * a.T @ F_mat - self._log_logistic_likelihood(
             self.Y, F) + np.sum(np.log(np.diag(L)))
         return _logq
 

@@ -39,8 +39,8 @@ def test_init():
     assert model.guesses is None
     model = gpmodel.GPRegressor(kernel, objective='LOO_log_p')
     assert model.objective == model._LOO_log_p
-    model = gpmodel.GPRegressor(kernel, guesses=(0.1, 0.1))
-    assert model.guesses == (0.1, 0.1)
+    model = gpmodel.GPRegressor(kernel, guesses=(0.1, 0.1, 0.1))
+    assert model.guesses == (0.1, 0.1, 0.1)
 
 
 def test_normalize():

@@ -318,7 +318,7 @@ class GPRegressor(BaseGPModel):
             vs = np.array(vs).copy()
             vs *= self.std**2
         if add_mean:
-            mus += self.mean_func.means
+            mus += self.mean_func.mean(self.X)[:, 0]
         return np.array(list(zip(mus, vs)))
 
     def score(self, X, Y, *args):
@@ -396,6 +396,10 @@ class GPClassifer(BaseGPModel):
             X (np.ndarray): Sequences in training set
             Y (np.ndarray): measurements in training set
         '''
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         self.X = X
         self.Y = Y
         self._ell = len(Y)
@@ -415,33 +419,6 @@ class GPClassifer(BaseGPModel):
                                 bounds=bounds,
                                 method='L-BFGS-B')
         self._make_hypers(minimize_res['x'])
-
-    def _predict(self, k, k_star, alpha=None, L=None, unnorm=True):
-        """ Make prediction for one sequence.
-
-        Predicts the mean and variance for one new sequence given its
-        covariance vector.
-
-        Uses Equations 2.23 and 2.24 of RW
-
-        Parameters:
-            k (np.matrix): k in equations 2.23 and 2.24
-            k_star (float): k* in equation 2.24
-
-        Returns:
-            res (tuple): probability, f_star, var
-        """
-        f_bar = np.dot(k, self._grad.T)
-        Wk = np.dot(self._W_root, k.T)
-        Wk = Wk.reshape((Wk.shape[0], ))
-        v = chol.modified_cholesky_lower_tri_solve(self._L, self._p, Wk)
-        var = k_star - np.dot(v.T, v)
-        i = 10
-        pi_star = integrate.quad(self._p_integral,
-                                 -i*var+f_bar,
-                                 f_bar+i*var,
-                                 args=(f_bar.item(), var.item()))[0]
-        return (pi_star, f_bar.item(), var.item())
 
     def predict(self, X):
         """ Make predictions for each sequence in new_seqs.

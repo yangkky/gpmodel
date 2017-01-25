@@ -5,6 +5,8 @@ import pandas as pd
 from sys import exit
 import abc
 
+from scipy.spatial import distance
+
 
 class BaseKernel(abc.ABC):
 
@@ -109,6 +111,35 @@ class BaseRadialKernel(BaseKernel):
         return np.abs(A + B - C)
 
 
+class BaseRadialARDKernel(BaseRadialKernel):
+
+    """ Base class for radial kernels with ARD. """
+
+    def fit(self, X):
+        self._saved = X
+
+    def _distance(self, X1, X2, L):
+        """ Calculates squared Mahalanobis distances between rows of X1 and X2.
+
+        Each row of X1 and X2 represents one measurement. Each column
+        represents a dimension.
+
+        Parameters:
+            X1 (np.ndarray): n x d
+            X2 (np.ndarray): m x d
+            L (float or np.ndarray): d x d
+
+        Returns:
+            D (np.ndarray): n x m
+        """
+        if isinstance(L, float):
+            L = np.diag(np.ones(X1.shape[1]) * L)
+        elif isinstance(L, np.ndarray):
+            if len(L.shape) == 1:
+                L = np.diag(L)
+        return distance.cdist(X1, X2, metric='mahalanobis', VI=L) ** 2
+
+
 class MaternKernel(BaseRadialKernel):
 
     """ A Matern kernel with nu = 5/2 or 3/2.
@@ -149,20 +180,56 @@ class MaternKernel(BaseRadialKernel):
             D = self._saved
         else:
             D = np.sqrt(self._distance(X1, X2))
+        L = hypers[0]
+        D_L = D / L
         if self.nu == '3/2':
-            return self._m32(D, hypers)
+            return self._m32(D_L)
         elif self.nu == '5/2':
-            return self._m52(D, hypers)
+            return self._m52(D_L)
 
-    def _m32(self, D, hypers):
-        ell = hypers[0]
-        return (1.0 + np.sqrt(3.0) * D / ell) * np.exp(-np.sqrt(3) * D / ell)
+    def _m32(self, D_L):
+        return (1.0 + np.sqrt(3.0) * D_L) * np.exp(-np.sqrt(3) * D_L)
 
-    def _m52(self, D, hypers):
-        ell = hypers[0]
-        first = (1.0 + np.sqrt(5.0)*D/ell) + 5.0*np.power(D, 2)/3.0/ell**2
-        second = np.exp(-np.sqrt(5.0) * D / ell)
+    def _m52(self, D_L):
+        first = (1.0 + np.sqrt(5.0)*D_L) + 5.0*np.power(D_L, 2)/3.0
+        second = np.exp(-np.sqrt(5.0) * D_L)
         return first * second
+
+
+class ARDMaternKernel(MaternKernel, BaseRadialARDKernel):
+
+    """ An ARD Matern kernel with nu = 5/2 or 3/2.
+
+    Attributes:
+        hypers (list): names of the hyperparameters required
+        _saved_X (dict): dict of saved index:X pairs
+        nu (string): '3/2' or '5/2'
+    """
+
+    def __init__(self, nu):
+        super().__init__(nu)
+
+    def fit(self, X):
+        return BaseRadialARDKernel.fit(self, X)
+
+    def cov(self, X1=None, X2=None, hypers=1.0):
+        """ Calculate the Matern kernel between X1 and X2.
+
+        Parameters:
+            X1 (np.ndarray):
+            X2 (np.ndarray)
+            hypers (iterable): default is ell=1.0.
+
+        Returns:
+            K (np.ndarray)
+        """
+        if X1 is None and X2 is None:
+            X1, X2 = self._saved, self._saved
+        D = np.sqrt(super()._distance(X1, X2, hypers))
+        if self.nu == '3/2':
+            return self._m32(D)
+        elif self.nu == '5/2':
+            return self._m52(D)
 
 
 class SEKernel(BaseRadialKernel):
@@ -195,7 +262,44 @@ class SEKernel(BaseRadialKernel):
             D = self._saved
         else:
             D = self._distance(X1, X2)
-        return sigma_f**2 * np.exp(-0.5/np.power(ell, 2) * D)
+        sigma_f, L = hypers
+        D_L2 = D / L ** 2
+        return self._se(D_L2, sigma_f)
+
+    def _se(self, D_L2, sigma_f):
+        return sigma_f ** 2 * np.exp(-0.5 * D_L2)
+
+
+class ARDSEKernel(SEKernel, BaseRadialARDKernel):
+
+    """ An ARD squared exponential kernel.
+
+    Attributes:
+        hypers (list): names of the hyperparameters required
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def fit(self, X):
+        return BaseRadialARDKernel.fit(self, X)
+
+    def cov(self, X1=None, X2=None, hypers=(1.0, 1.0)):
+        """ Calculate the squared exponential kernel between X1 and X2.
+
+        Parameters:
+            X1 (np.ndarray):
+            X2 (np.ndarray)
+            hypers (iterable): default is ell=1.0.
+
+        Returns:
+            K (np.ndarray)
+        """
+        if X1 is None and X2 is None:
+            X1, X2 = self._saved, self._saved
+        sigma_f, L = hypers
+        D = super()._distance(X1, X2, L)
+        return self._se(D, sigma_f)
 
 
 class SumKernel(BaseKernel):

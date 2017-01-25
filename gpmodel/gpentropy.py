@@ -36,7 +36,7 @@ class GPEntropy(object):
             self.kernel = model.kern
             self.var_n = model.hypers[0]
             self.hypers = model.hypers[1::]
-            self.observed = model.X_seqs
+            self.observed = model.X
             self.observed.index = [str(_) for _ in range(len(self.observed))]
             self.kernel.train(self.observed)
             self._Ky = model._Ky

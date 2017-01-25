@@ -57,9 +57,10 @@ def test_X():
                                                   collapse=False)
     assert np.array_equal(X, actual_X)
 
+
 def test_mean():
     this = gpmean.GPMean()
-    assert np.array_equal(np.zeros(3), this.mean(seqs))
+    assert np.array_equal(np.zeros((3, 1)), this.mean(seqs))
     this = gpmean.StructureSequenceMean(space, contacts, linear_model.Lasso,
                                         alpha=alpha)
     this.fit(seqs, Y)

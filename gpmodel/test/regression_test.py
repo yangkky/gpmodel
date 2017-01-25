@@ -14,7 +14,7 @@ from gpmodel import gpmean
 from gpmodel import chimera_tools
 from cholesky import chol
 
-n = 100
+n = 200
 d = 10
 X = np.random.random(size=(n, d))
 xa = X[[0]]
@@ -130,6 +130,29 @@ def test_predict():
     assert np.allclose(means, m)
 
 
+def test_score():
+    model = gpmodel.GPRegressor(kernel)
+    n_train = int(0.8 * n)
+    X_train = X[0:n_train]
+    X_test = X[n_train::]
+    Y_train = Y[0:n_train]
+    Y_test = Y[n_train::]
+    model.fit(X_train, Y_train)
+    assert 0 < model.score(X_test, Y_test) < 1.0
+
+
+def test_pickles():
+    model = gpmodel.GPRegressor(kernel)
+    model.fit(X, Y)
+    m1, v1 = model.predict(X_test)
+    model.dump('test.pkl')
+    new_model = gpmodel.GPRegressor.load('test.pkl')
+    os.remove('test.pkl')
+    m2, v2 = new_model.predict(X_test)
+    assert np.allclose(m1, m2)
+    assert np.allclose(v1, v2)
+
+
 if __name__ == "__main__":
     test_init()
     test_normalize()
@@ -138,6 +161,8 @@ if __name__ == "__main__":
     test_fit()
     test_LOO()
     test_predict()
+    test_score()
+    test_pickles()
     # To Do:
     # Test LOO_res and LOO_log_p and fitting with LOO_log_p
     # Test with mean functions

@@ -55,8 +55,8 @@ class BaseGPModel(abc.ABC):
         '''
         with open(model, 'rb') as m_file:
             attributes = pickle.load(m_file, encoding='latin1')
-        model = cls(attributes['kern'])
-        del attributes['kern']
+        model = cls(attributes['kernel'])
+        del attributes['kernel']
         if attributes['objective'] == 'LOO_log_p':
             model.objective = model._LOO_log_p
         else:
@@ -81,9 +81,10 @@ class BaseGPModel(abc.ABC):
             save_me['objective'] = 'LOO_log_p'
         save_me['guesses'] = self.guesses
         try:
-            names = self.hypers._fields
-            hypers = {n: h for n, h in zip(names, self.hypers)}
-            save_me['hypers'] = hypers
+            save_me['hypers'] = list(self.hypers)
+            # names = self.hypers._fields
+            # hypers = {n: h for n, h in zip(names, self.hypers)}
+            # save_me['hypers'] = hypers
         except AttributeError:
             pass
         with open(f, 'wb') as f:
@@ -335,13 +336,11 @@ class GPRegressor(BaseGPModel):
                 result is a dict.
         '''
         # Check that X and Y have the same indices
-        if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
+        if not (len(X) == len(Y)):
             raise ValueError
-            ('X and Y must be the same length and have the same indices.')
+            ('X and Y must be the same length.')
         # Make predictions
-        predicted = self.predict(X)
-        pred_Y = [y for (y, v) in predicted]
-
+        pred_Y, _ = self.predict(X)
         # if nothing specified, return Kendall's Tau
         if not args:
             r1 = stats.rankdata(Y)
@@ -358,7 +357,7 @@ class GPRegressor(BaseGPModel):
                 from sklearn.metrics import r2_score
                 scores[t] = r2_score(Y, pred_Y)
             elif t == 'R':
-                scores[t] = np.corrcoef(Y, pred_Y)[0, 1]
+                scores[t] = np.corrcoef(Y, pred_Y[:, 0])[0, 1]
             else:
                 raise ValueError('Invalid metric.')
         if len(list(scores.keys())) == 1:
@@ -381,13 +380,13 @@ class GPClassifer(BaseGPModel):
         """ Set hyperparameters for model. """
         if hypers is not None:
             if type(hypers) is not dict:
-                Hypers = namedtuple('Hypers', self.kern.hypers)
+                Hypers = namedtuple('Hypers', self.kernel.hypers)
                 self.hypers = Hypers._make(hypers)
             else:
                 Hypers = namedtuple('Hypers', list(hypers.keys()))
                 self.hypers = Hypers(**hypers)
 
-    def fit(self, X, Y, variances=None):
+    def fit(self, X, Y):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
@@ -400,8 +399,8 @@ class GPClassifer(BaseGPModel):
         self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kernel.fit(X_seqs)
-        n_guesses = len(self.kern.hypers)
+        self.kernel.fit(X)
+        n_guesses = len(self.kernel.hypers)
         if self.guesses is None:
             guesses = [0.9 for _ in range(n_guesses)]
         else:
@@ -416,24 +415,6 @@ class GPClassifer(BaseGPModel):
                                 bounds=bounds,
                                 method='L-BFGS-B')
         self._make_hypers(minimize_res['x'])
-
-    def _set_hypers(self, hypers):
-        ''' Set model.hypers and quantities used for making predictions.
-
-        Parameters:
-            hypers (iterable or dict)
-        '''
-        self._make_hypers(hypers)
-        self._f_hat = self._find_F(hypers=self.hypers)
-        self._W = self._hess(self._f_hat)
-        self._W_root = np.sqrt(self._W)
-        self._Ky = np.matrix(self.kern.cov(hypers=self.hypers))
-        triple_dot = self._W_root @ self._Ky @ self._W_root
-        self._L, self._p, _ = chol.modified_cholesky(np.eye(self._ell) +
-                                                     triple_dot)
-        self._grad = np.diag(self._grad_log_logistic_likelihood
-                             (self.Y, self._f_hat))
-        self.ML = self._log_ML(self.hypers)
 
     def _predict(self, k, k_star, alpha=None, L=None, unnorm=True):
         """ Make prediction for one sequence.
@@ -462,29 +443,36 @@ class GPClassifer(BaseGPModel):
                                  args=(f_bar.item(), var.item()))[0]
         return (pi_star, f_bar.item(), var.item())
 
-    def predict(self, new_seqs):
+    def predict(self, X):
         """ Make predictions for each sequence in new_seqs.
 
         Uses Equations 2.23 and 2.24 of RW
         Parameters:
-            new_seqs (DataFrame): sequences to predict.
-                They must have unique indices.
+            new_seqs (np.ndarray): sequences to predict.
 
          Returns:
-            predictions (list)
+            pi_star, f_bar, var as np.ndarrays
         """
         predictions = []
-        self.kern.train(new_seqs)
         h = self.hypers
-        for ns in new_seqs.index:
-            k = np.array([self.kern.cov(ns, seq1,
-                                        hypers=h)
-                          for seq1 in self.X_seqs.index])
-            k = k.reshape(1, len(k))
-            k_star = self.kern.cov(ns, ns,
-                                   hypers=h)
-            predictions.append(self._predict(k, k_star))
-        return predictions
+        k_star = self.kernel.cov(X, self.X, hypers=h)
+        k_star_star = self.kernel.cov(X, X, hypers=h)
+        f_bar = np.dot(k_star, self._grad.T)
+        Wk = np.dot(self._W_root, k_star.T)
+        v = np.zeros((len(self.X), len(X)))
+        for i in range(len(X)):
+            v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
+                                                             Wk[:, i])
+        var = k_star_star - np.dot(v.T, v)
+        span = 20
+        pi_star = np.zeros(len(X))
+        for i, preds in enumerate(zip(f_bar, np.diag(var))):
+            f, va = preds
+            pi_star[i] = integrate.quad(self._p_integral,
+                                        -span * va + f,
+                                        span * va + f,
+                                        args=(f, va))[0]
+        return pi_star, f_bar, var
 
     def _p_integral(self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
@@ -519,8 +507,8 @@ class GPClassifer(BaseGPModel):
             log_ML (float)
         """
         f_hat = self._find_F(hypers=hypers)
-        ML = self._logq(f_hat, hypers=hypers)
-        return ML.item()
+        self.ML = self._logq(f_hat, hypers=hypers)[0, 0]
+        return self.ML
 
     def _logistic_likelihood(self, Y, F):
         ''' Calculate logistic likelihood.
@@ -654,21 +642,22 @@ class GPClassifer(BaseGPModel):
             _logq (float)
         '''
         ell = self._ell
-        K = self.kernel.cov(hypers=hypers)
-        W = self._hess(F)
-        W_root = np.sqrt(W)
+        self._K = self.kernel.cov(hypers=hypers)
+        self._W = self._hess(F)
+        self._W_root = np.sqrt(self._W)
         F_mat = F.reshape(len(F), 1)
-        trip_dot = W_root @ K @ W_root
-        L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
-        b = W @ F_mat
-        b += np.diag(self._grad_log_logistic_likelihood(
-            self.Y, F)).reshape(len(F), 1)
-        inside = (W_root @ K @ b).reshape(L.shape[0])
-        trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)
+        trip_dot = self._W_root @ self._K @ self._W_root
+        self._L, self._p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
+        b = self._W @ F_mat
+        self._grad = np.diag(self._grad_log_logistic_likelihood
+                             (self.Y, F))
+        b += self._grad.reshape(len(F), 1)
+        inside = (self._W_root @ self._K @ b).reshape(self._L.shape[0])
+        trip_dot_lstsq = chol.modified_cholesky_solve(self._L, self._p, inside)
         trip_dot_lstsq = trip_dot_lstsq.reshape(b.shape)
-        a = b - W_root @ trip_dot_lstsq
+        a = b - self._W_root @ trip_dot_lstsq
         _logq = 0.5 * a.T @ F_mat - self._log_logistic_likelihood(
-            self.Y, F) + np.sum(np.log(np.diag(L)))
+            self.Y, F) + np.sum(np.log(np.diag(self._L)))
         return _logq
 
     def score(self, X, Y):
@@ -684,15 +673,15 @@ class GPClassifer(BaseGPModel):
             res: The auc on the test points.
         '''
         # Check that X and Y have the same indices
-        if not (set(X.index) == set(Y.index) and len(X) == len(Y)):
+        if not (len(X) == len(Y)):
             raise ValueError
-            ('X and Y must be the same length and have the same indices.')
+            ('X and Y must be the same length.')
         # Make predictions
-        predicted = self.predict(X)
+        p, _, _ = self.predict(X)
 
         # for classification, return the ROC AUC
         from sklearn.metrics import roc_auc_score
-        return roc_auc_score(Y, [p[0] for p in predicted])
+        return roc_auc_score(Y, p)
 
 
 class LassoGPRegressor(GPRegressor):

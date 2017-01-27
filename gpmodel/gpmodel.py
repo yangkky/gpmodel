@@ -366,7 +366,7 @@ class GPRegressor(BaseGPModel):
             return scores
 
 
-class GPClassifer(BaseGPModel):
+class GPClassifier(BaseGPModel):
 
     """ A Gaussian process classification model for proteins. """
 
@@ -484,7 +484,7 @@ class GPClassifer(BaseGPModel):
             log_ML (float)
         """
         f_hat = self._find_F(hypers=hypers)
-        self.ML = self._logq(f_hat, hypers=hypers)[0, 0]
+        self.ML = self._logq(f_hat)
         return self.ML
 
     def _logistic_likelihood(self, Y, F):
@@ -577,22 +577,22 @@ class GPClassifer(BaseGPModel):
             f_hat = guess
         else:
             raise ValueError('Initial guess must have same dimensions as Y')
-        K = self.kernel.cov(hypers=hypers)
+        self._K = self.kernel.cov(hypers=hypers)
         n_below = 0
         for i in range(evals):
             # find new f_hat
             W = self._hess(f_hat)
             W_root = np.sqrt(W)
-            trip_dot = (W_root.dot(K)).dot(W_root)
+            trip_dot = (W_root.dot(self._K)).dot(W_root)
             L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
             b = W.dot(f_hat.T)
             b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
             b = b.reshape(len(b), 1)
-            inside = W_root.dot(K).dot(b).reshape(L.shape[0])
+            inside = W_root.dot(self._K).dot(b).reshape(L.shape[0])
             trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)\
                 .reshape(b.shape)
             a = b - W_root.dot(trip_dot_lstsq)
-            f_new = K.dot(a)
+            f_new = self._K.dot(a)
             f_new = f_new.reshape((len(f_new), ))
             sq_error = np.sum((f_hat - f_new) ** 2)
             if sq_error / np.sum(f_new) < threshold:
@@ -604,7 +604,7 @@ class GPClassifer(BaseGPModel):
             f_hat = f_new
         raise RuntimeError('Maximum evaluations reached without convergence.')
 
-    def _logq(self, F, hypers):
+    def _logq(self, F):
         ''' Calculate negative log marginal likelihood.
 
         Finds the negative log marginal likelihood for Laplace's
@@ -619,7 +619,6 @@ class GPClassifer(BaseGPModel):
             _logq (float)
         '''
         ell = self._ell
-        self._K = self.kernel.cov(hypers=hypers)
         self._W = self._hess(F)
         self._W_root = np.sqrt(self._W)
         F_mat = F.reshape(len(F), 1)
@@ -635,7 +634,7 @@ class GPClassifer(BaseGPModel):
         a = b - self._W_root @ trip_dot_lstsq
         _logq = 0.5 * a.T @ F_mat - self._log_logistic_likelihood(
             self.Y, F) + np.sum(np.log(np.diag(self._L)))
-        return _logq
+        return _logq.item()
 
     def score(self, X, Y):
         ''' Score the model on the given points.

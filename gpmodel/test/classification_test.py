@@ -28,15 +28,15 @@ Y = np.array([np.random.choice([-1, 1], p=[1 - p, p]) for p in P])
 
 
 def test_init():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     assert model.objective == model._log_ML
     assert model.kernel == kernel
-    model = gpmodel.GPClassifer(kernel, guesses=(0.1, 0.1))
+    model = gpmodel.GPClassifier(kernel, guesses=(0.1, 0.1))
     assert model.guesses == (0.1, 0.1)
 
 
 def test_probs():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     actual_P = 1.0 / (1.0 + np.exp(-Y * F))
     assert np.allclose(model._logistic_likelihood(Y, F), actual_P)
     assert np.isclose(model._logistic_likelihood(Y[0], F[0]), actual_P[0])
@@ -49,7 +49,7 @@ def test_probs():
 
 
 def test_find_F():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     model.Y = Y
     model.kernel.fit(X)
     f_hat = model._find_F(hypers)
@@ -58,12 +58,12 @@ def test_find_F():
 
 
 def test_ML():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     model.Y = Y
     model._ell = len(Y)
     model.kernel.fit(X)
     f_hat = model._find_F(hypers)
-    q = model._logq(f_hat, hypers)
+    q = model._logq(f_hat)
     K = kernel.cov(X, X, hypers)
     this_P = 1.0 / (1.0 + np.exp(-Y * f_hat))
     W = -np.diag(-this_P * (1 - this_P))
@@ -78,7 +78,7 @@ def test_ML():
 
 
 def test_fit():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     model.fit(X, Y)
     assert np.allclose(model.X, X)
     assert np.allclose(model.Y, Y)
@@ -101,7 +101,7 @@ def test_fit():
 
 
 def test_predict():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     model.fit(X, Y)
     p, m, v = model.predict(X_test)
     h = model.hypers
@@ -127,7 +127,7 @@ def test_predict():
 
 
 def test_score():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     n_train = int(0.8 * n)
     X_train = X[0:n_train]
     X_test = X[n_train::]
@@ -138,11 +138,11 @@ def test_score():
 
 
 def test_pickles():
-    model = gpmodel.GPClassifer(kernel)
+    model = gpmodel.GPClassifier(kernel)
     model.fit(X, Y)
     p1, m1, v1 = model.predict(X_test)
     model.dump('test.pkl')
-    new_model = gpmodel.GPClassifer.load('test.pkl')
+    new_model = gpmodel.GPClassifier.load('test.pkl')
     os.remove('test.pkl')
     p2, m2, v2 = new_model.predict(X_test)
     assert np.allclose(m1, m2)

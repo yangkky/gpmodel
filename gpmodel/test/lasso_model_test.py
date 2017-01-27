@@ -68,7 +68,6 @@ def test_fit():
     model = gpmodel.LassoGPRegressor(gpkernel.LinearKernel(), gamma=0.1)
     np.random.seed(1)
     model.fit(X_df, Y)
-    print(model.ML)
     assert model.X.shape[1] == 19
     assert np.isclose(model.ML, 26.69784799760495)
     # need a test for kernel remembering correct X

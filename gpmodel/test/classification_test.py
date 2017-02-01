@@ -80,6 +80,7 @@ def test_ML():
 def test_fit():
     model = gpmodel.GPClassifier(kernel)
     model.fit(X, Y)
+    assert model._n_hypers == kernel._n_hypers
     assert np.allclose(model.X, X)
     assert np.allclose(model.Y, Y)
     s0, ell = model.hypers

@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn import linear_model
 
 from gpmodel import gpmean
+from gpmodel import gpkernel
 from gpmodel import gptools
 from gpmodel import chimera_tools
 from cholesky import chol
@@ -41,8 +42,6 @@ class BaseGPModel(abc.ABC):
         '''
         for key, value in kwargs.items():
             setattr(self, key, value)
-        hypers = kwargs.get('hypers', None)
-        self._make_hypers(hypers)
 
     @classmethod
     def load(cls, model):
@@ -119,20 +118,6 @@ class GPRegressor(BaseGPModel):
         else:
             self.objective = self._log_ML
 
-    def _make_hypers(self, hypers):
-        """ Set hyperparameters for model. """
-        if hypers is not None:
-            if type(hypers) is not dict:
-                if self.variances is None:
-                    hypers_list = ['var_n'] + self.kernel.hypers
-                    Hypers = namedtuple('Hypers', hypers_list)
-                else:
-                    Hypers = namedtuple('Hypers', self.kernel.hypers)
-                self.hypers = Hypers._make(hypers)
-            else:
-                Hypers = namedtuple('Hypers', list(hypers.keys()))
-                self.hypers = Hypers(**hypers)
-
     def fit(self, X, Y, variances=None):
         ''' Fit the model to the given data.
 
@@ -154,23 +139,22 @@ class GPRegressor(BaseGPModel):
         self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kernel.fit(X)
+        self._n_hypers = self.kernel.fit(X)
         self.mean, self.std, self.normed_Y = self._normalize(self.Y)
         self.mean_func.fit(X, self.normed_Y)
         self.normed_Y -= self.mean_func.mean(X).T[0]
         if variances is not None:
-            if not np.array_equal(variances.index, Y.index):
-                raise AttributeError('Indices do not match.')
+            if not len(variances) != len(Y):
+                raise ValueError('len(variances must match len(Y))')
             self.variances = variances / self.std**2
-            n_guesses = len(self.kernel.hypers)
         else:
             self.variances = None
-            n_guesses = 1 + len(self.kernel.hypers)
+            self._n_hypers += 1
         if self.guesses is None:
-            guesses = [0.9 for _ in range(n_guesses)]
+            guesses = [0.9 for _ in range(self._n_hypers)]
         else:
             guesses = self.guesses
-            if len(guesses) != n_guesses:
+            if len(guesses) != self._n_hypers:
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
 
@@ -179,7 +163,7 @@ class GPRegressor(BaseGPModel):
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
-        self._make_hypers(minimize_res['x'])
+        self.hypers = minimize_res['x']
         if self.objective == self._log_ML:
             self.log_p = self._LOO_log_p(self.hypers)
         else:
@@ -187,16 +171,12 @@ class GPRegressor(BaseGPModel):
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
-        if len(hypers) == len(self.kernel.hypers):
-            if self.variances is None:
-                raise AttributeError('No variances given.')
+        if self.variances is not None:
             K = self.kernel.cov(hypers=hypers)
             Ky = K + np.diag(self.variances)
-        elif len(hypers) == len(self.kernel.hypers) + 1:
+        else:
             K = self.kernel.cov(hypers=hypers[1::])
             Ky = K + np.identity(len(K)) * hypers[0]
-        else:
-            raise AttributeError('len(hypers) does not match')
         return K, Ky
 
     def _normalize(self, data):
@@ -376,16 +356,6 @@ class GPClassifier(BaseGPModel):
         self._set_params(**kwargs)
         self.objective = self._log_ML
 
-    def _make_hypers(self, hypers):
-        """ Set hyperparameters for model. """
-        if hypers is not None:
-            if type(hypers) is not dict:
-                Hypers = namedtuple('Hypers', self.kernel.hypers)
-                self.hypers = Hypers._make(hypers)
-            else:
-                Hypers = namedtuple('Hypers', list(hypers.keys()))
-                self.hypers = Hypers(**hypers)
-
     def fit(self, X, Y):
         ''' Fit the model to the given data.
 
@@ -403,22 +373,20 @@ class GPClassifier(BaseGPModel):
         self.X = X
         self.Y = Y
         self._ell = len(Y)
-        self.kernel.fit(X)
-        n_guesses = len(self.kernel.hypers)
+        self._n_hypers = self.kernel.fit(X)
         if self.guesses is None:
-            guesses = [0.9 for _ in range(n_guesses)]
+            guesses = [0.9 for _ in range(self._n_hypers)]
         else:
             guesses = self.guesses
-            if len(guesses) != n_guesses:
+            if len(guesses) != self._n_hypers:
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
-
         bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
                                 (guesses),
                                 bounds=bounds,
                                 method='L-BFGS-B')
-        self._make_hypers(minimize_res['x'])
+        self.hypers = minimize_res['x']
 
     def predict(self, X):
         """ Make predictions for each sequence in new_seqs.

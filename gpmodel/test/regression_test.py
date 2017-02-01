@@ -92,6 +92,7 @@ def test_LOO():
 def test_fit():
     model = gpmodel.GPRegressor(kernel)
     model.fit(X, Y)
+    assert model._n_hypers == kernel._n_hypers + 1
     assert np.allclose(model.X, X)
     assert np.allclose(model.Y, Y)
     m, s, normed = model._normalize(Y)

@@ -19,7 +19,7 @@ class BaseKernel(abc.ABC):
     @abc.abstractmethod
     def __init__(self):
         """ Create a GPKernel. """
-        self.hypers = []
+        self._n_hypers = 0
 
     @abc.abstractmethod
     def cov(self, X1, X2, hypers=None):
@@ -28,7 +28,7 @@ class BaseKernel(abc.ABC):
 
     @abc.abstractmethod
     def fit(self, X):
-        return
+        return self._n_hypers
 
 
 class PolynomialKernel(BaseKernel):
@@ -50,7 +50,7 @@ class PolynomialKernel(BaseKernel):
             raise TypeError('d must be an integer.')
         if d < 1:
             raise ValueError('d must be greater than or equal to 1.')
-        self.hypers = ['sigma_0', 'sigma_p']
+        self._n_hypers = 2
         self._deg = d
         self._saved = None
         self._X = None
@@ -58,6 +58,7 @@ class PolynomialKernel(BaseKernel):
     def fit(self, X):
         """ Remember an input. """
         self._saved = X @ X.T
+        return self._n_hypers
 
     def cov(self, X1=None, X2=None, hypers=(1.0, 1.0)):
         """ Calculate the polynomial covariance matrix between X1 and X2.
@@ -84,6 +85,7 @@ class BaseRadialKernel(BaseKernel):
     """ Base class for radial kernel functions. """
 
     def __init__(self):
+        self._n_hypers = 1
         return
 
     def cov(self, X1, X2, hypers=None):
@@ -91,6 +93,7 @@ class BaseRadialKernel(BaseKernel):
 
     def fit(self, X):
         self._saved = self._distance(X, X)
+        return self._n_hypers
 
     def _distance(self, X1, X2):
         """ Calculates the squared distances between rows of X1 and X2.
@@ -117,6 +120,7 @@ class BaseRadialARDKernel(BaseRadialKernel):
 
     def fit(self, X):
         self._saved = X
+        return self._n_hypers + X.shape[1] - 1
 
     def _distance(self, X1, X2, L):
         """ Calculates squared Mahalanobis distances between rows of X1 and X2.
@@ -127,17 +131,18 @@ class BaseRadialARDKernel(BaseRadialKernel):
         Parameters:
             X1 (np.ndarray): n x d
             X2 (np.ndarray): m x d
-            L (float or np.ndarray): d x d
+            L (float or np.ndarray): 1 x d
 
         Returns:
             D (np.ndarray): n x m
         """
-        if isinstance(L, float):
-            L = np.diag(np.ones(X1.shape[1]) * L)
-        elif isinstance(L, np.ndarray):
-            if len(L.shape) == 1:
-                L = np.diag(L)
-        return distance.cdist(X1, X2, metric='mahalanobis', VI=L) ** 2
+        if isinstance(L, float) or len(L) == 1:
+            L = np.ones(X1.shape[1]) * L
+        L2 = L**2
+        A = np.sum(X1 ** 2 / L2, axis=1).reshape((len(X1), 1))
+        B = np.sum(X2 ** 2 / L2, axis=1).reshape((len(X2), 1)).T
+        C = 2 * (X1 / L2) @ X2.T
+        return np.abs(A + B - C)
 
 
 class MaternKernel(BaseRadialKernel):
@@ -158,12 +163,13 @@ class MaternKernel(BaseRadialKernel):
         """
         if nu not in ['3/2', '5/2']:
             raise ValueError("nu must be '3/2' or '5/2'")
-        self.hypers = ['ell']
+        self._n_hypers = 1
         self.nu = nu
 
     def fit(self, X):
         BaseRadialKernel.fit(self, X)
         self._saved = np.sqrt(self._saved)
+        return self._n_hypers
 
     def cov(self, X1=None, X2=None, hypers=(1.0, )):
         """ Calculate the Matern kernel between X1 and X2.
@@ -218,7 +224,7 @@ class ARDMaternKernel(MaternKernel, BaseRadialARDKernel):
         Parameters:
             X1 (np.ndarray):
             X2 (np.ndarray)
-            hypers (iterable): default is ell=1.0.
+            hypers (float or iterable): default is ell=1.0.
 
         Returns:
             K (np.ndarray)
@@ -244,7 +250,7 @@ class SEKernel(BaseRadialKernel):
 
     def __init__(self):
         """ Initiate a SEKernel. """
-        self.hypers = ['sigma_f', 'ell']
+        self._n_hypers = 2
 
     def cov(self, X1=None, X2=None, hypers=(1.0, 1.0)):
         """ Calculate the squared exponential kernel between x1 and x2.
@@ -297,7 +303,8 @@ class ARDSEKernel(SEKernel, BaseRadialARDKernel):
         """
         if X1 is None and X2 is None:
             X1, X2 = self._saved, self._saved
-        sigma_f, L = hypers
+        sigma_f = hypers[0]
+        L = hypers[1::]
         D = super()._distance(X1, X2, L)
         return self._se(D, sigma_f)
 
@@ -321,20 +328,12 @@ class SumKernel(BaseKernel):
             hypers (list): list of hyperparameter names
         '''
         self._kernels = kernels
-        hypers = []
-        for k in self._kernels:
-            hypers += k.hypers
-        self.hypers = [hypers[i] +
-                       str(hypers[0:i].count(hypers[i]))
-                       for i in range(len(hypers))]
-        hypers_inds = [len(k.hypers) for k in self._kernels]
-        hypers_inds = np.cumsum(np.array(hypers_inds))
-        hypers_inds = np.insert(hypers_inds, 0, 0)
-        self.hypers_inds = hypers_inds.astype(int)
 
     def fit(self, X):
+        n_hypers = 0
         for kernel in self._kernels:
-            kernel.fit(X)
+            n_hypers += kernel.fit(X)
+        return n_hypers
 
     def cov(self, X1=None, X2=None, hypers=None):
         """ Calculate the sum kernel between two inputs.
@@ -351,7 +350,9 @@ class SumKernel(BaseKernel):
         if hypers is None:
             Ks = [kern.cov(X1, X2) for kern in self._kernels]
         else:
-            hypers_inds = self.hypers_inds
+            hypers_inds = [k._n_hypers for k in self._kernels]
+            hypers_inds = np.cumsum(np.array(hypers_inds))
+            hypers_inds = np.insert(hypers_inds, 0, 0)
             Ks = [kern.cov(X1, X2, hypers[hypers_inds[i]:
                                           hypers_inds[i+1]])
                   for i, kern in enumerate(self._kernels)]
@@ -364,10 +365,11 @@ class LinearKernel(BaseKernel):
 
     def __init__(self):
         """ Initiates a LinearKernel. """
-        self.hypers = ['var_p']
+        self._n_hypers = 1
 
     def fit(self, X):
         self._saved = X @ X.T
+        return self._n_hypers
 
     def cov(self, X1=None, X2=None, hypers=(1.0, )):
         """ Calculate the linear kernel between x1 and x2.

@@ -409,6 +409,8 @@ class GPClassifier(BaseGPModel):
             v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
                                                              Wk[:, i])
         var = k_star_star - np.dot(v.T, v)
+        if self.variances is None:
+            var += self.hypers[0]
         span = 20
         pi_star = np.zeros(len(X))
         for i, preds in enumerate(zip(f_bar, np.diag(var))):
@@ -563,7 +565,7 @@ class GPClassifier(BaseGPModel):
             f_new = self._K.dot(a)
             f_new = f_new.reshape((len(f_new), ))
             sq_error = np.sum((f_hat - f_new) ** 2)
-            if sq_error / np.sum(f_new) < threshold:
+            if sq_error / abs(np.sum(f_new)) < threshold:
                 n_below += 1
             else:
                 n_below = 0
@@ -627,6 +629,123 @@ class GPClassifier(BaseGPModel):
         from sklearn.metrics import roc_auc_score
         return roc_auc_score(Y, p)
 
+
+class GPMultiClassifier(BaseGPModel):
+
+    """ A GP multi-class classifier. """
+
+    def __init__(self, kernels, **kwargs):
+        self._kernels = kernels
+        self.guesses = None
+        self._set_params(**kwargs)
+        self.objective = self._log_ML
+
+    def predict(self, X):
+        return
+
+    def fit(self, X, Y):
+        self.X = X
+        self.Y = Y
+        self._n_hypers = [k.fit(X) for k in self._kernels]
+        return
+
+    def _find_F(self, hypers, guess=None, threshold=1e-12, evals=1000):
+        """Calculates f_hat according to Algorithm 3.3 in RW.
+
+        Returns:
+            f_hat (np.ndarray): (n_samples x n_classes)
+        """
+        n_samples, n_classes = self.Y.shape
+        Y_vector = (self.Y.T).reshape((n_samples * n_classes, 1))
+        if guess is None:
+            f_hat = np.zeros_like(self.Y)
+        else:
+            f_hat = guess
+            if guess.shape != self.Y.shape:
+                raise ValueError('guess must have same dimensions as Y')
+        f_vector = (f_hat.T).reshape((n_samples * n_classes, 1))
+        # K[:,:,i] is cov for ith class
+        K = self._make_K(hypers=hypers)
+        # Block diagonal K
+        K_expanded = self._expand(K)
+        n_below = 0
+        for k in range(evals):
+            P = self._softmax(f_hat)
+            P_vector = P.T.reshape((n_samples * n_classes, 1))
+            PI = self._stack(P)
+            E = np.zeros((n_samples, n_samples, n_classes))
+            for i in range(n_classes):
+                Dc_root = np.sqrt(np.diag(P[:, i]))
+                DKD = Dc_root @ K[:, :, i] @ Dc_root
+                L = np.linalg.cholesky(np.eye(n_samples) + DKD)
+                first = np.linalg.lstsq(L, Dc_root)[0]
+                E[:, :, i] = Dc_root @ np.linalg.lstsq(L.T, first)[0]
+            M = np.linalg.cholesky(np.sum(E, axis=2))
+            D = np.diag(P_vector[:, 0])
+            b = (D - PI @ PI.T) @ f_vector + Y_vector - P_vector
+            E_expanded = self._expand(E)
+            c = E_expanded @ K_expanded @ b
+            R = np.concatenate([np.eye(n_samples) for _ in range(n_classes)],
+                               axis=0)
+            a = b - c
+            first, _, _, _ = np.linalg.lstsq(M, R.T @ c)
+            a += E_expanded @ R @ np.linalg.lstsq(M.T, first)[0]
+            f_vector_new = K_expanded @ a
+            sq_error = np.sum((f_vector - f_vector_new) ** 2)
+            if sq_error / abs(np.sum(f_vector_new)) < threshold:
+                n_below += 1
+            else:
+                n_below = 0
+            if n_below > 9:
+                break
+            f_vector = f_vector_new
+            f_hat = f_vector_new.reshape((n_classes, n_samples)).T
+        return f_hat
+
+    def _expand(self, A):
+        """ Expand n x m x c matrix to nm x nc block diagonal matrix. """
+        n, m, c = A.shape
+        expanded = np.zeros((n*c, m*c))
+        for i in range(c):
+            expanded[i*n:(i+1)*n, i*m:(i+1)*m] = A[:, :, i]
+        return expanded
+
+    def _make_K(self, hypers):
+        hypers = self._split_hypers(hypers)
+        Ks = np.stack([k.cov(hypers=h) for k, h in zip(self._kernels, hypers)],
+                      axis=2)
+        return Ks
+
+    def _split_hypers(self, hypers):
+        inds = np.cumsum(self._n_hypers)
+        inds = np.insert(inds, 0, 0)
+        return [hypers[inds[i]:inds[i+1]] for i in range(len(inds) - 1)]
+
+    def _softmax(self, f):
+        """ Calculate softmaxed probabilities.
+
+        Parameters:
+            f (np.ndarray): n_samples x n_classes
+
+        Returns:
+            p (np.ndarray): n_samples x n_classes
+        """
+        P = np.exp(f)
+        return P / np.sum(P, axis=1).reshape((P.shape[0], 1))
+
+    def _stack(self, P):
+        """ Stack diagonal probability matrices.
+
+        Parameters:
+            P(np.ndarray): n_samples x n_classes
+
+        Returns:
+            PI(np.ndarray): (n_samples * n_classes) x n_classes
+        """
+        return np.concatenate([np.diag(p) for p in P.T], axis=0)
+
+    def _log_ML(self, hypers):
+        return
 
 class LassoGPRegressor(GPRegressor):
 

@@ -389,11 +389,11 @@ class GPClassifier(BaseGPModel):
         self.hypers = minimize_res['x']
 
     def predict(self, X):
-        """ Make predictions for each sequence in new_seqs.
+        """ Make predictions for each input in X.
 
-        Uses Equations 2.23 and 2.24 of RW
+        Uses Algorithm 3.2 of RW
         Parameters:
-            new_seqs (np.ndarray): sequences to predict.
+            X (np.ndarray): inputs to predict
 
          Returns:
             pi_star, f_bar, var as np.ndarrays
@@ -527,7 +527,7 @@ class GPClassifier(BaseGPModel):
             F (np.ndarray): values for the latent function
 
         Returns:
-            W (np.matrix): diagonal negative hessian of the log
+            W (np.ndarray): diagonal negative hessian of the log
                 likelihood matrix
         """
         pi = self._logistic_likelihood(1.0, F)
@@ -583,7 +583,7 @@ class GPClassifier(BaseGPModel):
 
         Parameters:
             var_p (float)
-            F (Series): values for the latent function
+            F (np.ndarray): values for the latent function
 
         Returns:
             _logq (float)
@@ -669,16 +669,29 @@ class GPMultiClassifier(BaseGPModel):
             return scores
 
     def _log_loss(self, Y, pi_star):
+        """ Calculate the negative log loss. """
         n = len(Y)
         return - np.sum(Y * np.log(pi_star)) / n
 
     def _accuracy(self, Y, pi_star):
+        """ Calculate the fraction correctly predicted. """
         n = len(Y)
         p = np.zeros_like(Y)
         p[range(n), pi_star.argmax(1)] = 1
         return np.sum(p * Y) / n
 
     def predict(self, X):
+        """ Make predictions for each input in X.
+
+        Uses Algorithm 3.4 of RW
+        Parameters:
+            X (np.ndarray): inputs to predict.
+
+         Returns:
+            pi_star (np.ndarray): predictive test probabilities. n x c
+            mu (np.ndarray): latent test mean. n x c
+            sigma (np.ndarray): latent test covariance. n x c x c
+        """
         P = self._softmax(self._f_hat)
         N, C = self.Y.shape
         P_vector = P.T.reshape((N * C, 1))
@@ -712,6 +725,15 @@ class GPMultiClassifier(BaseGPModel):
         return pi_star, mu, sigma
 
     def fit(self, X, Y):
+        ''' Fit the model to the given data.
+
+        Set the hyperparameters by training on the given data.
+        Update all dependent values.
+
+        Parameters:
+            X (np.ndarray): Sequences in training set
+            Y (np.ndarray): measurements in training set
+        '''
         if isinstance(X, pd.DataFrame):
             X = X.values
         if isinstance(Y, pd.Series):
@@ -844,12 +866,14 @@ class GPMultiClassifier(BaseGPModel):
         return expanded
 
     def _make_K(self, hypers):
+        """ Make the covariance matrix for the training inputs. """
         hypers = self._split_hypers(hypers)
         Ks = np.stack([k.cov(hypers=h) for k, h in zip(self._kernels, hypers)],
                       axis=2)
         return Ks
 
     def _split_hypers(self, hypers):
+        """ Split the hypers for each kernel. """
         inds = np.cumsum(self._n_hypers)
         inds = np.insert(inds, 0, 0)
         return [hypers[inds[i]:inds[i+1]] for i in range(len(inds) - 1)]

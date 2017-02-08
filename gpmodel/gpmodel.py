@@ -640,6 +640,44 @@ class GPMultiClassifier(BaseGPModel):
         self._set_params(**kwargs)
         self.objective = self._log_ML
 
+    def score(self, X, Y, *args):
+        ''' Score the model on the given points.
+
+        Predicts Y for the sequences in X, then scores the predictions.
+
+        Parameters:
+            X (np.ndarray) n x d
+            Y (np.ndarray) n x c
+            type (string): 'log_loss' or 'accuracy'. Default is 'accuracy.'
+
+        Returns:
+            res: If one score, result is a float. If multiple,
+                result is a dict.
+        '''
+        pi_star, _, _ = self.predict(X)
+        if not args:
+            return self._accuracy(Y, pi_star)
+        scores = {}
+        for t in args:
+            if t == 'accuracy':
+                return self._accuracy(Y, pi_star)
+            elif t == 'log_loss':
+                return self._log_loss(Y, pi_star)
+        if len(list(scores.keys())) == 1:
+            return scores[list(scores.keys())[0]]
+        else:
+            return scores
+
+    def _log_loss(self, Y, pi_star):
+        n = len(Y)
+        return - np.sum(Y * np.log(pi_star)) / n
+
+    def _accuracy(self, Y, pi_star):
+        n = len(Y)
+        p = np.zeros_like(Y)
+        p[range(n), pi_star.argmax(1)] = 1
+        return np.sum(p * Y) / n
+
     def predict(self, X):
         P = self._softmax(self._f_hat)
         N, C = self.Y.shape
@@ -661,7 +699,8 @@ class GPMultiClassifier(BaseGPModel):
             for j in range(C):
                 sigma[:, i, j] = np.sum(c * k_star[j], axis=0)
                 if i == j:
-                    sigma[:, i, j] += k_star_star[i] - np.sum(b * k_star[i], axis=0)
+                    sigma[:, i, j] += k_star_star[i] - np.sum(b * k_star[i],
+                                                              axis=0)
         S = 5000
         pi_star = np.zeros((X.shape[0], C))
         for _ in range(S):

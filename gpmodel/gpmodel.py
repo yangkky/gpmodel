@@ -641,15 +641,106 @@ class GPMultiClassifier(BaseGPModel):
         self.objective = self._log_ML
 
     def predict(self, X):
-        return
+        P = self._softmax(self._f_hat)
+        N, C = self.Y.shape
+        P_vector = P.T.reshape((N * C, 1))
+        PI = self._stack(P)
+        M = np.linalg.cholesky(np.sum(self._E, axis=2))
+        hypers = self._split_hypers(self.hypers)
+        mu = np.ones((len(X), C))
+        k_star = [k.cov(self.X, X, h) for k, h in zip(self._kernels, hypers)]
+        sigma = np.zeros((len(X), C, C))
+        k_star_star = [np.diag(k.cov(X, X, h))
+                       for k, h in zip(self._kernels, hypers)]
+        for i in range(C):
+            mu[:, i] = (self.Y[:, i] - P[:, i]).reshape((1, N)) @ k_star[i]
+            Ec = self._E[:, :, i]
+            b = Ec @ k_star[i]
+            first = np.linalg.lstsq(M, b)[0]
+            c = Ec @ np.linalg.lstsq(M.T, first)[0]
+            for j in range(C):
+                sigma[:, i, j] = np.sum(c * k_star[j], axis=0)
+                if i == j:
+                    sigma[:, i, j] += k_star_star[i] - np.sum(b * k_star[i], axis=0)
+        S = 5000
+        pi_star = np.zeros((X.shape[0], C))
+        for _ in range(S):
+            for i in range(len(X)):
+                f = np.random.multivariate_normal(mu[i], sigma[i])
+                f = np.exp(f)
+                pi_star[i] += f / np.sum(f)
+        pi_star /= S
+        return pi_star, mu, sigma
 
     def fit(self, X, Y):
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         self.X = X
         self.Y = Y
         self._n_hypers = [k.fit(X) for k in self._kernels]
+        if self.guesses is None:
+            guesses = [0.9 for _ in range(sum(self._n_hypers))]
+        else:
+            guesses = self.guesses
+            if len(guesses) != sum(self._n_hypers):
+                raise AttributeError(('Length of guesses does not match '
+                                      'number of hyperparameters'))
+        bounds = [(1e-5, 50) for _ in guesses]
+        minimize_res = minimize(self.objective,
+                                (guesses),
+                                bounds=bounds,
+                                method='L-BFGS-B')
+        self.hypers = minimize_res['x']
         return
 
-    def _find_F(self, hypers, guess=None, threshold=1e-12, evals=1000):
+    def _log_ML(self, hypers):
+        """ Returns the negative log marginal likelihood for the model.
+
+        Uses RW Equation 3.44.
+
+        Parameters:
+            hypers (iterable): the hyperparameters
+
+        Returns:
+            log_ML (float)
+        """
+        self._f_hat = self._find_F(hypers)
+        n_samples, n_classes = self.Y.shape
+        Y_vector = (self.Y.T).reshape((n_samples * n_classes, 1))
+        f_hat_vector = (self._f_hat.T).reshape((n_samples * n_classes, 1))
+        P = self._softmax(self._f_hat)
+        P_vector = P.T.reshape((n_samples * n_classes, 1))
+        PI = self._stack(P)
+        K_expanded = self._expand(self._K)
+        self._E = np.zeros((n_samples, n_samples, n_classes))
+        self._L = np.zeros((n_samples, n_samples, n_classes))
+        for i in range(n_classes):
+            Dc_root = np.sqrt(np.diag(P[:, i]))
+            DKD = Dc_root @ self._K[:, :, i] @ Dc_root
+            self._L[:, :, i] = np.linalg.cholesky(np.eye(n_samples) + DKD)
+            first = np.linalg.lstsq(self._L[:, :, i], Dc_root)[0]
+            self._E[:, :, i] = Dc_root @ \
+                np.linalg.lstsq(self._L[:, :, i].T, first)[0]
+        self._M = np.linalg.cholesky(np.sum(self._E, axis=2))
+        D = np.diag(P_vector[:, 0])
+        b = (D - PI @ PI.T) @ f_hat_vector + Y_vector - P_vector
+        E_expanded = self._expand(self._E)
+        c = E_expanded @ K_expanded @ b
+        self._a = b - c
+        first, _, _, _ = np.linalg.lstsq(self._M, self._R.T @ c)
+        self._a += E_expanded @ self._R @ \
+            np.linalg.lstsq(self._M.T, first)[0]
+        first = 0.5 * self._a.T @ f_hat_vector
+        second = -Y_vector.T @ f_hat_vector
+        third = np.sum(np.log(np.sum(np.exp(self._f_hat), axis=1)))
+        fourth = np.sum([np.sum(np.log(np.diag(self._L[:, :, i])))
+                         for i in range(n_classes)])
+        self.ML = (first + second + third + fourth).item()
+        return self.ML
+
+    def _find_F(self, hypers, guess=None, threshold=1e-3, evals=1000):
         """Calculates f_hat according to Algorithm 3.3 in RW.
 
         Returns:
@@ -665,41 +756,44 @@ class GPMultiClassifier(BaseGPModel):
                 raise ValueError('guess must have same dimensions as Y')
         f_vector = (f_hat.T).reshape((n_samples * n_classes, 1))
         # K[:,:,i] is cov for ith class
-        K = self._make_K(hypers=hypers)
+        self._K = self._make_K(hypers=hypers)
         # Block diagonal K
-        K_expanded = self._expand(K)
+        K_expanded = self._expand(self._K)
+        self._R = np.concatenate([np.eye(n_samples) for _ in range(n_classes)],
+                                 axis=0)
         n_below = 0
         for k in range(evals):
             P = self._softmax(f_hat)
             P_vector = P.T.reshape((n_samples * n_classes, 1))
             PI = self._stack(P)
             E = np.zeros((n_samples, n_samples, n_classes))
+            L = np.zeros((n_samples, n_samples, n_classes))
             for i in range(n_classes):
                 Dc_root = np.sqrt(np.diag(P[:, i]))
-                DKD = Dc_root @ K[:, :, i] @ Dc_root
-                L = np.linalg.cholesky(np.eye(n_samples) + DKD)
-                first = np.linalg.lstsq(L, Dc_root)[0]
-                E[:, :, i] = Dc_root @ np.linalg.lstsq(L.T, first)[0]
+                DKD = Dc_root @ self._K[:, :, i] @ Dc_root
+                L[:, :, i] = np.linalg.cholesky(np.eye(n_samples) + DKD)
+                first = np.linalg.lstsq(L[:, :, i], Dc_root)[0]
+                E[:, :, i] = Dc_root @ \
+                    np.linalg.lstsq(L[:, :, i].T, first)[0]
             M = np.linalg.cholesky(np.sum(E, axis=2))
             D = np.diag(P_vector[:, 0])
             b = (D - PI @ PI.T) @ f_vector + Y_vector - P_vector
             E_expanded = self._expand(E)
             c = E_expanded @ K_expanded @ b
-            R = np.concatenate([np.eye(n_samples) for _ in range(n_classes)],
-                               axis=0)
             a = b - c
-            first, _, _, _ = np.linalg.lstsq(M, R.T @ c)
-            a += E_expanded @ R @ np.linalg.lstsq(M.T, first)[0]
+            first, _, _, _ = np.linalg.lstsq(M, self._R.T @ c)
+            a += E_expanded @ self._R @ \
+                np.linalg.lstsq(M.T, first)[0]
             f_vector_new = K_expanded @ a
             sq_error = np.sum((f_vector - f_vector_new) ** 2)
+            f_vector = f_vector_new
+            f_hat = f_vector_new.reshape((n_classes, n_samples)).T
             if sq_error / abs(np.sum(f_vector_new)) < threshold:
                 n_below += 1
             else:
                 n_below = 0
             if n_below > 9:
                 break
-            f_vector = f_vector_new
-            f_hat = f_vector_new.reshape((n_classes, n_samples)).T
         return f_hat
 
     def _expand(self, A):
@@ -744,8 +838,6 @@ class GPMultiClassifier(BaseGPModel):
         """
         return np.concatenate([np.diag(p) for p in P.T], axis=0)
 
-    def _log_ML(self, hypers):
-        return
 
 class LassoGPRegressor(GPRegressor):
 

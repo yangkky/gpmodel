@@ -218,6 +218,8 @@ class GPRegressor(BaseGPModel):
          Returns:
             means, cov as np.ndarrays. means.shape is (n,), cov.shape is (n,n)
         """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
         h = self.hypers[1::]
         if isinstance(X, pd.DataFrame):
             X = X.values
@@ -229,6 +231,8 @@ class GPRegressor(BaseGPModel):
             v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
                                                              k_star[i])
         var = k_star_star - v.T @ v
+        if self.variances is None:
+            var += self.hypers[0]
         E += self.mean_func.mean(X)
         E = self.unnormalize(E)
         var *= self.std ** 2
@@ -398,6 +402,8 @@ class GPClassifier(BaseGPModel):
          Returns:
             pi_star, f_bar, var as np.ndarrays
         """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
         predictions = []
         h = self.hypers
         k_star = self.kernel.cov(X, self.X, hypers=h)
@@ -409,8 +415,6 @@ class GPClassifier(BaseGPModel):
             v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
                                                              Wk[:, i])
         var = k_star_star - np.dot(v.T, v)
-        if self.variances is None:
-            var += self.hypers[0]
         span = 20
         pi_star = np.zeros(len(X))
         for i, preds in enumerate(zip(f_bar, np.diag(var))):
@@ -635,7 +639,7 @@ class GPMultiClassifier(BaseGPModel):
     """ A GP multi-class classifier. """
 
     def __init__(self, kernels, **kwargs):
-        self._kernels = kernels
+        self.kernels = kernels
         self.guesses = None
         self._set_params(**kwargs)
         self.objective = self._log_ML
@@ -692,6 +696,8 @@ class GPMultiClassifier(BaseGPModel):
             mu (np.ndarray): latent test mean. n x c
             sigma (np.ndarray): latent test covariance. n x c x c
         """
+        if isinstance(X, pd.DataFrame):
+            X = X.values
         P = self._softmax(self._f_hat)
         N, C = self.Y.shape
         P_vector = P.T.reshape((N * C, 1))
@@ -699,10 +705,10 @@ class GPMultiClassifier(BaseGPModel):
         M = np.linalg.cholesky(np.sum(self._E, axis=2))
         hypers = self._split_hypers(self.hypers)
         mu = np.ones((len(X), C))
-        k_star = [k.cov(self.X, X, h) for k, h in zip(self._kernels, hypers)]
+        k_star = [k.cov(self.X, X, h) for k, h in zip(self.kernels, hypers)]
         sigma = np.zeros((len(X), C, C))
         k_star_star = [np.diag(k.cov(X, X, h))
-                       for k, h in zip(self._kernels, hypers)]
+                       for k, h in zip(self.kernels, hypers)]
         for i in range(C):
             mu[:, i] = (self.Y[:, i] - P[:, i]).reshape((1, N)) @ k_star[i]
             Ec = self._E[:, :, i]
@@ -740,7 +746,7 @@ class GPMultiClassifier(BaseGPModel):
             Y = Y.values
         self.X = X
         self.Y = Y
-        self._n_hypers = [k.fit(X) for k in self._kernels]
+        self._n_hypers = [k.fit(X) for k in self.kernels]
         if self.guesses is None:
             guesses = [0.9 for _ in range(sum(self._n_hypers))]
         else:
@@ -868,7 +874,7 @@ class GPMultiClassifier(BaseGPModel):
     def _make_K(self, hypers):
         """ Make the covariance matrix for the training inputs. """
         hypers = self._split_hypers(hypers)
-        Ks = np.stack([k.cov(hypers=h) for k, h in zip(self._kernels, hypers)],
+        Ks = np.stack([k.cov(hypers=h) for k, h in zip(self.kernels, hypers)],
                       axis=2)
         return Ks
 
@@ -963,5 +969,6 @@ class LassoGPRegressor(GPRegressor):
             weights['weight'] = self._clf.coef_
             mask = ~np.isclose(weights['weight'], 0.0)
         X = X.transpose()[mask].transpose()
-        X.columns = list(range(np.shape(X)[1]))
+        if isinstance(X, pd.DataFrame):
+            X.columns = list(range(np.shape(X)[1]))
         return X, mask

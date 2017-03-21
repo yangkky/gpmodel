@@ -265,7 +265,8 @@ def load_assignments(assignments_file):
     return dict(list(zip(nodes_outputfile, assignment)))
 
 
-def make_sequence(code, assignments_dict, sample_space, default=0):
+def make_sequence(code, assignments_dict, sample_space,
+                  default=0, skip_gaps=False):
     ''' Returns the chimera sequence as a list.
 
     Parameters:
@@ -291,7 +292,10 @@ def make_sequence(code, assignments_dict, sample_space, default=0):
             parent = default
             if (np.array(aa) != aa[0]).any():
                 warnings.warn('Unassigned block not identical for all parents')
-        seq.append(aa[parent])
+        if skip_gaps and '-' in aa[parent]:
+            pass
+        else:
+            seq.append(aa[parent])
     return seq
 
 
@@ -354,7 +358,7 @@ def zero_index(code):
     return ''.join([str(int(x)-1) for x in str(code)])
 
 
-def translate(na_sequence):
+def translate(na_sequence, skip_gaps=False):
     """ Translates a nucleic acid string."""
     codon_dict = {'ATT':'I', 'ATC': 'I', 'ATA': 'I', 'CTG': 'L',
                   'CTC': 'L', 'CTA': 'L', 'CTT': 'L', 'TTA': 'L', 'TTG': 'L',
@@ -382,10 +386,13 @@ def translate(na_sequence):
     if len(na_sequence) % 3 != 0:
         raise ValueError('na_sequence must have length divisible by 3.')
     translated = ''
-    for i in range(len(na_sequence)/3):
+    for i in range(len(na_sequence) // 3):
         codon = na_sequence[3*i:3*i+3].upper()
         try:
             translated += codon_dict[codon]
         except KeyError:
-            translated += '-'
+            if skip_gaps and codon == '---':
+                pass
+            else:
+                translated += '-'
     return translated

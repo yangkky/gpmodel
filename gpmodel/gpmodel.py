@@ -232,9 +232,10 @@ class GPRegressor(BaseGPModel):
                                                              k_star[i])
         var = k_star_star - v.T @ v
         if self.variances is None:
-            var += self.hypers[0]
+            np.fill_diagonal(var, np.diag(var) + self.hypers[0])
         E += self.mean_func.mean(X)
         E = self.unnormalize(E)
+        E = E[:, 0]
         var *= self.std ** 2
         return E, var
 

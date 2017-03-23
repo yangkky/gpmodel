@@ -88,7 +88,7 @@ def X_from_terms(X_terms, all_terms):
         return np.array(X)
 
 
-def make_contact_X(seqs, sample_space, contacts):
+def make_contact_X(seqs, sample_space, contacts, contact_terms=None):
     """ Make binary indicator vector for contacts.
 
     Parameters:
@@ -104,13 +104,18 @@ def make_contact_X(seqs, sample_space, contacts):
             ((pos1,aa1),(pos2,aa2)).
     """
     contact_X = []
-    contact_terms = contacting_terms(sample_space, contacts)
+    if sample_space is None:
+        amino_acids = ('G', 'A', 'L', 'M', 'F', 'W', 'K', 'Q', 'E', 'S',
+                       'P', 'V', 'I', 'C', 'Y', 'H', 'R', 'N', 'D', 'T', '-')
+        sample_space = [amino_acids for _ in seqs[0]]
+    if contact_terms is None:
+        contact_terms = contacting_terms(sample_space, contacts)
     X_terms = [get_contacts(seq, contacts) for seq in seqs]
     contact_X = X_from_terms(X_terms, contact_terms)
     return contact_X, contact_terms
 
 
-def make_sequence_X(seqs, sample_space):
+def make_sequence_X(seqs, sample_space=None, sequence_terms=None):
     """ Make binary indicator vector for sequence terms.
 
     Parameters:
@@ -124,7 +129,12 @@ def make_sequence_X(seqs, sample_space):
             (pos,aa).
     """
     sequence_X = []
-    sequence_terms = make_sequence_terms(sample_space)
+    if sample_space is None:
+        amino_acids = ('G', 'A', 'L', 'M', 'F', 'W', 'K', 'Q', 'E', 'S',
+                       'P', 'V', 'I', 'C', 'Y', 'H', 'R', 'N', 'D', 'T', '-')
+        sample_space = [amino_acids for _ in seqs[0]]
+    if sequence_terms is None:
+        sequence_terms = make_sequence_terms(sample_space)
     X_terms = [get_terms(seq) for seq in seqs]
     sequence_X = X_from_terms(X_terms, sequence_terms)
     return sequence_X, sequence_terms
@@ -350,6 +360,7 @@ def make_name_dict(dict_file):
     name_df['code'] = new_code
     name_dict = {a: b for a, b in zip(name_df['name'], new_code)}
     return name_dict
+
 
 def zero_index(code):
     '''

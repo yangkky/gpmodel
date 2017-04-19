@@ -6,74 +6,68 @@ import numpy as np
 from gpmodel import gpkernel
 from gpmodel import gpentropy
 
-seqs = pd.DataFrame([['R','Y','M','A'],['R','T','H','A'], ['R','T','M','A']],
-                    index=['A','B','C'], columns=[0,1,2,3])
 
-seqs = seqs.append(seqs.iloc[0])
-seqs.index = ['A', 'B', 'C', 'D']
-space = [('R'), ('Y', 'T'), ('M', 'H'), ('A')]
-contacts = [(0, 1), (2, 3)]
+def entropy(new_X, old_X, kernel, hypers):
+    k_star = kernel.cov(new_X, old_X, hypers=hypers)
+    kss = kernel.cov(new_X, new_X, hypers=hypers)
+    K = kernel.cov(X1=old_X, X2=old_X, hypers=hypers)
+    Ky = K + np.eye(len(old_X)) * vn
+    kss -= k_star @ np.linalg.inv(Ky) @ k_star.T
 
-X = np.array([[1.0, 2.0], [3.0, -1.0], [2.0, -2.0]])
-X_df = pd.DataFrame(X, index=['A','B','C'])
+d = 20
+xa = np.random.random(size=(1, d))
+xb = np.random.random(size=(1, d))
+xc = np.random.random(size=(1, d))
+X = np.concatenate((xa, xb, xc), axis=0)
 
-kernel = gpkernel.StructureKernel(contacts)
-vp = 0.4
-vn = 0.2
-K = pd.DataFrame([[2.0,0.0,1.0,2.0],
-                  [0.0,2.0,1.0,0.0],
-                  [1.0,1.0,2.0,1.0],
-                  [2.0,0.0,1.0,2.0]],
-                 index=seqs.index,
-                 columns=seqs.index)
+kernel = gpkernel.MaternKernel('5/2')
+out_kernel = gpkernel.MaternKernel('5/2')
+ell = 0.5
+vn = 0.01
 
-ent = gpentropy.GPEntropy(kernel=kernel, hypers=[vp],
-                          var_n=vn, observations=seqs)
-
-assert np.isclose(ent._Ky, K.values / 2*vp + np.eye(4) * vn).all()
+# Test the constructor
+ent = gpentropy.GPEntropy(kernel, [ell], var_n=vn, observations=X)
+K = out_kernel.cov(X1=X, X2=X, hypers=(ell, ))
+Ky = K + np.eye(len(X)) * vn
+L = np.linalg.cholesky(Ky)
+assert np.allclose(Ky, ent._Ky)
+assert np.allclose(L, ent._L)
+assert ent.hypers[0] == ell
+assert ent.var_n == vn
 
 # add observations and check Ky again
-new_obs = seqs
-ent.observe(new_obs)
-K_no_noise = kernel.make_K(ent.observed, hypers=[vp])
-real_K = K_no_noise + np.eye(8) * vn
-assert np.isclose(ent._Ky, real_K).all()
-assert np.isclose(ent._L, np.linalg.cholesky(real_K)).all()
+X_new = np.random.random(size=(2, d))
+ent.observe(X_new)
+all_X = np.concatenate((X, X_new))
+assert np.allclose(all_X, ent.observed)
+K = out_kernel.cov(X1=all_X, X2=all_X, hypers=(ell, ))
+Ky = K + np.eye(len(all_X)) * vn
+L = np.linalg.cholesky(Ky)
+assert np.allclose(Ky, ent._Ky)
+assert np.allclose(L, ent._L)
+
 # k_star
-real_k_star = K_no_noise[0]
-assert np.isclose(ent._k_star(seqs.loc['A']), real_k_star).all()
-assert np.isclose(ent._k_star(seqs.loc[['A', 'B']]), K_no_noise[0:2]).all()
-assert np.isclose(ent._k_star(seqs.loc[['A', 'B', 'D']]),
-                             K_no_noise[[0,1,3]]).all()
-# posterior covariance
-new_seqs = pd.DataFrame([['B','Y','M','A'],
-                        ['N','T','H','A'],
-                        ['G','T','M','A']],
-                        index=[1, 2, 3], columns=[0,1,2,3])
-k_off = np.matrix(ent._k_star(new_seqs))
-cov = kernel.make_K(new_seqs, hypers=[vp])
-real_post = cov - k_off * np.linalg.inv(ent._Ky) * k_off.T
-assert np.isclose(ent._posterior_covariance(new_seqs), real_post).all()
+X_test = np.random.random(size=(3, d))
+k_star = out_kernel.cov(X_test, all_X, hypers=(ell, ))
+
+# posterior
+kss = out_kernel.cov(X_test, X_test, hypers=(ell, ))
+kss -= k_star @ np.linalg.inv(Ky) @ k_star.T
+kss += vn * np.eye(len(kss))
+assert np.allclose(ent._posterior_covariance(X_test), kss)
+
 # entropy
-H =  0.5 * (np.log(np.linalg.det(real_post))
-            + len(new_seqs) * np.log(2*np.pi*np.exp(1)))
-assert np.isclose(ent.entropy(new_seqs), H)
-# expected entropy
-probabilities = np.array([[0.1, 0.9, 0.4]]).T
-assert np.isclose(ent.expected_entropy(new_seqs, probabilities), 1.10000636981)
-s, H, chosen = ent.maximize_expected_entropy(new_seqs, probabilities, 2)
-assert np.isclose(H, 1.0432025064204087)
-assert chosen == [1,2]
-assert np.array_equal(s, new_seqs.iloc[chosen].values)
+entropy = 0.5 * np.log(np.linalg.det(kss))
+entropy += 3 / 2 * np.log(2 * np.pi * np.exp(1.0))
+assert np.isclose(ent.entropy(X_test), entropy)
 
-new_seqs = pd.DataFrame([['R','Y','H','A'],
-                         ['N','T','H','A'],
-                         ['G','T','M','A'],
-                         ['N', 'T', 'M', 'A']],
-                        index=['1', '2', '3', '4'], columns=[0,1,2,3])
-probabilities = np.array([[0.1, 0.9, 0.4, 0.3]]).T
 
-s, H, chosen = ent.maximize_entropy(new_seqs, 2)
-assert np.isclose(H, 1.5849798517056266)
-assert chosen == [1,2]
-assert np.array_equal(s, new_seqs.iloc[chosen].values)
+# probabilistic entropy
+P = np.ones(3)
+assert np.isclose(ent.expected_entropy(X_test, P), entropy)
+
+# lazy-greedy
+# X_test = np.random.random(size=(25, d))
+# P = np.random.random(size=25)
+# print(ent.maximize_entropy(X_test, 20))
+# print(ent.maximize_expected_entropy(X_test, P, 12))

@@ -483,7 +483,7 @@ class GPClassifier(BaseGPModel):
         else:
             if int(Y) not in [1, -1]:
                 raise RuntimeError('Y must be -1 or 1')
-        return 1./(1 + np.exp(-Y * F))
+        return 1.0 / (1 + np.exp(-Y * F))
 
     def _log_logistic_likelihood(self, Y, F):
         """ Calculate the log logistic likelihood.

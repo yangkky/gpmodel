@@ -9,6 +9,7 @@ from scipy.optimize import minimize
 from scipy import stats, integrate
 import pandas as pd
 from sklearn import linear_model
+from sklearn import metrics
 
 from gpmodel import gpmean
 from gpmodel import gpkernel
@@ -221,8 +222,6 @@ class GPRegressor(BaseGPModel):
         if isinstance(X, pd.DataFrame):
             X = X.values
         h = self.hypers[1::]
-        if isinstance(X, pd.DataFrame):
-            X = X.values
         k_star = self.kernel.cov(X, self.X, hypers=h)
         k_star_star = self.kernel.cov(X, X, hypers=h)
         E = k_star @ self._alpha
@@ -306,49 +305,37 @@ class GPRegressor(BaseGPModel):
             mus += self.mean_func.mean(self.X)[:, 0]
         return np.array(list(zip(mus, vs)))
 
-    def score(self, X, Y, *args):
+    def score(self, X, Y):
         ''' Score the model on the given points.
 
         Predicts Y for the sequences in X, then scores the predictions.
 
         Parameters:
-            X (pandas.DataFrame)
-            Y (pandas.Series)
+            X (pandas.DataFrame or np.ndarray)
+            Y (pandas.Series or np.ndaray)
             type (string): 'kendalltau', 'R2', or 'R'. Default is 'kendalltau.'
 
         Returns:
-            res: If one score, result is a float. If multiple,
-                result is a dict.
+            res (dict): keys are 'kendalltau', 'SE', 'R2', and 'R'.
         '''
         # Check that X and Y have the same indices
-        if not (len(X) == len(Y)):
-            raise ValueError
-            ('X and Y must be the same length.')
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         # Make predictions
-        pred_Y, _ = self.predict(X)
+        pred_Y, pred_var = self.predict(X)
         # if nothing specified, return Kendall's Tau
-        if not args:
-            r1 = stats.rankdata(Y)
-            r2 = stats.rankdata(pred_Y)
-            return stats.kendalltau(r1, r2).correlation
-
+        r1 = stats.rankdata(Y)
+        r2 = stats.rankdata(pred_Y)
         scores = {}
-        for t in args:
-            if t == 'kendalltau':
-                r1 = stats.rankdata(Y)
-                r2 = stats.rankdata(pred_Y)
-                scores[t] = stats.kendalltau(r1, r2).correlation
-            elif t == 'R2':
-                from sklearn.metrics import r2_score
-                scores[t] = r2_score(Y, pred_Y)
-            elif t == 'R':
-                scores[t] = np.corrcoef(Y, pred_Y[:, 0])[0, 1]
-            else:
-                raise ValueError('Invalid metric.')
-        if len(list(scores.keys())) == 1:
-            return scores[list(scores.keys())[0]]
-        else:
-            return scores
+        scores['kendalltau'] = stats.kendalltau(r1, r2).correlation
+        scores['R2'] = metrics.r2_score(Y, pred_Y)
+        scores['SE'] = metrics.mean_squared_error(Y, pred_Y)
+        scores['R'] = np.corrcoef(Y, pred_Y)[0, 1]
+        pred_var = np.diag(pred_var)
+        log_ps = -0.5 * np.log(pred_var) - (pred_Y - Y)**2 / 2 / pred_var
+        log_ps -= 0.5 * np.log(2 * np.pi)
+        scores['log_loss'] = -np.sum(log_ps)
+        return scores
 
 
 class GPClassifier(BaseGPModel):
@@ -617,22 +604,21 @@ class GPClassifier(BaseGPModel):
         Predicts Y for the sequences in X, then scores the predictions.
 
         Parameters:
-            X (pandas.DataFrame)
-            Y (pandas.Series)
+            X (pandas.DataFrame or np.ndarray)
+            Y (pandas.Series or np.ndarray)
 
         Returns:
-            res: The auc on the test points.
+            res (dict): The auc on the test points.
         '''
         # Check that X and Y have the same indices
-        if not (len(X) == len(Y)):
-            raise ValueError
-            ('X and Y must be the same length.')
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         # Make predictions
         p, _, _ = self.predict(X)
-
-        # for classification, return the ROC AUC
-        from sklearn.metrics import roc_auc_score
-        return roc_auc_score(Y, p)
+        scores = {}
+        scores['auroc'] = metrics.roc_auc_score(Y, p)
+        scores['log_loss'] = metrics.log_loss(Y, p)
+        return scores
 
 
 class GPMultiClassifier(BaseGPModel):
@@ -645,7 +631,7 @@ class GPMultiClassifier(BaseGPModel):
         self._set_params(**kwargs)
         self.objective = self._log_ML
 
-    def score(self, X, Y, *args):
+    def score(self, X, Y):
         ''' Score the model on the given points.
 
         Predicts Y for the sequences in X, then scores the predictions.
@@ -653,25 +639,17 @@ class GPMultiClassifier(BaseGPModel):
         Parameters:
             X (np.ndarray) n x d
             Y (np.ndarray) n x c
-            type (string): 'log_loss' or 'accuracy'. Default is 'accuracy.'
 
         Returns:
-            res: If one score, result is a float. If multiple,
-                result is a dict.
+            res (dict): 'acc' and 'log_loss'
         '''
+        if isinstance(Y, pd.Series):
+            Y = Y.values
         pi_star, _, _ = self.predict(X)
-        if not args:
-            return self._accuracy(Y, pi_star)
         scores = {}
-        for t in args:
-            if t == 'accuracy':
-                return self._accuracy(Y, pi_star)
-            elif t == 'log_loss':
-                return self._log_loss(Y, pi_star)
-        if len(list(scores.keys())) == 1:
-            return scores[list(scores.keys())[0]]
-        else:
-            return scores
+        scores['acc'] = self._accuracy(Y, pi_star)
+        scores['log_loss'] = self._log_loss(Y, pi_star)
+        return scores
 
     def _log_loss(self, Y, pi_star):
         """ Calculate the negative log loss. """

@@ -135,8 +135,10 @@ def test_score():
     Y_train = Y[0:n_train]
     Y_test = Y[n_train::]
     model.fit(X_train, Y_train)
-    assert 0 < model.score(X_test, Y_test) < 1.0
-
+    scores = model.score(X_test, Y_test)
+    p, _, _ = model.predict(X_test)
+    assert scores['auroc'] == metrics.roc_auc_score(Y_test, p)
+    assert scores['log_loss'] == metrics.log_loss(Y_test, p)
 
 def test_pickles():
     model = gpmodel.GPClassifier(kernel)

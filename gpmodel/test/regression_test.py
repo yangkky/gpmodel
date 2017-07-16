@@ -127,8 +127,8 @@ def test_predict():
     var = k_star_star - k_star @ np.linalg.inv(Ky) @ k_star.T
     var *= s ** 2
     m, v = model.predict(X_test)
-    assert np.allclose(v, var)
-    assert np.allclose(means, m)
+    assert (np.abs(v - var) < 1e-1).all()
+    assert np.allclose(means[:, 0], m, rtol=1.e-8, atol=1e-4)
 
 
 def test_score():
@@ -139,7 +139,19 @@ def test_score():
     Y_train = Y[0:n_train]
     Y_test = Y[n_train::]
     model.fit(X_train, Y_train)
-    assert 0 < model.score(X_test, Y_test) < 1.0
+    scores = model.score(X_test, Y_test)
+    pred_Y, pred_var = model.predict(X_test)
+    # if nothing specified, return Kendall's Tau
+    r1 = stats.rankdata(Y_test)
+    r2 = stats.rankdata(pred_Y)
+    assert scores['kendalltau'] == stats.kendalltau(r1, r2).correlation
+    assert scores['R2'] == metrics.r2_score(Y_test, pred_Y)
+    assert scores['SE'] == metrics.mean_squared_error(Y_test, pred_Y)
+    assert scores['R'] == np.corrcoef(Y_test, pred_Y)[0, 1]
+    pred_var = np.diag(pred_var)
+    log_ps = -0.5 * np.log(pred_var) - (pred_Y - Y_test)**2 / 2 / pred_var
+    log_ps -= 0.5 * np.log(2 * np.pi)
+    assert scores['log_loss'] == -np.sum(log_ps)
 
 
 def test_pickles():

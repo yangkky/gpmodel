@@ -35,3 +35,7 @@ means, cov = mo.predict(X_test)
 ```
 
 This returns the full predictive distribution as a vector of means and the covariance matrix.
+
+## Further Reading
+
+This package implements algorithms from chapters 2, 3, and 5 of Rasmussen and William's *Gaussian Processes for Machine Learning.*

@@ -6,7 +6,8 @@ import abc
 
 import numpy as np
 from scipy.optimize import minimize
-from scipy import stats, integrate
+from scipy import stats, integrate, linalg
+from scipy.special import expit
 import pandas as pd
 from sklearn import linear_model
 from sklearn import metrics
@@ -15,7 +16,6 @@ from gpmodel import gpmean
 from gpmodel import gpkernel
 from gpmodel import gptools
 from gpmodel import chimera_tools
-from cholesky import chol
 
 
 class BaseGPModel(abc.ABC):
@@ -225,10 +225,7 @@ class GPRegressor(BaseGPModel):
         k_star = self.kernel.cov(X, self.X, hypers=h)
         k_star_star = self.kernel.cov(X, X, hypers=h)
         E = k_star @ self._alpha
-        v = np.zeros((len(self.X), len(X)))
-        for i in range(len(X)):
-            v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
-                                                             k_star[i])
+        v = linalg.solve_triangular(self._L, k_star.T, lower=True)
         var = k_star_star - v.T @ v
         if self.variances is None:
             np.fill_diagonal(var, np.diag(var) + self.hypers[0])
@@ -250,14 +247,16 @@ class GPRegressor(BaseGPModel):
             log_ML (float)
         """
         self._K, self._Ky = self._make_Ks(hypers)
-        self._L, self._p, _ = chol.modified_cholesky(self._Ky)
-        self._alpha = chol.modified_cholesky_solve(self._L, self._p,
-                                                   self.normed_Y)
-        self._alpha = self._alpha.reshape(self._ell, 1)
+        self._L = np.linalg.cholesky(self._Ky)
+        self._alpha = linalg.solve_triangular(self._L, self.normed_Y, lower=True)
+        self._alpha = linalg.solve_triangular(self._L.T, self._alpha,
+                                              lower=False)
+        self._alpha = np.expand_dims(self._alpha, 1)
+
         first = 0.5 * np.dot(self.normed_Y, self._alpha)
         second = np.sum(np.log(np.diag(self._L)))
-        third = len(self._K)/2.*np.log(2*np.pi)
-        self.ML = (first+second+third).item()
+        third = len(self._K) / 2. * np.log(2 * np.pi)
+        self.ML = (first + second + third).item()
         return self.ML
 
     def _LOO_log_p(self, hypers):
@@ -304,38 +303,6 @@ class GPRegressor(BaseGPModel):
         if add_mean:
             mus += self.mean_func.mean(self.X)[:, 0]
         return np.array(list(zip(mus, vs)))
-
-    def score(self, X, Y):
-        ''' Score the model on the given points.
-
-        Predicts Y for the sequences in X, then scores the predictions.
-
-        Parameters:
-            X (pandas.DataFrame or np.ndarray)
-            Y (pandas.Series or np.ndaray)
-            type (string): 'kendalltau', 'R2', or 'R'. Default is 'kendalltau.'
-
-        Returns:
-            res (dict): keys are 'kendalltau', 'SE', 'R2', and 'R'.
-        '''
-        # Check that X and Y have the same indices
-        if isinstance(Y, pd.Series):
-            Y = Y.values
-        # Make predictions
-        pred_Y, pred_var = self.predict(X)
-        # if nothing specified, return Kendall's Tau
-        r1 = stats.rankdata(Y)
-        r2 = stats.rankdata(pred_Y)
-        scores = {}
-        scores['kendalltau'] = stats.kendalltau(r1, r2).correlation
-        scores['R2'] = metrics.r2_score(Y, pred_Y)
-        scores['SE'] = metrics.mean_squared_error(Y, pred_Y)
-        scores['R'] = np.corrcoef(Y, pred_Y)[0, 1]
-        pred_var = np.diag(pred_var)
-        log_ps = -0.5 * np.log(pred_var) - (pred_Y - Y)**2 / 2 / pred_var
-        log_ps -= 0.5 * np.log(2 * np.pi)
-        scores['log_loss'] = -np.sum(log_ps)
-        return scores
 
 
 class GPClassifier(BaseGPModel):
@@ -393,15 +360,11 @@ class GPClassifier(BaseGPModel):
         if isinstance(X, pd.DataFrame):
             X = X.values
         predictions = []
-        h = self.hypers
-        k_star = self.kernel.cov(X, self.X, hypers=h)
-        k_star_star = self.kernel.cov(X, X, hypers=h)
-        f_bar = np.dot(k_star, self._grad.T)
-        Wk = np.dot(self._W_root, k_star.T)
-        v = np.zeros((len(self.X), len(X)))
-        for i in range(len(X)):
-            v[:, i] = chol.modified_cholesky_lower_tri_solve(self._L, self._p,
-                                                             Wk[:, i])
+        k_star = self.kernel.cov(X, self.X, hypers=self.hypers)
+        k_star_star = self.kernel.cov(X, X, hypers=self.hypers)
+        f_bar = np.dot(k_star, self._grad)
+        Wk = np.expand_dims(self._W_root, 1) * k_star.T
+        v = linalg.solve_triangular(self._L, Wk, lower=True)
         var = k_star_star - np.dot(v.T, v)
         span = 20
         pi_star = np.zeros(len(X))
@@ -411,7 +374,7 @@ class GPClassifier(BaseGPModel):
                                         -span * va + f,
                                         span * va + f,
                                         args=(f, va))[0]
-        return pi_star, f_bar, var
+        return pi_star.flatten(), f_bar.flatten(), var
 
     def _p_integral(self, z, mean, variance):
         ''' Equation 3.25 from RW with a sigmoid likelihood.
@@ -437,7 +400,7 @@ class GPClassifier(BaseGPModel):
     def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
-        Uses RW Equation 3.32.
+        Uses RW Equation 3.32 and Algorithm 3.1.
 
         Parameters:
             hypers (iterable): the hyperparameters
@@ -445,88 +408,41 @@ class GPClassifier(BaseGPModel):
         Returns:
             log_ML (float)
         """
-        f_hat = self._find_F(hypers=hypers)
-        self.ML = self._logq(f_hat)
+        ell = len(self.Y)
+        self._f_hat = np.zeros(ell)
+        self._K = self.kernel.cov(hypers=hypers)
+        evals = 1000
+        threshold = 1e-15
+        for i in range(evals):
+            pi = expit(self._f_hat)
+            # Line 4
+            W = pi * (1 - pi)
+            # Line 5
+            self._W_root = np.sqrt(W)
+            W_sr_K = self._W_root[:, np.newaxis] * self._K
+            B = np.eye(W.shape[0]) + W_sr_K * self._W_root
+            self._L = np.linalg.cholesky(B)
+            # Line 6
+            self._grad = (self.Y + 1) / 2 - pi
+            b = W * self._f_hat + self._grad
+            # Line 7
+            self._a = b - self._W_root * linalg.cho_solve((self._L, True),
+                                                          W_sr_K.dot(b))
+            # Line 8
+            f_new = self._K.dot(self._a)
+            sq_error = np.sum((self._f_hat - f_new) ** 2)
+            self._f_hat = f_new
+            if sq_error / abs(np.sum(f_new)) < threshold:
+                break
+        else:
+            raise RuntimeError('Maximum evaluations reached without convergence.')
+        _logq = 0.5 * self._a.T @ np.expand_dims(self._f_hat, 1)
+        _logq -= np.sum(np.log(1.0 / (1 + np.exp(-self.Y * self._f_hat))))
+        _logq += np.sum(np.log(np.diag(self._L)))
+        self.ML = _logq
         return self.ML
 
-    def _logistic_likelihood(self, Y, F):
-        ''' Calculate logistic likelihood.
-
-        Calculates the logistic probability of the outcomes G given
-        the latent variables F according to Equation 3.2 in RW.
-
-        Inputs for all the probability functions must be floats or 1D arrays.
-
-        Parameters:
-            Y (float or np.ndarray): +/- 1
-            F (float or np.ndarray): value of latent function
-
-        Returns:
-            float or ndarray
-        '''
-        if isinstance(Y, np.ndarray):
-            if not ((Y == 1).astype(int) + (Y == -1).astype(int)).all():
-                raise RuntimeError('All values in Y must be -1 or 1')
-        else:
-            if int(Y) not in [1, -1]:
-                raise RuntimeError('Y must be -1 or 1')
-        return 1.0 / (1 + np.exp(-Y * F))
-
-    def _log_logistic_likelihood(self, Y, F):
-        """ Calculate the log logistic likelihood.
-
-        Calculates the log logistic likelihood of the outcomes Y
-        given the latent variables F. log[p(Y|f)]. Uses Equation
-        3.15 of RW.
-
-        Parameters:
-            Y (np.ndarray): outputs, +/-1
-            F (np.ndarray): values for the latent function
-
-        Returns:
-            lll (float): log logistic likelihood
-        """
-        if isinstance(Y, np.ndarray) and len(Y) != len(F):
-            raise RuntimeError('Y and F must be the same length')
-        lll = np.sum(np.log(self._logistic_likelihood(Y, F)))
-        return lll
-
-    def _grad_log_logistic_likelihood(self, Y, F):
-        """ Calculate the gradient of the log logistic likelihood.
-
-        Calculates the gradient of the logistic likelihood of the
-        outcomes Y given the latent variables F.
-        Uses Equation 3.15 of RW.
-
-        Parameters:
-            Y (np.ndarray): outputs, +/-1
-            F (np.ndarray): values for the latent function
-
-        Returns:
-            glll (np.ndarray): diagonal matrix containing the
-                gradient of the log likelihood
-        """
-        glll = (Y + 1) / 2.0 - self._logistic_likelihood(1.0, F)
-        return np.diag(glll)
-
-    def _hess(self, F):
-        """ Calculate the negative hessian of the logistic likelihod.
-
-        Calculates the negative hessian of the logistic likelihood
-        according to Equation 3.15 of RW.
-
-        Parameters:
-            F (np.ndarray): values for the latent function
-
-        Returns:
-            W (np.ndarray): diagonal negative hessian of the log
-                likelihood matrix
-        """
-        pi = self._logistic_likelihood(1.0, F)
-        W = pi * (1 - pi)
-        return np.diag(W)
-
-    def _find_F(self, hypers, guess=None, threshold=.0001, evals=1000):
+    def _find_F(self, hypers, guess=None, threshold=1e-15, evals=1000):
         """Calculates f_hat according to Algorithm 3.1 in RW.
 
         Returns:
@@ -542,83 +458,28 @@ class GPClassifier(BaseGPModel):
         self._K = self.kernel.cov(hypers=hypers)
         n_below = 0
         for i in range(evals):
-            # find new f_hat
-            W = self._hess(f_hat)
-            W_root = np.sqrt(W)
-            trip_dot = (W_root.dot(self._K)).dot(W_root)
-            L, p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
-            b = W.dot(f_hat.T)
-            b += np.diag(self._grad_log_logistic_likelihood(self.Y, f_hat)).T
-            b = b.reshape(len(b), 1)
-            inside = W_root.dot(self._K).dot(b).reshape(L.shape[0])
-            trip_dot_lstsq = chol.modified_cholesky_solve(L, p, inside)\
-                .reshape(b.shape)
-            a = b - W_root.dot(trip_dot_lstsq)
+            pi = expit(f_hat)
+            W = pi * (1 - pi)
+            # Line 5
+            W_sr = np.sqrt(W)
+            W_sr_K = W_sr[:, np.newaxis] * self._K
+            B = np.eye(W.shape[0]) + W_sr_K * W_sr
+            L = np.linalg.cholesky(B)
+            # Line 6
+            b = W * f_hat + (self.Y + 1) / 2 - pi
+            # Line 7
+            a = b - W_sr * linalg.cho_solve((L, True), W_sr_K.dot(b))
+            # Line 8
             f_new = self._K.dot(a)
-            f_new = f_new.reshape((len(f_new), ))
             sq_error = np.sum((f_hat - f_new) ** 2)
             if sq_error / abs(np.sum(f_new)) < threshold:
-                n_below += 1
-            else:
-                n_below = 0
-            if n_below > 9:
+                self._a = a
+                self._L = L
+                self._W_root = W_sr
+                self._grad = (self.Y + 1) / 2 - pi
                 return f_new
             f_hat = f_new
         raise RuntimeError('Maximum evaluations reached without convergence.')
-
-    def _logq(self, F):
-        ''' Calculate negative log marginal likelihood.
-
-        Finds the negative log marginal likelihood for Laplace's
-        approximation Equation 5.20 or 3.32 from RW, as described
-        in Algorithm 5.1
-
-        Parameters:
-            var_p (float)
-            F (np.ndarray): values for the latent function
-
-        Returns:
-            _logq (float)
-        '''
-        ell = self._ell
-        self._W = self._hess(F)
-        self._W_root = np.sqrt(self._W)
-        F_mat = F.reshape(len(F), 1)
-        trip_dot = self._W_root @ self._K @ self._W_root
-        self._L, self._p, _ = chol.modified_cholesky(np.eye(ell) + trip_dot)
-        b = self._W @ F_mat
-        self._grad = np.diag(self._grad_log_logistic_likelihood
-                             (self.Y, F))
-        b += self._grad.reshape(len(F), 1)
-        inside = (self._W_root @ self._K @ b).reshape(self._L.shape[0])
-        trip_dot_lstsq = chol.modified_cholesky_solve(self._L, self._p, inside)
-        trip_dot_lstsq = trip_dot_lstsq.reshape(b.shape)
-        a = b - self._W_root @ trip_dot_lstsq
-        _logq = 0.5 * a.T @ F_mat - self._log_logistic_likelihood(
-            self.Y, F) + np.sum(np.log(np.diag(self._L)))
-        return _logq.item()
-
-    def score(self, X, Y):
-        ''' Score the model on the given points.
-
-        Predicts Y for the sequences in X, then scores the predictions.
-
-        Parameters:
-            X (pandas.DataFrame or np.ndarray)
-            Y (pandas.Series or np.ndarray)
-
-        Returns:
-            res (dict): The auc on the test points.
-        '''
-        # Check that X and Y have the same indices
-        if isinstance(Y, pd.Series):
-            Y = Y.values
-        # Make predictions
-        p, _, _ = self.predict(X)
-        scores = {}
-        scores['auroc'] = metrics.roc_auc_score(Y, p)
-        scores['log_loss'] = metrics.log_loss(Y, p)
-        return scores
 
 
 class GPMultiClassifier(BaseGPModel):

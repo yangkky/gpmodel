@@ -5,14 +5,14 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from scipy import integrate
+from scipy.special import expit
 from sklearn import metrics, linear_model
 
 from gpmodel import gpkernel
 from gpmodel import gpmodel
 from gpmodel import gpmean
-from cholesky import chol
 
-n = 200
+n = 10
 d = 10
 X = np.random.random(size=(n, d))
 xa = X[[0]]
@@ -35,35 +35,17 @@ def test_init():
     assert model.guesses == (0.1, 0.1)
 
 
-def test_probs():
-    model = gpmodel.GPClassifier(kernel)
-    actual_P = 1.0 / (1.0 + np.exp(-Y * F))
-    assert np.allclose(model._logistic_likelihood(Y, F), actual_P)
-    assert np.isclose(model._logistic_likelihood(Y[0], F[0]), actual_P[0])
-    actual_log_P = np.log(np.prod(actual_P))
-    assert np.allclose(model._log_logistic_likelihood(Y, F), actual_log_P)
-    actual_grad = np.diag((Y + 1.0) / 2.0 - P)
-    assert np.allclose(model._grad_log_logistic_likelihood(Y, F), actual_grad)
-    actual_hess = np.diag(-P * (1 - P))
-    assert np.allclose(model._hess(F), -actual_hess)
-
-
-def test_find_F():
-    model = gpmodel.GPClassifier(kernel)
-    model.Y = Y
-    model.kernel.fit(X)
-    f_hat = model._find_F(hypers)
-    check_f_hat = cov @ ((Y + 1) / 2 - 1.0 / (1.0 + np.exp(-f_hat)))
-    assert np.allclose(f_hat, check_f_hat)
-
-
 def test_ML():
     model = gpmodel.GPClassifier(kernel)
     model.Y = Y
     model._ell = len(Y)
     model.kernel.fit(X)
-    f_hat = model._find_F(hypers)
-    q = model._logq(f_hat)
+    ML = model._log_ML(hypers)
+    f_hat = model._f_hat
+
+    check_f_hat = cov @ np.expand_dims((Y + 1) / 2 - 1.0 / (1.0 + np.exp(-f_hat)), 1)
+    assert np.allclose(model._f_hat, check_f_hat.flatten())
+
     K = kernel.cov(X, X, hypers)
     this_P = 1.0 / (1.0 + np.exp(-Y * f_hat))
     W = -np.diag(-this_P * (1 - this_P))
@@ -73,8 +55,9 @@ def test_ML():
     second = np.log(np.prod(this_P))
     third = -0.5 * np.log(det_B)
     actual_q = first + second + third
-    assert np.isclose(actual_q, -q)
-    assert np.isclose(q, model._log_ML(hypers))
+
+    assert np.isclose(actual_q, -ML)
+    assert np.isclose(ML, model.ML)
 
 
 def test_fit():
@@ -87,18 +70,17 @@ def test_fit():
     K = kernel.cov(X, X, (s0, ell))
     ML = model._log_ML((s0, ell))
     f_hat = model._find_F((s0, ell))
-    this_P = 1.0 / (1.0 + np.exp(-Y * f_hat))
+    this_P = expit(f_hat)
     W = -np.diag(-this_P * (1 - this_P))
     W_root = np.sqrt(W)
     trip_dot = W_root @ K @ W_root
-    L, p, _ = chol.modified_cholesky(np.eye(len(Y)) + trip_dot)
-    grad = np.diag(model._grad_log_logistic_likelihood(Y, f_hat))
+    L = np.linalg.cholesky(np.eye(len(Y)) + trip_dot)
+    grad = (model.Y + 1) / 2 - this_P
     assert np.isclose(model.ML, ML)
     assert np.allclose(model._K, K)
-    assert np.allclose(model._W_root, W_root)
+    assert np.allclose(model._W_root, np.diag(W_root))
     assert np.allclose(model._L, L)
-    assert np.allclose(model._p, p)
-    assert np.allclose(model._grad, grad)
+    assert np.allclose(model._grad.flatten(), grad)
 
 
 def test_predict():
@@ -127,19 +109,6 @@ def test_predict():
     assert np.allclose(p, pi_star)
 
 
-def test_score():
-    model = gpmodel.GPClassifier(kernel)
-    n_train = int(0.8 * n)
-    X_train = X[0:n_train]
-    X_test = X[n_train::]
-    Y_train = Y[0:n_train]
-    Y_test = Y[n_train::]
-    model.fit(X_train, Y_train)
-    scores = model.score(X_test, Y_test)
-    p, _, _ = model.predict(X_test)
-    assert scores['auroc'] == metrics.roc_auc_score(Y_test, p)
-    assert scores['log_loss'] == metrics.log_loss(Y_test, p)
-
 def test_pickles():
     model = gpmodel.GPClassifier(kernel)
     model.fit(X, Y)
@@ -155,10 +124,7 @@ def test_pickles():
 
 if __name__ == "__main__":
     test_init()
-    test_probs()
-    test_find_F()
     test_ML()
     test_fit()
     test_predict()
-    test_score()
     test_pickles()

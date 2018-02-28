@@ -12,7 +12,6 @@ from gpmodel import gpkernel
 from gpmodel import gpmodel
 from gpmodel import gpmean
 from gpmodel import chimera_tools
-from cholesky import chol
 
 n = 200
 d = 10
@@ -103,13 +102,12 @@ def test_fit():
     K = kernel.cov(X, X, (s0, ell))
     Ky = K + np.diag(vn * np.ones(len(K)))
     ML = model._log_ML((vn, s0, ell))
-    L, p, _ = chol.modified_cholesky(Ky)
+    L = np.linalg.cholesky(Ky)
     alpha = np.linalg.inv(Ky) @ normed.reshape((n, 1))
     assert np.isclose(model.ML, ML)
     assert np.allclose(model._K, K)
     assert np.allclose(model._Ky, Ky)
     assert np.allclose(model._L, L)
-    assert np.allclose(model._p, p)
     assert np.allclose(model._alpha, alpha)
 
 
@@ -129,29 +127,6 @@ def test_predict():
     m, v = model.predict(X_test)
     assert (np.abs(v - var) < 1e-1).all()
     assert np.allclose(means[:, 0], m, rtol=1.e-8, atol=1e-4)
-
-
-def test_score():
-    model = gpmodel.GPRegressor(kernel)
-    n_train = int(0.8 * n)
-    X_train = X[0:n_train]
-    X_test = X[n_train::]
-    Y_train = Y[0:n_train]
-    Y_test = Y[n_train::]
-    model.fit(X_train, Y_train)
-    scores = model.score(X_test, Y_test)
-    pred_Y, pred_var = model.predict(X_test)
-    # if nothing specified, return Kendall's Tau
-    r1 = stats.rankdata(Y_test)
-    r2 = stats.rankdata(pred_Y)
-    assert scores['kendalltau'] == stats.kendalltau(r1, r2).correlation
-    assert scores['R2'] == metrics.r2_score(Y_test, pred_Y)
-    assert scores['SE'] == metrics.mean_squared_error(Y_test, pred_Y)
-    assert scores['R'] == np.corrcoef(Y_test, pred_Y)[0, 1]
-    pred_var = np.diag(pred_var)
-    log_ps = -0.5 * np.log(pred_var) - (pred_Y - Y_test)**2 / 2 / pred_var
-    log_ps -= 0.5 * np.log(2 * np.pi)
-    assert scores['log_loss'] == -np.sum(log_ps)
 
 
 def test_pickles():
@@ -174,7 +149,6 @@ if __name__ == "__main__":
     test_fit()
     test_LOO()
     test_predict()
-    test_score()
     test_pickles()
     # To Do:
     # Test LOO_res and LOO_log_p and fitting with LOO_log_p

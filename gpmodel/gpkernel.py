@@ -108,10 +108,7 @@ class BaseRadialKernel(BaseKernel):
         Returns:
             D (np.ndarray): n x m
         """
-        A = np.sum(X1 ** 2, axis=1).reshape((len(X1), 1))
-        B = np.sum(X2 ** 2, axis=1).reshape((len(X2), 1)).T
-        C = 2 * X1 @ X2.T
-        return np.abs(A + B - C)
+        return distance.cdist(X1, X2, metric='sqeuclidean')
 
 
 class BaseRadialARDKernel(BaseRadialKernel):

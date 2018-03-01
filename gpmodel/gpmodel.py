@@ -112,8 +112,6 @@ class GPRegressor(BaseGPModel):
         if objective is not None:
             if objective == 'log_ML':
                 self.objective = self._log_ML
-            elif objective == 'LOO_log_p':
-                self.objective = self._LOO_log_p
             else:
                 raise AttributeError(objective + ' is not a valid objective')
         else:
@@ -163,10 +161,7 @@ class GPRegressor(BaseGPModel):
                                 (np.log(guesses)),
                                 method='L-BFGS-B')
         self.hypers = np.exp(minimize_res['x'])
-        if self.objective == self._log_ML:
-            self.log_p = self._LOO_log_p(minimize_res['x'])
-        else:
-            self.ML = self._log_ML(minimize_res['x'])
+
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
@@ -257,51 +252,6 @@ class GPRegressor(BaseGPModel):
         third = len(self._K) / 2. * np.log(2 * np.pi)
         self.ML = (first + second + third).item()
         return self.ML
-
-    def _LOO_log_p(self, hypers):
-        """ Calculates the negative LOO log probability.
-
-        Equation 5.10 and 5.11 from RW
-        Parameters:
-            variances (iterable)
-        Returns:
-            log_p
-        """
-        LOO = self.LOO_res(hypers)
-        vs = LOO[:, 1]
-        mus = LOO[:, 0]
-        log_ps = -0.5*np.log(vs) - (self.normed_Y-mus)**2 / 2 / vs
-        log_ps -= 0.5*np.log(2*np.pi)
-        return_me = -sum(log_ps)
-        return return_me
-
-    def LOO_res(self, hypers, add_mean=False, unnorm=False):
-        """ Calculates LOO regression predictions.
-
-        Calculates the LOO predictions according to Equation 5.12 from RW.
-
-        Parameters:
-            hypers (iterable)
-            add_mean (Boolean): whether or not to add in the mean function.
-                Default is False.
-            unnormalize (Boolean): whether or not to unnormalize.
-                Default is False unless the mean is added back, in which
-                case always True.
-        Returns:
-            res (np.ndarray): columns are 'mu' and 'v'
-        """
-        K, Ky = self._make_Ks(hypers)
-        K_inv = np.linalg.inv(Ky)
-        Y = self.normed_Y
-        mus = np.diag(Y - np.dot(K_inv, Y) / K_inv)
-        vs = np.diag(1 / K_inv)
-        if add_mean or unnorm:
-            mus = self.unnormalize(mus)
-            vs = np.array(vs).copy()
-            vs *= self.std**2
-        if add_mean:
-            mus += self.mean_func.mean(self.X)[:, 0]
-        return np.array(list(zip(mus, vs)))
 
 
 class GPClassifier(BaseGPModel):

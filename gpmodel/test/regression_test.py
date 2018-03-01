@@ -36,8 +36,6 @@ def test_init():
     assert model.objective == model._log_ML
     assert model.kernel == kernel
     assert model.guesses is None
-    model = gpmodel.GPRegressor(kernel, objective='LOO_log_p')
-    assert model.objective == model._LOO_log_p
     model = gpmodel.GPRegressor(kernel, guesses=(0.1, 0.1, 0.1))
     assert model.guesses == (0.1, 0.1, 0.1)
 
@@ -80,14 +78,6 @@ def test_ML():
     assert np.isclose(actual, model._log_ML(np.log(hypers)))
 
 
-def test_LOO():
-    model = gpmodel.GPRegressor(kernel)
-    model.fit(X, Y)
-    hypers = np.random.random(size=(3,))
-    LOOs = model.LOO_res(hypers)
-    LP = model._LOO_log_p(hypers)
-
-
 def test_fit():
     model = gpmodel.GPRegressor(kernel)
     model.fit(X, Y)
@@ -119,7 +109,6 @@ def test_predict():
     k_star = model.kernel.cov(X_test, X, hypers=h)
     k_star_star = model.kernel.cov(X_test, X_test, hypers=h)
     K = kernel.cov(X, X, h)
-    assert np.allclose(K, model._K)
     Ky = K + np.diag(model.hypers[0] * np.ones(len(K)))
     means = k_star @ np.linalg.inv(Ky) @ normed.reshape(len(Y), 1)
     means = means * s + m
@@ -148,7 +137,6 @@ if __name__ == "__main__":
     test_K()
     test_ML()
     test_fit()
-    test_LOO()
     test_predict()
     test_pickles()
     # To Do:

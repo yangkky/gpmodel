@@ -159,16 +159,14 @@ class GPRegressor(BaseGPModel):
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
 
-        bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
-                                (guesses),
-                                bounds=bounds,
+                                (np.log(guesses)),
                                 method='L-BFGS-B')
-        self.hypers = minimize_res['x']
+        self.hypers = np.exp(minimize_res['x'])
         if self.objective == self._log_ML:
-            self.log_p = self._LOO_log_p(self.hypers)
+            self.log_p = self._LOO_log_p(minimize_res['x'])
         else:
-            self.ML = self._log_ML(self.hypers)
+            self.ML = self._log_ML(minimize_res['x'])
 
     def _make_Ks(self, hypers):
         """ Make covariance matrix (K) and noisy covariance matrix (Ky)."""
@@ -235,17 +233,18 @@ class GPRegressor(BaseGPModel):
         var *= self.std ** 2
         return E, var
 
-    def _log_ML(self, hypers):
+    def _log_ML(self, log_hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Uses RW Equation 5.8.
 
         Parameters:
-            hypers (iterable): the hyperparameters
+            log_hypers (iterable): the hyperparameters
 
         Returns:
             log_ML (float)
         """
+        hypers = np.exp(log_hypers)
         self._K, self._Ky = self._make_Ks(hypers)
         self._L = np.linalg.cholesky(self._Ky)
         self._alpha = linalg.solve_triangular(self._L, self.normed_Y, lower=True)

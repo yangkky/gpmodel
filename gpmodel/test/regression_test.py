@@ -77,7 +77,7 @@ def test_ML():
     second = 0.5 * np.log(np.linalg.det(Ky))
     third = model._ell / 2.0 * np.log(2 * np.pi)
     actual = first + second + third
-    assert np.isclose(actual, model._log_ML(hypers))
+    assert np.isclose(actual, model._log_ML(np.log(hypers)))
 
 
 def test_LOO():
@@ -101,7 +101,7 @@ def test_fit():
     vn, s0, ell = model.hypers
     K = kernel.cov(X, X, (s0, ell))
     Ky = K + np.diag(vn * np.ones(len(K)))
-    ML = model._log_ML((vn, s0, ell))
+    ML = model._log_ML(np.log(model.hypers))
     L = np.linalg.cholesky(Ky)
     alpha = np.linalg.inv(Ky) @ normed.reshape((n, 1))
     assert np.isclose(model.ML, ML)
@@ -119,6 +119,7 @@ def test_predict():
     k_star = model.kernel.cov(X_test, X, hypers=h)
     k_star_star = model.kernel.cov(X_test, X_test, hypers=h)
     K = kernel.cov(X, X, h)
+    assert np.allclose(K, model._K)
     Ky = K + np.diag(model.hypers[0] * np.ones(len(K)))
     means = k_star @ np.linalg.inv(Ky) @ normed.reshape(len(Y), 1)
     means = means * s + m

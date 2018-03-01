@@ -289,12 +289,10 @@ class GPClassifier(BaseGPModel):
             if len(guesses) != self._n_hypers:
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
-        bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
                                 (guesses),
-                                bounds=bounds,
                                 method='L-BFGS-B')
-        self.hypers = minimize_res['x']
+        self.hypers = np.exp(minimize_res['x'])
 
     def predict(self, X):
         """ Make predictions for each input in X.
@@ -346,17 +344,18 @@ class GPClassifier(BaseGPModel):
         third = np.exp(-(z-mean) ** 2 / (2*variance))
         return first*second*third
 
-    def _log_ML(self, hypers):
+    def _log_ML(self, log_hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Uses RW Equation 3.32 and Algorithm 3.1.
 
         Parameters:
-            hypers (iterable): the hyperparameters
+            log_hypers (iterable): the log hyperparameters
 
         Returns:
             log_ML (float)
         """
+        hypers = np.exp(log_hypers)
         ell = len(self.Y)
         self._f_hat = np.zeros(ell)
         self._K = self.kernel.cov(hypers=hypers)

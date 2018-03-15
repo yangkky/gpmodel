@@ -117,7 +117,7 @@ class GPRegressor(BaseGPModel):
         else:
             self.objective = self._log_ML
 
-    def fit(self, X, Y, variances=None):
+    def fit(self, X, Y, variances=None, bounds=None):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
@@ -156,11 +156,13 @@ class GPRegressor(BaseGPModel):
             if len(guesses) != self._n_hypers:
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
-
+        if bounds is None:
+            bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
-                                (np.log(guesses)),
-                                method='L-BFGS-B')
-        self.hypers = np.exp(minimize_res['x'])
+                                guesses,
+                                method='L-BFGS-B',
+                                bounds=bounds)
+        self.hypers = minimize_res['x']
 
 
     def _make_Ks(self, hypers):
@@ -220,15 +222,13 @@ class GPRegressor(BaseGPModel):
         E = k_star @ self._alpha
         v = linalg.solve_triangular(self._L, k_star.T, lower=True)
         var = k_star_star - v.T @ v
-        if self.variances is None:
-            np.fill_diagonal(var, np.diag(var) + self.hypers[0])
         E += self.mean_func.mean(X)
         E = self.unnormalize(E)
         E = E[:, 0]
         var *= self.std ** 2
         return E, var
 
-    def _log_ML(self, log_hypers):
+    def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Uses RW Equation 5.8.
@@ -239,7 +239,6 @@ class GPRegressor(BaseGPModel):
         Returns:
             log_ML (float)
         """
-        hypers = np.exp(log_hypers)
         self._K, self._Ky = self._make_Ks(hypers)
         self._L = np.linalg.cholesky(self._Ky)
         self._alpha = linalg.solve_triangular(self._L, self.normed_Y, lower=True)
@@ -264,7 +263,7 @@ class GPClassifier(BaseGPModel):
         self._set_params(**kwargs)
         self.objective = self._log_ML
 
-    def fit(self, X, Y):
+    def fit(self, X, Y, bounds=None):
         ''' Fit the model to the given data.
 
         Set the hyperparameters by training on the given data.
@@ -289,10 +288,13 @@ class GPClassifier(BaseGPModel):
             if len(guesses) != self._n_hypers:
                 raise AttributeError(('Length of guesses does not match '
                                       'number of hyperparameters'))
+        if bounds is None:
+            bounds = [(1e-5, None) for _ in guesses]
         minimize_res = minimize(self.objective,
-                                (guesses),
-                                method='L-BFGS-B')
-        self.hypers = np.exp(minimize_res['x'])
+                                guesses,
+                                method='L-BFGS-B',
+                                bounds=bounds)
+        self.hypers = minimize_res['x']
 
     def predict(self, X):
         """ Make predictions for each input in X.
@@ -344,7 +346,7 @@ class GPClassifier(BaseGPModel):
         third = np.exp(-(z-mean) ** 2 / (2*variance))
         return first*second*third
 
-    def _log_ML(self, log_hypers):
+    def _log_ML(self, hypers):
         """ Returns the negative log marginal likelihood for the model.
 
         Uses RW Equation 3.32 and Algorithm 3.1.
@@ -355,7 +357,6 @@ class GPClassifier(BaseGPModel):
         Returns:
             log_ML (float)
         """
-        hypers = np.exp(log_hypers)
         ell = len(self.Y)
         self._f_hat = np.zeros(ell)
         self._K = self.kernel.cov(hypers=hypers)

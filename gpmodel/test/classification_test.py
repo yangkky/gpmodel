@@ -40,7 +40,7 @@ def test_ML():
     model.Y = Y
     model._ell = len(Y)
     model.kernel.fit(X)
-    ML = model._log_ML(np.log(hypers))
+    ML = model._log_ML(hypers)
     f_hat = model._f_hat
 
     check_f_hat = cov @ np.expand_dims((Y + 1) / 2 - 1.0 / (1.0 + np.exp(-f_hat)), 1)
@@ -68,7 +68,7 @@ def test_fit():
     assert np.allclose(model.Y, Y)
     s0, ell = model.hypers
     K = kernel.cov(X, X, (s0, ell))
-    ML = model._log_ML(np.log([s0, ell]))
+    ML = model._log_ML(([s0, ell]))
     f_hat = model._find_F((s0, ell))
     this_P = expit(f_hat)
     W = -np.diag(-this_P * (1 - this_P))

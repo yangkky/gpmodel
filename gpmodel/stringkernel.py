@@ -5,6 +5,99 @@ import numpy as np
 
 from gpmodel.gpkernel import BaseKernel
 
+class MultipleDecompositionKernel(BaseKernel):
+
+    """ Weighted sum of weighted decomposition kernels. """
+
+    def __init__(self, contacts, Ss, L):
+        self.kernels = [WeightedDecompositionKernel(contacts, S, L) for S in Ss]
+        self._n_hypers = 2 * len(Ss)
+        return
+
+    def fit(self, X):
+        self._saved = [ke.cov(X, X) for ke in self.kernels]
+        return self._n_hypers
+
+    def cov(self, X1=None, X2=None, hypers=None):
+        if hypers is None:
+            hypers = np.ones(self._n_hypers)
+        w = np.expand_dims(hypers[:self._n_hypers // 2], 1)
+        w = np.expand_dims(w, 2)
+        gamma = hypers[self._n_hypers // 2:]
+        if X1 is None and X2 is None:
+            base = self._saved
+        else:
+            base = [ke.cov(X1, X2)for ke in self.kernels]
+        base = [K ** g for K, g in zip(base, gamma)]
+        base = np.array(base)
+        return np.sum(base * w, axis=0)
+
+class WeightedDecompositionKernel(BaseKernel):
+
+    """
+    A weighted decomposition kernel.
+
+    Attributes:
+        graph (dict):
+        S (np.ndarray): Substitution matrix
+    """
+
+    def __init__(self, contacts, S, L):
+        """ Instantiate a WeightedDecompositionKernel.
+
+        Parameters:
+            contacts (list):
+            S (np.ndarray): Substitution matrix
+            L (int): maximum length
+        """
+        self.S = S
+        self.graph = self.make_graph(contacts, L)
+        self._n_hypers = 0
+        return
+
+    def make_graph(self, contacts, L):
+        """ Return a dict enumerating the neighbors for each position"""
+        graph = {i:np.array([]) for i in range(L)}
+        for c1, c2 in contacts:
+            graph[c1] = np.append(graph[c1], c2).astype(int)
+            graph[c2] = np.append(graph[c2], c1).astype(int)
+        return graph
+
+    def fit(self, X):
+        """ Precompute the kernel for a set of sequences."""
+        self._saved = self.cov(X1=X, X2=X)
+        return self._n_hypers
+
+    def cov(self, X1=None, X2=None, hypers=None):
+        """Calculate the weighted decomposition kernel.
+
+        If no sequences given, then uses precomputed kernel.
+
+        Parameters:
+            X1 (np.ndarray): 0-indexed tokens
+            X2 (np.ndarray):
+            hypers (iterable): the sigma value
+
+        Returns:
+            K (np.ndarray): n1 x n2 normalized mismatch string kernel
+        """
+        if X1 is None and X2 is None:
+            return self._saved
+        # Get pairwise substitution values
+        n1, L = X1.shape
+        n2, _ = X2.shape
+        K = np.zeros((n1, n2))
+        for i, x1 in enumerate(X1):
+            for j, x2 in enumerate(X2):
+                subs = np.array([self.S[xx, yy] for xx, yy in zip(x1, x2)])
+                for k, s in enumerate(subs):
+                    if len(self.graph[k]) > 0:
+                        K[i, j] += s * np.prod(subs[self.graph[k]])
+                    else:
+                        K[i, j] += s
+        return K
+
+
 class MismatchKernel(BaseKernel):
 
     """

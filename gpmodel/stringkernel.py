@@ -2,8 +2,17 @@ import itertools
 from collections import Counter
 
 import numpy as np
+import numba
 
 from gpmodel.gpkernel import BaseKernel
+
+@numba.jit(nopython=True)
+def wdk(subs, graph):
+    K = 0
+    # The last one was added for the ones that don't have as many contacts
+    for k, s in enumerate(subs[:-1]):
+        K += s * np.prod(subs[graph[k]])
+    return K
 
 class MultipleDecompositionKernel(BaseKernel):
 
@@ -23,13 +32,14 @@ class MultipleDecompositionKernel(BaseKernel):
             hypers = np.ones(self._n_hypers)
         w = np.expand_dims(hypers[:self._n_hypers // 2], 1)
         w = np.expand_dims(w, 2)
-        gamma = hypers[self._n_hypers // 2:]
+        gamma = hypers[self._n_hypers // 2:].reshape(len(self.kernels), 1, 1)
         if X1 is None and X2 is None:
             base = self._saved
         else:
             base = [ke.cov(X1, X2)for ke in self.kernels]
-        base = [K ** g for K, g in zip(base, gamma)]
+        # base = [K ** g for K, g in zip(base, gamma)]
         base = np.array(base)
+        base = base ** gamma
         return np.sum(base * w, axis=0)
 
 class WeightedDecompositionKernel(BaseKernel):
@@ -57,11 +67,14 @@ class WeightedDecompositionKernel(BaseKernel):
 
     def make_graph(self, contacts, L):
         """ Return a dict enumerating the neighbors for each position"""
-        graph = {i:np.array([]) for i in range(L)}
+        graph = [[] for i in range(L)]
         for c1, c2 in contacts:
-            graph[c1] = np.append(graph[c1], c2).astype(int)
-            graph[c2] = np.append(graph[c2], c1).astype(int)
-        return graph
+            graph[c1].append(int(c2))
+            graph[c2].append(int(c1))
+        max_L = max([len(g) for g in graph])
+        # Fill with -1s so that every row has the same length
+        graph = [g + [-1] * (max_L - len(g)) for g in graph]
+        return np.array(graph).astype(int) # numba does not allow float indexers of arrays
 
     def fit(self, X):
         """ Precompute the kernel for a set of sequences."""
@@ -87,15 +100,27 @@ class WeightedDecompositionKernel(BaseKernel):
         n1, L = X1.shape
         n2, _ = X2.shape
         K = np.zeros((n1, n2))
+        square = np.allclose(X1, X2)
         for i, x1 in enumerate(X1):
             for j, x2 in enumerate(X2):
-                subs = np.array([self.S[xx, yy] for xx, yy in zip(x1, x2)])
-                for k, s in enumerate(subs):
-                    if len(self.graph[k]) > 0:
-                        K[i, j] += s * np.prod(subs[self.graph[k]])
-                    else:
-                        K[i, j] += s
-        return K
+                if square:
+                    if i > j:
+                        K[i, j] = K[j, i]
+                subs = self.S[x1, x2]
+                # Add a 1 at the end to make the shapes work
+                subs = np.append(subs, 1)
+                K[i, j] = wdk(subs, self.graph)
+        k1 = np.zeros((n1, 1))
+        for i, x1 in enumerate(X1):
+            subs = self.S[x1, x1]
+            subs = np.append(subs, 1)
+            k1[i, 0] = wdk(subs, self.graph)
+        k2 = np.zeros((1, n2))
+        for i, x2 in enumerate(X2):
+            subs = self.S[x2, x2]
+            subs = np.append(subs, 1)
+            k2[0, i] = wdk(subs, self.graph)
+        return K / np.sqrt(k1) / np.sqrt(k2)
 
 
 class MismatchKernel(BaseKernel):

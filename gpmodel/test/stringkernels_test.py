@@ -24,13 +24,18 @@ S = np.array([[1.0, 0.0, 0.4, 0.3],
               [0.3, 0.8, 0.5, 1.0]])
 contacts = [(0, 2), (0, 4), (2, 3), (2, 4), (3, 4)]
 L = 5
-graph = {
-        0: np.array([2, 4]),
-        1: np.array([]),
-        2: np.array([0, 3, 4]),
-        3: np.array([2, 4]),
-        4: np.array([0, 2, 3])
-    }
+graph = [[2, 4, -1],
+         [-1, -1, -1],
+         [0, 3, 4],
+         [2, 4, -1],
+         [0, 2, 3]]
+# graph = {
+#         0: np.array([2, 4]),
+#         1: np.array([]),
+#         2: np.array([0, 3, 4]),
+#         3: np.array([2, 4]),
+#         4: np.array([0, 2, 3])
+#     }
 
 S2 = np.array([[1.0, 0.1, 0.4, 0.3],
                [0.1, 0.9, 0.2, 0.9],
@@ -57,11 +62,11 @@ def test_mkl():
 
 def test_wdk():
     k = stringkernel.WeightedDecompositionKernel(contacts, S, L)
-    for i, item in graph.items():
-        assert np.allclose(item, k.graph[i])
+    for g1, g2 in zip(k.graph, graph):
+        assert np.allclose(g1, g2)
     K = k.cov(X1, X2)
-    K_t = np.array([[ 1., 0.36 ],
-                    [ 0.264,  5.]])
+    K_t = np.array([[ 1. / 5., 0.36 / 5. ],
+                    [ 0.264 / 5.,  5. / 5.]])
     assert np.allclose(K, K_t)
     nh = k.fit(X1)
     assert nh == 0.0

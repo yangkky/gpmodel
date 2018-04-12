@@ -1,5 +1,6 @@
 import itertools
 from collections import Counter
+import multiprocessing as mp
 
 import numpy as np
 import numba
@@ -7,10 +8,13 @@ import numba
 from gpmodel.gpkernel import BaseKernel
 
 @numba.jit(nopython=True)
+# @numba.autojit
 def wdk(subs, graph):
     K = 0
     # The last one was added for the ones that don't have as many contacts
-    for k, s in enumerate(subs[:-1]):
+    for k in numba.prange(len(subs) - 1):
+        s = subs[k]
+    # for k, s in enumerate(subs[:-1]):
         K += s * np.prod(subs[graph[k]])
     return K
 
@@ -24,6 +28,8 @@ class MultipleDecompositionKernel(BaseKernel):
         return
 
     def fit(self, X):
+        # pool = mp.Pool(processes=8)
+        # self._saved = [pool.apply(ke.cov, args=(X, X)) for ke in self.kernels]
         self._saved = [ke.cov(X, X) for ke in self.kernels]
         return self._n_hypers
 
@@ -36,6 +42,8 @@ class MultipleDecompositionKernel(BaseKernel):
         if X1 is None and X2 is None:
             base = self._saved
         else:
+            # pool = mp.Pool(processes=8)
+            # base = [pool.apply(ke.cov, args=(X1, X2)) for ke in self.kernels]
             base = [ke.cov(X1, X2)for ke in self.kernels]
         # base = [K ** g for K, g in zip(base, gamma)]
         base = np.array(base)
@@ -100,7 +108,10 @@ class WeightedDecompositionKernel(BaseKernel):
         n1, L = X1.shape
         n2, _ = X2.shape
         K = np.zeros((n1, n2))
-        square = np.allclose(X1, X2)
+        if n1 == n2:
+            square = np.allclose(X1, X2)
+        else:
+            square = False
         for i, x1 in enumerate(X1):
             for j, x2 in enumerate(X2):
                 if square:

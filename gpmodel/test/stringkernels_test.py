@@ -15,13 +15,19 @@ m = 2
 A = ['A', 'C', 'G', 'T']
 
 X1 = np.array([[0, 1, 2, 3, 1],
-               [0, 2, 1, 3, 2]])
+               [0, 2, 1, 3, 2],
+               [1, 2, 2, 3, 1]])
 X2 = np.array([[1, 1, 2, 1, 0],
                [0, 2, 1, 3, 2]])
 S = np.array([[1.0, 0.0, 0.4, 0.3],
               [0.0, 1.0, 0.2, 0.8],
               [0.4, 0.2, 1.0, 0.5],
               [0.3, 0.8, 0.5, 1.0]])
+D = np.array([[0.0, 5.0, 3.0, 6.0, 2.0],
+              [5.0, 0.0, 5.0, 6.0, 7.0],
+              [3.0, 5.0, 0.0, 1.0, 2.0],
+              [6.0, 6.0, 1.0, 0.0, 1.0],
+              [2.0, 7.0, 2.0, 1.0, 0.0]])
 contacts = [(0, 2), (0, 4), (2, 3), (2, 4), (3, 4)]
 L = 5
 graph = [[2, 4, -1],
@@ -29,13 +35,6 @@ graph = [[2, 4, -1],
          [0, 3, 4],
          [2, 4, -1],
          [0, 2, 3]]
-# graph = {
-#         0: np.array([2, 4]),
-#         1: np.array([]),
-#         2: np.array([0, 3, 4]),
-#         3: np.array([2, 4]),
-#         4: np.array([0, 2, 3])
-#     }
 
 S2 = np.array([[1.0, 0.1, 0.4, 0.3],
                [0.1, 0.9, 0.2, 0.9],
@@ -43,7 +42,9 @@ S2 = np.array([[1.0, 0.1, 0.4, 0.3],
                [0.3, 0.9, 0.1, 0.8]])
 
 def test_mkl():
-    k = stringkernel.MultipleDecompositionKernel(contacts, [S, S2], L)
+    kernels = [stringkernel.WeightedDecompositionKernel(contacts, subs, 5)
+               for subs in [S, S2]]
+    k = stringkernel.MultipleKernel(kernels)
     assert k._n_hypers == 4
     assert len(k.kernels) == 2
     K1 = k.kernels[0].cov(X1, X2)
@@ -60,14 +61,81 @@ def test_mkl():
     assert np.allclose(k._saved[0], k.kernels[0].cov(X1, X1))
     assert np.allclose(k._saved[1], k.kernels[1].cov(X1, X1))
 
+def naive_wdk(x1, x2, S, D, cutoff=4.5):
+    subs = S[x1, x2]
+    k = 0
+    for i, s in enumerate(subs):
+        total = 0
+        for j, ss in enumerate(subs):
+            if i == j:
+                continue
+            if D[i, j] < cutoff:
+                total += ss
+        k += s * total
+    return k
+
 def test_wdk():
-    k = stringkernel.WeightedDecompositionKernel(contacts, S, L)
-    for g1, g2 in zip(k.graph, graph):
-        assert np.allclose(g1, g2)
+
+    K11 = np.zeros((len(X1), len(X1)))
+    for i, x1 in enumerate(X1):
+        for j, x2 in enumerate(X1):
+            K11[i, j] = naive_wdk(x1, x2, S, D)
+    K22 = np.zeros((len(X2), len(X2)))
+    for i, x1 in enumerate(X2):
+        for j, x2 in enumerate(X2):
+            K22[i, j] = naive_wdk(x1, x2, S, D)
+    K12 = np.zeros((len(X1), len(X2)))
+    for i, x1 in enumerate(X1):
+        for j, x2 in enumerate(X2):
+            K12[i, j] = naive_wdk(x1, x2, S, D)
+    K1_star = np.expand_dims(np.sqrt(np.diag(K11)), 1)
+    K2_star = np.expand_dims(np.sqrt(np.diag(K22)), 0)
+    K12 = K12 / K1_star / K2_star
+    k = stringkernel.WeightedDecompositionKernel(contacts, S, len(X1[0]))
     K = k.cov(X1, X2)
-    K_t = np.array([[ 1. / 5., 0.36 / 5. ],
-                    [ 0.264 / 5.,  5. / 5.]])
-    assert np.allclose(K, K_t)
+    assert np.allclose(K, K12)
+    nh = k.fit(X1)
+    assert nh == 0.0
+    assert np.allclose(k._saved, k.cov(X1, X1))
+
+def naive_sdk(x1, x2, S, adj):
+    subs = S[x1, x2]
+    k = 0
+    for i, s in enumerate(subs):
+        total = 0
+        for j, ss in enumerate(subs):
+            total += ss * adj[i, j]
+        k += s * total
+    return k
+
+
+def test_sdk():
+    L = np.random.random() * 10.0
+    p = np.random.choice(4)
+    adj = D / L
+    np.fill_diagonal(adj, 1)
+    adj = adj ** (-p)
+    np.fill_diagonal(adj, 0)
+
+    K11 = np.zeros((len(X1), len(X1)))
+    for i, x1 in enumerate(X1):
+        for j, x2 in enumerate(X1):
+            K11[i, j] = naive_sdk(x1, x2, S, adj)
+    K22 = np.zeros((len(X2), len(X2)))
+    for i, x1 in enumerate(X2):
+        for j, x2 in enumerate(X2):
+            K22[i, j] = naive_sdk(x1, x2, S, adj)
+    K12 = np.zeros((len(X1), len(X2)))
+    for i, x1 in enumerate(X1):
+        for j, x2 in enumerate(X2):
+            K12[i, j] = naive_sdk(x1, x2, S, adj)
+    K1_star = np.expand_dims(np.sqrt(np.diag(K11)), 1)
+    K2_star = np.expand_dims(np.sqrt(np.diag(K22)), 0)
+    K12 = K12 / K1_star / K2_star
+    k = stringkernel.SmoothDecompositionKernel(D, S, L=L, power=p)
+    assert np.allclose(k.adj, adj)
+    K = k.cov(X1, X2)
+    assert np.allclose(K, K12)
     nh = k.fit(X1)
     assert nh == 0.0
     assert np.allclose(k._saved, k.cov(X1, X1))
@@ -119,4 +187,5 @@ def test_mismatch_kernel():
 if __name__=="__main__":
     test_mkl()
     test_wdk()
+    test_sdk()
     test_mismatch_kernel()

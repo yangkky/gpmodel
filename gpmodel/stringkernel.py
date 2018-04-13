@@ -4,6 +4,7 @@ import multiprocessing as mp
 
 import numpy as np
 import numba
+from scipy import sparse
 
 from gpmodel.gpkernel import BaseKernel
 
@@ -15,16 +16,22 @@ def wdk(subs, graph):
     for k in numba.prange(len(subs) - 1):
         s = subs[k]
     # for k, s in enumerate(subs[:-1]):
-        K += s * np.prod(subs[graph[k]])
+        K += s * np.sum(subs[graph[k]])
     return K
 
-class MultipleDecompositionKernel(BaseKernel):
+# @numba.jit(nopython=True)
+def sdk(subs, adj):
+    masked = subs * adj
+    masked = masked.sum(axis=-1)
+    return np.sum(masked.T * subs)
 
-    """ Weighted sum of weighted decomposition kernels. """
+class MultipleKernel(BaseKernel):
 
-    def __init__(self, contacts, Ss, L):
-        self.kernels = [WeightedDecompositionKernel(contacts, S, L) for S in Ss]
-        self._n_hypers = 2 * len(Ss)
+    """ Weighted sum of kernels with no individual hyperparameters. """
+
+    def __init__(self, kernels):
+        self.kernels = kernels
+        self._n_hypers = 2 * len(kernels)
         return
 
     def fit(self, X):
@@ -117,21 +124,94 @@ class WeightedDecompositionKernel(BaseKernel):
                 if square:
                     if i > j:
                         K[i, j] = K[j, i]
-                subs = self.S[x1, x2]
-                # Add a 1 at the end to make the shapes work
-                subs = np.append(subs, 1)
+                subs = np.zeros(L + 1)
+                subs[:-1] = self.S[x1, x2]
                 K[i, j] = wdk(subs, self.graph)
         k1 = np.zeros((n1, 1))
         for i, x1 in enumerate(X1):
             subs = self.S[x1, x1]
-            subs = np.append(subs, 1)
+            subs = np.append(subs, 0)
             k1[i, 0] = wdk(subs, self.graph)
         k2 = np.zeros((1, n2))
         for i, x2 in enumerate(X2):
             subs = self.S[x2, x2]
-            subs = np.append(subs, 1)
+            subs = np.append(subs, 0)
             k2[0, i] = wdk(subs, self.graph)
         return K / np.sqrt(k1) / np.sqrt(k2)
+
+class SmoothDecompositionKernel(BaseKernel):
+
+    """
+    A smoothed weighted decomposition kernel.
+
+    Attributes:
+        adj (np.ndarray): Adjacency matrix
+        S (np.ndarray): Substitution matrix
+    """
+
+    def __init__(self, D, S, L=4.5, power=2):
+        """ Instantiate a WeightedDecompositionKernel.
+
+        Parameters:
+            D (np.ndarray): Position distance matrix
+            S (np.ndarray): Substitution matrix
+        """
+        self.S = S
+        self.adj = self.make_graph(D, L, power)
+        self._n_hypers = 0
+        return
+
+    def make_graph(self, D, L, power):
+        """ Make adjacency matrix."""
+        np.fill_diagonal(D, 1)
+        graph = (D / L) ** (-power)
+        np.fill_diagonal(graph, 0)
+        return graph
+
+    def fit(self, X):
+        """ Precompute the kernel for a set of sequences."""
+        self._saved = self.cov(X1=X, X2=X)
+        return self._n_hypers
+
+    def cov(self, X1=None, X2=None, hypers=None):
+        """Calculate the weighted decomposition kernel.
+
+        If no sequences given, then uses precomputed kernel.
+
+        Parameters:
+            X1 (np.ndarray): 0-indexed tokens
+            X2 (np.ndarray):
+            hypers (iterable): the sigma value
+
+        Returns:
+            K (np.ndarray): n1 x n2 normalized mismatch string kernel
+        """
+        if X1 is None and X2 is None:
+            return self._saved
+        # Get pairwise substitution values
+        n1, L = X1.shape
+        n2, _ = X2.shape
+        is_square = False
+        if n1 == n2:
+            if np.allclose(X1, X2):
+                is_square = True
+        K = np.empty((n1, n2))
+        for i, x1 in enumerate(X1):
+            for j, x2 in enumerate(X2):
+                if is_square and i > j:
+                        K[i, j] = K[j, i]
+                else:
+                    subs = self.S[x1, x2]
+                    K[i, j] = sdk(subs, self.adj)
+        K11 = np.empty((n1, 1))
+        for i, x1 in enumerate(X1):
+            subs = self.S[x1, x1]
+            K11[i, 0] = sdk(subs, self.adj)
+        K22 = np.empty((1, n2))
+        for i, x2 in enumerate(X2):
+            subs = self.S[x2, x2]
+            K22[0, i] = sdk(subs, self.adj)
+        return K / np.sqrt(K11) / np.sqrt(K22)
 
 
 class MismatchKernel(BaseKernel):
